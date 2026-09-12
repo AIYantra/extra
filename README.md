@@ -129,4 +129,5 @@ For security concerns, please review our [Security Policy](SECURITY.md).
 ## 📜 License
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for more information.  
-Copyright © 2026 AIYantra (yantraOS Sovereign Operating System Project).
+Copyright (c) 2026 Euryale Ferox Private Limited.
+

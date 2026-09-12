@@ -1,0 +1,10 @@
+Extra
+Copyright (c) 2026 Euryale Ferox Private Limited
+
+Third-party notices:
+
+Extra interfaces with Microsoft Windows APIs (user32.dll, UIAutomationCore.dll, dxgi.dll).
+Playwright integration, Copyright (c) Microsoft Corporation, Apache License 2.0.
+Model Context Protocol SDK, Copyright (c) Anthropic PBC, MIT License.
+Pillow, Copyright (c) 2010-2026 Alex Clark and contributors, HPND License.
+pywin32, Copyright (c) Mark Hammond and contributors, PSF License.
