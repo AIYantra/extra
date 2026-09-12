@@ -36,8 +36,8 @@ env/
 *.png
 *.jpg
 *.jpeg
-!assets/
-!docs/images/
+!assets/**
+!docs/images/**
 
 # Testing caches
 .pytest_cache/

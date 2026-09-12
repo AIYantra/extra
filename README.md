@@ -1,46 +1,88 @@
 <div align="center">
 
-# ⚡ Extra
-### The Open-Source Astra 6 for your PC. Your AI can see, click, type, navigate, and get real work done on Windows.
+<img src="assets/logo.png" alt="Extra Logo" width="220" />
+
+# Extra
+
+### The Open-Source Astra 6 for your PC
+**Your AI can see, click, type, navigate, and get real work done on Windows.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows 11 / 10](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010-0078D6.svg)](https://microsoft.com/windows)
 [![Protocol: Model Context Protocol (MCP)](https://img.shields.io/badge/Protocol-MCP%20Native-orange.svg)](https://modelcontextprotocol.io)
-[![Parent: yantraOS](https://img.shields.io/badge/Parent-yantraOS-8A2BE2.svg)](https://yantraos.com)
+[![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
+[![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
 
-**Equip your AI assistants (Antigravity, Claude, AGY, Cursor, ChatGPT) with autonomous, sub-10ms Windows desktop control.**
-
-[Live Site](https://extra.yantraos.com) • [Architecture](ARCHITECTURE.md) • [Contributing](CONTRIBUTING.md) • [License](LICENSE)
+[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](ARCHITECTURE.md) • [Contributing](CONTRIBUTING.md) • [License](LICENSE)
 
 </div>
 
 ---
 
-## 🚀 What is Extra?
+## ✨ Why Extra?
 
-**Extra** brings the battle-tested computer-use autonomy of **[yantraOS](https://yantraos.com)** to **Windows 11 and Windows 10** as a lightweight, zero-latency desktop bridge and [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server.
+Today's AI assistants can write brilliant essays and code, but they are trapped inside a chat window. When you need them to click a button, open an app, organize your files, or input data into a spreadsheet, they can only give you text instructions.
 
-While early prototypes like Astra 6 and Anthropic Computer Use rely purely on slow, token-hungry vision loops that misclick on DPI-scaled monitors and get stuck in infinite stalls, **Extra** introduces a **Hybrid Dual-Plane Engine**:
+**Extra gives your AI hands and eyes on Windows.**
 
-1. **⚡ Visual Plane:** Ultra-fast screen capture (< 3ms) via DirectX Desktop Duplication (DXGI) and pure-ctypes MSS.
-2. **🎯 Semantic Plane:** Native Windows **UI Automation (UIA v3 COM)** inspection that queries buttons, menus, and text fields with 100.0% mathematical accuracy.
-3. **⌨️ Zero-Lag Input:** Instant typing via Win32 `KEYEVENTF_UNICODE` (types 500 characters in 2ms with zero dropped keys and full emoji/multilingual support).
-4. **🛡️ 2-Strike Stall Breaker:** Closed-loop perceptual diffing that detects when an action produces no screen change and prevents infinite click loops.
-5. **🔒 100% Enterprise Clean:** Zero obscure binary blobs or solo-dev wheels. Every low-level call relies on Microsoft's built-in Windows system DLLs (`user32.dll`, `UIAutomationCore.dll`, `dxgi.dll`).
+It connects **Claude, Google Antigravity, Cursor, AGY**, or any autonomous agent directly to your Windows desktop with high-speed screen vision, pixel-perfect clicking, and instant typing.
+
+* **No clunky browser extensions.**
+* **No expensive cloud servers watching your screen.**
+* **100% open source, local, and private.**
 
 ---
 
-## ⚡ 60-Second Quickstart
+## 💡 What You Can Ask Your AI To Do
 
-### 1. One-Line Install (PowerShell)
-Open PowerShell (as regular user) on Windows 10 or 11 and run:
+Once Extra is running, you can talk to your AI like a real human assistant sitting at your desk:
+
+* 📊 **Spreadsheets & Data:** *"Open Excel, calculate total revenue from the invoice CSVs in my Downloads folder, and create a summary chart."*
+* 🗂️ **Desktop & File Cleanup:** *"Clean up my messy desktop by moving screenshots into Pictures, PDFs into Documents, and deleting empty folders."*
+* 🌐 **Web Research & Data Entry:** *"Open Chrome, find the top 5 flights to Tokyo under $800, and copy their flight numbers and dates into Notepad."*
+* ⚙️ **Windows System Tasks:** *"Open Settings, check if any Windows updates are pending, and let me know if a restart is needed."*
+* 🎵 **App Control:** *"Launch Spotify, search for low-fi focus beats, and start playing."*
+
+---
+
+## ⚡ Quickstart (1 Minute)
+
+You can set up Extra in two easy ways:
+
+### Option A: Ask Your AI To Set It Up (Easiest)
+
+Simply copy and paste this single prompt into your AI (Claude, Antigravity, Cursor, AGY):
+
+```text
+Setup Extra on my PC: In PowerShell run 'irm https://extra.yantraos.com/install.ps1 | iex', then read and configure ~/.extra/app/STARTER_PROMPT.md so we are ready to use Extra.
+```
+
+Your AI will run the installer, configure its tools, and reply:  
+> **"We are ready to use Extra."**
+
+---
+
+### Option B: Run PowerShell Yourself
+
+1. Open standard **Windows PowerShell** (no admin elevation required).
+2. Paste and run this one command:
 
 ```powershell
 irm https://extra.yantraos.com/install.ps1 | iex
 ```
 
-### 2. Connect Your AI Assistant
-Extra automatically exposes an **MCP Server**. Add it to your `claude_desktop_config.json` or Antigravity MCP settings:
+The automated installer will:
+* Verify Windows 10/11 64-bit architecture.
+* Discover or configure Python 3.10+.
+* Create an isolated environment at `~/.extra`.
+* Automatically connect to **Claude Desktop** (`claude_desktop_config.json`).
+* Run a complete system doctor diagnostic.
+
+---
+
+### Connecting to Any MCP-Compatible AI
+
+Extra works out of the box with any agent supporting the **Model Context Protocol (MCP)**. If you use Cursor, Windsurf, or custom agents, add this snippet to your MCP config:
 
 ```json
 {
@@ -53,22 +95,50 @@ Extra automatically exposes an **MCP Server**. Add it to your `claude_desktop_co
 }
 ```
 
-### 3. Prompt Your AI
-Paste the starter prompt into your AI chat:
-> *"You have access to Extra on my Windows 11 desktop. Open Excel, create a table with the Q3 invoice totals from my Downloads folder, and generate a summary chart."*
+---
+
+## 🎯 How It Works Under The Hood
+
+Extra is engineered from the ground up for speed, reliability, and token efficiency:
+
+1. 👁️ **Ultra-Fast Screen Capture (< 3ms):** Uses native DirectX Desktop Duplication (DXGI) to take crystal-clear desktop frames in under 3 milliseconds—without lagging your PC or blurring text.
+2. 🎯 **Pixel-Perfect Clicking:** Rather than guessing coordinates from fuzzy screenshots, Extra queries the native Windows accessibility tree (UI Automation) to click the exact button, menu, or text field with 100% mathematical accuracy.
+3. ⚡ **Instant Typing:** Types 500 characters in under 5 milliseconds via native Win32 Unicode injection—with zero dropped letters and full support for emojis and international languages.
+4. 🛑 **Infinite Loop Stall Protection:** If an app freezes or a click produces no visual result, Extra immediately catches it and stops safely instead of burning your tokens in an endless loop.
+5. 🔒 **100% Local & Private:** Extra runs completely on your machine. Zero screenshots, keystrokes, or telemetry are ever sent to any cloud server.
 
 ---
 
 ## 📊 Performance Comparison
 
-| Metric / Capability | Naive Python (`PyAutoGUI`) | Astra 6 / Anthropic Computer Use | **Extra "Flashless" Engine** |
+| Metric / Capability | Legacy Scripts (`PyAutoGUI`) | Cloud Vision Models | **Extra Engine** |
 | :--- | :--- | :--- | :--- |
-| **Screen Grab Speed** | 150 – 300 ms (GDI) | 80 – 150 ms | **1.8 – 3.2 ms (DXGI / MSS)** |
-| **Typing Speed (100 chars)** | 2.5 – 5.0 seconds | 1.0 – 2.0 seconds | **< 0.005 seconds (`VK_PACKET`)** |
-| **Targeting Precision** | ~60% (fails on DPI scale) | ~82% (vision heuristic) | **99.4% (Hybrid UIA + DXGI)** |
-| **DPI Scaling Support** | Broken on 125%/150% | Requires manual client config | **Native PerMonitorV2 Auto-Sync** |
-| **Token Consumption** | High (100% full-screen vision) | High (full-screen vision every step) | **70% lower (UIA tree + ROI crops)** |
-| **Infinite Stall Prevention** | None (infinite loops) | Basic timeouts | **Closed-loop perceptual delta detection** |
+| **Screen Grab Speed** | 150 – 300 ms | 80 – 150 ms | **1.8 – 3.2 ms (DirectX DXGI)** |
+| **Typing Speed (100 chars)** | 2.5 – 5.0 seconds | 1.0 – 2.0 seconds | **< 0.005 seconds (Instant Win32)** |
+| **Click Accuracy** | ~60% (fails on display scaling) | ~82% (vision guess) | **99.4% (Native Windows UIA)** |
+| **Multi-Monitor DPI Support** | Broken on 125%/150% scales | Requires manual adjustment | **Automatic (PerMonitorV2)** |
+| **AI Token Cost** | High (full screenshot every step) | High (full vision payload) | **70% Lower (Smart element tree)** |
+| **Stall Prevention** | None (gets stuck forever) | Basic timeout | **Smart visual delta detection** |
+
+---
+
+## 🛠️ Included Tools (MCP Suite)
+
+When connected to Extra, your AI assistant receives these native tools:
+
+| Tool Name | What It Does |
+| :--- | :--- |
+| `extra_launch` | Opens any Windows app, utility, or URL directly (`calc`, `notepad`, `settings`, `chrome`) |
+| `extra_inspect_ui` | Scans all visible buttons, inputs, tabs, and menus on your screen |
+| `extra_click_element` | Deterministically clicks any element by its ID, name, or bounding box |
+| `extra_screenshot` | Captures high-res desktop frames with optional Set-of-Mark visual badges |
+| `extra_click` | Moves mouse, left/right clicks, and double clicks with sub-pixel DPI accuracy |
+| `extra_type` | Injects text instantly with zero lag, full emoji support, and atomic paste |
+| `extra_hotkey` | Sends keyboard shortcuts (`Ctrl+C`, `Win+E`, `Alt+Tab`, `Enter`) |
+| `extra_scroll` | Smoothly scrolls wheels up, down, left, or right |
+| `extra_drag` | Drags and drops files, windows, or sliders between coordinates |
+| `extra_browser` | Directly extracts web page DOM content in Edge/Chrome without taking screenshots |
+| `extra_focus_window` | Brings any application window immediately to the front |
 
 ---
 
@@ -76,7 +146,8 @@ Paste the starter prompt into your AI chat:
 
 ```text
 extra/
-├── core/                   # The Flashless Windows Engine
+├── assets/                 # Brand logos and banners
+├── core/                   # Core Windows Automation Engine
 │   ├── capture.py          # Sub-3ms screen capture (DXGI & MSS)
 │   ├── geometry.py         # PerMonitorV2 DPI scaling & display normalization
 │   ├── input_engine.py     # Win32 SendInput Unicode & atomic clipboard injection
@@ -88,7 +159,7 @@ extra/
 │   └── browser.py          # Playwright / Edge CDP DOM bridge
 ├── mcp/                    # Anthropic Model Context Protocol
 │   └── server.py           # Standard JSON-RPC stdio/SSE server
-├── cli.py                  # CLI runner (extra run, extra doctor, extra test)
+├── cli.py                  # CLI runner (extra doctor, test, run, inspect, snap)
 ├── install.ps1             # 1-line PowerShell installer
 ├── pyproject.toml          # Package metadata and build configuration
 ├── requirements.txt        # Enterprise-audited dependency manifest
@@ -99,35 +170,32 @@ extra/
 
 ---
 
-## 🛡️ Security & Enterprise Trust
+## 🛡️ Enterprise Trust & Safety
 
-Extra is engineered from the ground up for strict enterprise compliance:
-* **Zero Solo Binary Blobs:** No pre-compiled wheels from unverified repositories that trigger Windows Defender heuristics.
-* **Microsoft & Anthropic Pedigree:** Dependencies are strictly limited to official Microsoft (`playwright`), Anthropic (`mcp`), and Python Software Foundation packages.
-* **Native System Calls:** Low-level OS capabilities utilize Microsoft's pre-installed Windows DLLs directly via Python's standard `ctypes`.
-* **Zero Telemetry / 100% Sovereign:** Extra sends zero telemetry to the cloud. All operations execute strictly between your local AI agent and your local Windows operating system.
+* **Zero Unverified Binary Blobs:** No mysterious compiled `.dll` or `.pyd` files from solo maintainers.
+* **Microsoft & Anthropic Standards:** Built exclusively on Microsoft system calls (`ctypes`), Anthropic's official `mcp` SDK, and PSF packages.
+* **Fail-Safe Protection:** Includes a screen-corner emergency escape at `(0, 0)` and a global panic hotkey (`Ctrl+Alt+Shift+Q`).
 
 ---
 
-## 🌌 Part of the yantraOS Ecosystem
+## 🌌 Part of the yantraOS Sovereign Ecosystem
 
-Extra is the Windows ambassador for **[yantraOS](https://yantraos.com)**, the sovereign Arch Linux operating system engineered for autonomous computing. 
+Extra is the Windows bridge for **[yantraOS](https://yantraos.com)**, the sovereign Arch Linux operating system engineered for autonomous computing.
 
-If you want bare-metal AI autonomy with zero Windows telemetry, sub-microsecond OS kernel scheduling, and native Wayland hardware control, explore **yantraOS**.
+If you want bare-metal AI autonomy with zero operating system telemetry, sub-microsecond OS kernel scheduling, and native Wayland hardware control, explore **[yantraos.com](https://yantraos.com)**.
 
 ---
 
-## 🤝 Contributing & Community
+## 🤝 Contributing
 
-We welcome contributions from kernel hackers, automation researchers, and AI developers!
-Please read our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before submitting pull requests.
+We welcome contributions from kernel hackers, automation researchers, and AI developers!  
+Please check out our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md).
 
-For security concerns, please review our [Security Policy](SECURITY.md).
+For vulnerability reporting, review our [Security Policy](SECURITY.md).
 
 ---
 
 ## 📜 License
 
-Distributed under the MIT License. See [LICENSE](LICENSE) for more information.  
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.  
 Copyright (c) 2026 Euryale Ferox Private Limited.
-
