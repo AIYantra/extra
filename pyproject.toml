@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "extra-desktop"
+version = "0.1.0"
+description = "Flashless Windows 10/11 Computer-Use Engine & Model Context Protocol (MCP) Server"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "AIYantra Engineering Team", email = "engineering@yantraos.com" }
+]
+dependencies = [
+    "mcp>=1.0.0",
+    "playwright>=1.47.0",
+    "pillow>=10.4.0",
+    "beautifulsoup4>=4.12.3",
+    "pywin32>=306",
+    "comtypes>=1.4.0",
+    "mss>=9.0.1",
+    "imagehash>=4.3.1",
+    "numpy>=1.26.0",
+    "psutil>=6.0.0",
+]
+
+[project.scripts]
+extra = "extra.cli:main"
+
+[project.urls]
+Homepage = "https://extra.yantraos.com"
+Repository = "https://github.com/AIYantra/extra"
+Documentation = "https://extra.yantraos.com/docs"
+
+[tool.setuptools.package-dir]
+"extra" = "."
+"extra.core" = "core"
+"extra.fastpath" = "fastpath"
+"extra.mcp" = "mcp"

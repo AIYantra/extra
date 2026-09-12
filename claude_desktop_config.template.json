@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "extra": {
+      "command": "python.exe",
+      "args": [
+        "-m",
+        "extra.mcp.server"
+      ],
+      "env": {
+        "PYTHONPATH": "."
+      }
+    }
+  }
+}
