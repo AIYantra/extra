@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="assets/logo.png" alt="Extra Logo" width="220" />
+<a href="https://extra.yantraos.com">
+  <img src="assets/logo.png" alt="Extra — Get extra from your AI" width="420" />
+</a>
 
 # Extra
 
