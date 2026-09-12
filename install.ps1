@@ -16,7 +16,8 @@
 [CmdletBinding()]
 param(
     [switch]$SkipDoctor = $false,
-    [switch]$NoClaudeConfig = $false
+    [switch]$NoClaudeConfig = $false,
+    [switch]$NoTelemetry = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -242,22 +243,47 @@ if (-not $SkipDoctor) {
     & $venvPython -m extra.cli doctor
 }
 
+# 9. Anonymous Install Analytics (Non-blocking)
+if (-not $env:EXTRA_NO_TELEMETRY -and -not $NoTelemetry) {
+    try {
+        $pyVer = "unknown"
+        if ($venvPython -and (Test-Path $venvPython)) {
+            $pyVer = & $venvPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>$null
+        }
+        $payload = @{
+            event = "install_completed"
+            os = [Environment]::OSVersion.VersionString
+            arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+            python = $pyVer
+            claude_configured = (-not $NoClaudeConfig)
+            timestamp = (Get-Date).ToUniversalTime().ToString("o")
+        } | ConvertTo-Json -Compress
+
+        $null = Invoke-RestMethod -Uri "https://extra.yantraos.com/api/telemetry" `
+            -Method POST `
+            -Body $payload `
+            -ContentType "application/json" `
+            -TimeoutSec 3 `
+            -ErrorAction SilentlyContinue
+    } catch {
+        # Safe failover — telemetry failure will never interrupt installation
+    }
+}
+
+$starterPromptPath = Join-Path $installDir "STARTER_PROMPT.md"
+
 Write-Host @"
 
 ======================================================================
-  INSTALLATION COMPLETE! EXTRA IS READY TO POWER YOUR AI ASSISTANT.
+  EXTRA IS INSTALLED AND READY!
 ======================================================================
 
-How to use Extra:
-1. Restart Claude Desktop (or Antigravity / Cursor).
-2. Ask your AI: "Take a screenshot and click the Search button."
-3. From any terminal, run:
-   extra doctor    # Verify hardware capture and UIA status
-   extra test      # Run full test suite
-   extra snap      # Capture quick desktop screenshot
-   extra run       # Launch MCP server manually
+How to use Extra (Just 1 step):
+Copy and paste this prompt into your AI (Claude, Antigravity, Cursor, AGY):
 
-Starter Prompt:
-See '$installDir\STARTER_PROMPT.md' for the master system prompt.
+👉  Setup $starterPromptPath
+
+Your AI will automatically configure its rules and reply:
+"We are ready to use Extra." You don't need to do anything manually!
 ======================================================================
 "@ -ForegroundColor Green
