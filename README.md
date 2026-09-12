@@ -117,6 +117,16 @@ If you want bare-metal AI autonomy with zero Windows telemetry, sub-microsecond 
 
 ---
 
+## 🤝 Contributing & Community
+
+We welcome contributions from kernel hackers, automation researchers, and AI developers!
+Please read our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before submitting pull requests.
+
+For security concerns, please review our [Security Policy](SECURITY.md).
+
+---
+
 ## 📜 License
 
-MIT License. Copyright (c) 2026 Euryale Ferox Private Limited / AIYantra.
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.  
+Copyright © 2026 AIYantra (yantraOS Sovereign Operating System Project).
