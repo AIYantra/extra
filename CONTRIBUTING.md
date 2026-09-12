@@ -95,14 +95,11 @@ extra/
 │   └── server.py           # Anthropic MCP JSON-RPC server (11 native tools)
 ├── cli.py                  # CLI runner (extra doctor, test, run, inspect, snap)
 ├── install.ps1             # 1-line PowerShell zero-friction installer
-├── manual_test.py          # Interactive manual testing suite
-├── test_core_engine.py     # End-to-end automated integration tests
 ├── pyproject.toml          # PEP 518 / 621 package manifest
 ├── requirements.txt        # Enterprise-audited dependency manifest
-├── STARTER_PROMPT.md       # Master AI system prompt & few-shot playbooks
-├── PRD.md                  # Product Requirements Document
+├── STARTER_PROMPT.md       # Master AI system prompt & setup directive
 ├── ARCHITECTURE.md         # Full System Architecture Specification
-└── MEMORY.md               # Project Context & Architecture Decision Records (ADRs)
+└── test_core_engine.py     # End-to-end automated integration tests
 ```
 
 ---

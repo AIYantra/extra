@@ -1,7 +1,7 @@
 <div align="center">
 
 # ⚡ Extra
-### The Open-Source "Flashless" Computer Use Bridge for Windows 11 & 10
+### The Open-Source Astra 6 for your PC. Your AI can see, click, type, navigate, and get real work done on Windows.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows 11 / 10](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010-0078D6.svg)](https://microsoft.com/windows)
@@ -10,7 +10,7 @@
 
 **Equip your AI assistants (Antigravity, Claude, AGY, Cursor, ChatGPT) with autonomous, sub-10ms Windows desktop control.**
 
-[Live Site (extra.yantraos.com)](https://extra.yantraos.com) • [Architecture](ARCHITECTURE.md) • [PRD](PRD.md) • [Roadmap](ROADMAP.md)
+[Live Site](https://extra.yantraos.com) • [Architecture](ARCHITECTURE.md) • [Contributing](CONTRIBUTING.md) • [License](LICENSE)
 
 </div>
 
@@ -90,11 +90,11 @@ extra/
 │   └── server.py           # Standard JSON-RPC stdio/SSE server
 ├── cli.py                  # CLI runner (extra run, extra doctor, extra test)
 ├── install.ps1             # 1-line PowerShell installer
+├── pyproject.toml          # Package metadata and build configuration
 ├── requirements.txt        # Enterprise-audited dependency manifest
-├── STARTER_PROMPT.md       # Master AI system prompt
-├── PRD.md                  # Product Requirements Document
+├── STARTER_PROMPT.md       # Master AI system prompt & setup directive
 ├── ARCHITECTURE.md         # Full System Architecture Specification
-└── MEMORY.md               # Project Context & Architecture Decision Records (ADRs)
+└── test_core_engine.py     # End-to-end integration test suite
 ```
 
 ---
