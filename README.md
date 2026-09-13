@@ -17,6 +17,13 @@
 
 [Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](ARCHITECTURE.md) • [Contributing](CONTRIBUTING.md) • [License](LICENSE)
 
+<br/>
+<br/>
+
+<a href="https://extra.yantraos.com">
+  <img src="assets/demo.gif" alt="Extra in action — Live Windows desktop automation" width="100%" />
+</a>
+
 </div>
 
 ---
