@@ -134,7 +134,7 @@ if ($scriptDir -and (Test-Path "$scriptDir\requirements.txt")) {
     $installDir = Join-Path $extraHome "app"
     $venvDir = Join-Path $extraHome "venv"
 
-    # Clone or download if not present
+    # Clone or download if not present, or pull latest changes if existing
     if (-not (Test-Path "$installDir\requirements.txt")) {
         Write-Step "Downloading Extra repository from GitHub..."
         $git = Get-Command git.exe -ErrorAction SilentlyContinue
@@ -149,6 +149,26 @@ if ($scriptDir -and (Test-Path "$scriptDir\requirements.txt")) {
             if (Test-Path (Join-Path $extraHome "extra-main")) {
                 Rename-Item -Path (Join-Path $extraHome "extra-main") -NewName "app" -Force
             }
+        }
+    } else {
+        Write-Step "Existing installation found. Updating to latest version from GitHub..."
+        $git = Get-Command git.exe -ErrorAction SilentlyContinue
+        if ($git -and (Test-Path "$installDir\.git")) {
+            try {
+                & git -C $installDir pull origin main --quiet
+                Write-Success "Repository updated successfully."
+            } catch {
+                Write-WarningMsg "Could not update via git pull: $_"
+            }
+        } else {
+            $rulesDir = Join-Path $installDir "rules"
+            if (-not (Test-Path $rulesDir)) {
+                New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+            }
+            try {
+                Invoke-WebRequest -Uri "https://extra.yantraos.com/extra_automation.md" -OutFile (Join-Path $rulesDir "extra_automation.md")
+                Write-Success "Fetched latest automation rules."
+            } catch {}
         }
     }
 }
@@ -243,6 +263,13 @@ if ($agyCmd) {
 
         # Deploy High-Speed Zero-Lookup Automation Rules
         $ruleSrc = Join-Path $installDir "rules\extra_automation.md"
+        if (-not (Test-Path $ruleSrc)) {
+            $rulesDir = Join-Path $installDir "rules"
+            if (-not (Test-Path $rulesDir)) { New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null }
+            try {
+                Invoke-WebRequest -Uri "https://extra.yantraos.com/extra_automation.md" -OutFile $ruleSrc -UseBasicParsing
+            } catch {}
+        }
         if (Test-Path $ruleSrc) {
             # 1. Current working directory workspace if .agents exists or CWD is a project
             $cwdAgentsRules = Join-Path (Get-Location) ".agents\rules"
