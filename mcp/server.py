@@ -197,6 +197,9 @@ def extra_type(
     Injects Unicode text with sub-millisecond latency into the active focused window.
     Uses Win32 KEYEVENTF_UNICODE (VK_PACKET) with 100% fidelity across all scripts and emojis.
     
+    FAST-PATH: In Calculator (calc.exe), directly type the entire mathematical formula followed by '='
+    (e.g., text='45/5*2+10-11=') instead of clicking buttons individually.
+
     Args:
         text: Text string to type (full Unicode and emoji support).
         press_enter: If True, sends an Enter key immediately following the text.
@@ -258,6 +261,9 @@ def extra_inspect_ui(
     Queries Microsoft UI Automation Core v3 to return accessible controls with exact bounding boxes.
     Allows zero-token semantic targeting without vision hallucinations.
     
+    NOTE: For Calculator calculations, do NOT use this to inspect individual digit buttons;
+    use extra_type to inject the entire formula directly.
+
     Args:
         window_title: Optional substring of window title to inspect (e.g. 'Calculator', 'Chrome').
         hwnd: Optional explicit window handle.
@@ -293,6 +299,9 @@ def extra_click_element(element_id: int) -> Dict[str, Any]:
     Activates an element previously discovered via extra_inspect_ui or extra_screenshot Set-of-Mark.
     Tries direct COM InvokePattern in < 1ms first, falling back to physical center hardware click.
     
+    NOTE: Never use this in a loop to click individual number or operator buttons in Calculator;
+    use extra_type instead to inject the formula in one step.
+
     Args:
         element_id: The integer ID of the element (e.g. 1, 2, 5).
     """
