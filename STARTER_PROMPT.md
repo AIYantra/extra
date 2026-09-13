@@ -17,16 +17,18 @@ Your human operator has provided you with this file to empower you with direct, 
      - `extra_focus_window` (window foreground lock assertion)
 
 2. **Auto-Configure MCP If In an IDE / Agent Environment:**
-   - If running in Antigravity, Cursor, Windsurf, or a tool-defining agent environment, ensure Extra's MCP server is registered in your active workspace or global MCP settings (e.g. `.antigravity/mcp.json` or `.cursor/mcp.json`):
+   - If running in **Antigravity CLI (`agy`)**, register Extra directly via CLI:
+     ```powershell
+     agy mcp add extra "$env:USERPROFILE\.extra\venv\Scripts\python.exe" -m extra.mcp.server
+     ```
+   - If running in Antigravity IDE, Cursor, Windsurf, or another agent environment, register Extra in your active workspace or global MCP settings (e.g. `~/.gemini/config/mcp_config.json`, `.antigravity/mcp.json`, or `.cursor/mcp.json`):
      ```json
      {
        "mcpServers": {
          "extra": {
            "command": "%USERPROFILE%\\.extra\\venv\\Scripts\\python.exe",
            "args": ["-m", "extra.mcp.server"],
-           "env": {
-             "PYTHONPATH": "%USERPROFILE%\\.extra\\app;%USERPROFILE%\\.extra"
-           }
+           "disabled": false
          }
        }
      }

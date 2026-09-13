@@ -8,9 +8,20 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
 from typing import Any, Dict, List, Optional
+
+# Defensive sys.path guard: ensure local 'mcp' folder never shadows the PyPI 'mcp' SDK
+_shadow_paths = [
+    p for p in sys.path
+    if os.path.isdir(os.path.join(p, "mcp")) and "site-packages" not in p.lower()
+]
+for _p in _shadow_paths:
+    sys.path.remove(_p)
+if "mcp" in sys.modules and "site-packages" not in getattr(sys.modules["mcp"], "__file__", "").lower():
+    del sys.modules["mcp"]
 
 from mcp.server.mcpserver import MCPServer
 

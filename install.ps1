@@ -185,7 +185,7 @@ if (-not (Test-Path $binDir)) {
 
 $parentDir = Split-Path -Parent $installDir
 $cmdWrapper = Join-Path $binDir "extra.cmd"
-"@echo off`nset PYTHONPATH=$installDir;$parentDir`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
+"@echo off`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
 
 # Add ~/.extra/bin to User PATH if not already there
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -226,9 +226,6 @@ if (-not $NoClaudeConfig) {
     $configObj["mcpServers"]["extra"] = @{
         "command" = $venvPython
         "args" = @("-m", "extra.mcp.server")
-        "env" = @{
-            "PYTHONPATH" = "$installDir;$parentDir"
-        }
     }
 
     $updatedJson = $configObj | ConvertTo-Json -Depth 10
@@ -236,10 +233,21 @@ if (-not $NoClaudeConfig) {
     Write-Success "Claude Desktop configuration updated: $claudeConfigFile"
 }
 
-# 8. Run Extra Doctor Diagnostics
+# 8. Antigravity CLI (agy) Configuration
+$agyCmd = Get-Command agy.exe -ErrorAction SilentlyContinue
+if ($agyCmd) {
+    Write-Step "Configuring Antigravity CLI (agy) MCP Integration..."
+    try {
+        & $agyCmd.Source mcp add extra $venvPython -m extra.mcp.server
+        Write-Success "Antigravity CLI (agy) MCP server registered successfully."
+    } catch {
+        Write-WarningMsg "Could not auto-register with agy: $_"
+    }
+}
+
+# 9. Run Extra Doctor Hardware Diagnostics
 if (-not $SkipDoctor) {
     Write-Step "Running Extra Doctor Hardware Diagnostics..."
-    $env:PYTHONPATH = "$installDir;$parentDir"
     & $venvPython -m extra.cli doctor
 }
 
