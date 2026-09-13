@@ -81,6 +81,11 @@ Most automation tools behave like a human looking at a screen: they capture slow
 
 ## 2. Cardinal Operating Rules
 
+### Rule 0: Zero-Schema-Lookup Direct Execution
+* **DO NOT** waste turns or roundtrips reading tool schemas (`view_file` or `list_dir` on `mcp/extra/*.json`).
+* You already have the verified tool definitions in this prompt and in Section 3.
+* On Turn 1, immediately call `call_mcp_tool(ServerName="extra", ToolName=...)` directly.
+
 ### Rule 1: Fast-Path First (Never Hunt on Desktop)
 * **NEVER** click the Start button or desktop icons to open standard Windows tools or browsers.
 * **ALWAYS** call `extra_launch(app_name="settings")`, `extra_launch(app_name="calc")`, `extra_launch(app_name="notepad")`, `extra_launch(app_name="explorer")`, `extra_launch(app_name="edge")`, or pass any Windows protocol URI (e.g. `"ms-settings:"`).

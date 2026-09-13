@@ -236,10 +236,32 @@ if (-not $NoClaudeConfig) {
 # 8. Antigravity CLI (agy) Configuration
 $agyCmd = Get-Command agy.exe -ErrorAction SilentlyContinue
 if ($agyCmd) {
-    Write-Step "Configuring Antigravity CLI (agy) MCP Integration..."
+    Write-Step "Configuring Antigravity CLI (agy) MCP Integration & Rules..."
     try {
         & $agyCmd.Source mcp add extra $venvPython -m extra.mcp.server
         Write-Success "Antigravity CLI (agy) MCP server registered successfully."
+
+        # Deploy High-Speed Zero-Lookup Automation Rules
+        $ruleSrc = Join-Path $installDir "rules\extra_automation.md"
+        if (Test-Path $ruleSrc) {
+            # 1. Current working directory workspace if .agents exists or CWD is a project
+            $cwdAgentsRules = Join-Path (Get-Location) ".agents\rules"
+            if (-not (Test-Path $cwdAgentsRules)) {
+                New-Item -ItemType Directory -Path $cwdAgentsRules -Force | Out-Null
+            }
+            Copy-Item -Path $ruleSrc -Destination (Join-Path $cwdAgentsRules "extra_automation.md") -Force
+            Write-Success "Installed extra_automation.md to $(Join-Path $cwdAgentsRules 'extra_automation.md')"
+
+            # 2. Global Antigravity CLI rules directory
+            $agyGlobalRules = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\rules"
+            if (Test-Path (Split-Path -Parent $agyGlobalRules)) {
+                if (-not (Test-Path $agyGlobalRules)) {
+                    New-Item -ItemType Directory -Path $agyGlobalRules -Force | Out-Null
+                }
+                Copy-Item -Path $ruleSrc -Destination (Join-Path $agyGlobalRules "extra_automation.md") -Force
+                Write-Success "Installed global rule to $(Join-Path $agyGlobalRules 'extra_automation.md')"
+            }
+        }
     } catch {
         Write-WarningMsg "Could not auto-register with agy: $_"
     }
