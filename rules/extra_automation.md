@@ -42,6 +42,8 @@ To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100
   1. `extra_launch(app_name="calc")`
   2. `extra_focus_window(window_title="Calculator")`
   3. `extra_type(text="<formula>=")` (e.g. `extra_type(text="245.12/383.29=")`) — calculations compute instantly on screen.
+  4. NEVER pass `use_clipboard=true` in Calculator (Windows Calculator rejects clipboard paste with "Invalid input").
+  5. NEVER call `extra_inspect_ui` to read the result. Call `extra_screenshot()` directly once to present the result.
 - **Documents & Briefings (`notepad.exe`):**
   1. Write the document file directly to disk (`Path.write_text` or `write_to_file`) to avoid slow character-by-character typing.
   2. Visibly launch Notepad with the file: `extra_launch(app_name="notepad", args=["<absolute_path>"])`.

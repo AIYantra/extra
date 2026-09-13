@@ -210,19 +210,29 @@ def extra_type(
     _stall_breaker.check_safety_abort()
 
     t0 = time.perf_counter()
-    if use_clipboard or len(text) > 80:
+    # Guard: Calculator (calc.exe) strictly rejects clipboard paste containing operators or equals ("Invalid input").
+    # Always use native instant_type (VK_PACKET) when Calculator is focused.
+    fg = get_foreground_window()
+    is_calc = fg and ("calculator" in fg.title.lower() or "calc" in fg.title.lower())
+
+    if is_calc:
+        instant_type(text, press_enter=press_enter)
+        method = "vk_packet"
+    elif use_clipboard or len(text) > 80:
         atomic_clipboard_paste(text)
         if press_enter:
             send_hotkey(["enter"])
+        method = "clipboard"
     else:
         instant_type(text, press_enter=press_enter)
+        method = "vk_packet"
     duration_ms = (time.perf_counter() - t0) * 1000.0
 
     return {
         "success": True,
         "length": len(text),
         "duration_ms": round(duration_ms, 2),
-        "method": "clipboard" if (use_clipboard or len(text) > 80) else "vk_packet",
+        "method": method,
     }
 
 

@@ -134,7 +134,7 @@ Most automation tools behave like a human looking at a screen: they capture slow
 
 ### Rule 8: Anti-Stall Application Shortcuts (Never Pixel-Hunt)
 * **Window Snapping:** NEVER drag window title bars with the mouse. ALWAYS use `extra_hotkey(keys=["win", "left"])` or `extra_hotkey(keys=["win", "right"])`.
-* **Calculator:** NEVER click on-screen digit buttons with the mouse. Focus the window and inject the entire formula at once with `extra_type(text="<formula>=")`.
+* **Calculator:** NEVER click on-screen digit buttons with the mouse. Focus the window and inject the entire formula at once with `extra_type(text="<formula>=")`. NEVER pass `use_clipboard=true` for Calculator (Calculator rejects clipboard paste with "Invalid input"). Do NOT inspect the UI tree to check results — call `extra_screenshot()` directly.
 * **Notepad & Docs:** NEVER type long texts key-by-key. Write the file directly to disk and launch `notepad.exe "<path>"`, or use atomic clipboard paste (`Ctrl+V`).
 * **MS Paint & Diagrams:** NEVER try to freehand drag geometric shapes or charts. Generate the image programmatically via `.NET System.Drawing` or `PIL`, save it, and open in `mspaint.exe` to display it.
 * **Explorer & Files:** NEVER drag-and-drop icons across desktop clutter. Create folders with `mkdir` and move files via filesystem commands, then launch `explorer.exe "<path>"`.
