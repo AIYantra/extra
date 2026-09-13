@@ -15,6 +15,11 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+try:
+    from extra import __version__
+except Exception:
+    __version__ = "0.1.1"
+
 from extra.core.capture import capture_screen
 from extra.core.focus import (
     find_window_by_title,
@@ -47,6 +52,7 @@ def cmd_doctor() -> int:
     os_version = platform.version()
     machine = platform.machine()
     py_ver = sys.version.split()[0]
+    print(f"  Extra Version: {__version__}")
     print(f"  OS:            {os_name} {os_release} (Build {os_version})")
     print(f"  Architecture:  {machine}")
     print(f"  Python:        {py_ver} ({'64-bit' if sys.maxsize > 2**32 else '32-bit'})")
@@ -186,6 +192,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         prog="extra",
         description="Extra — Flashless Windows 10/11 Computer-Use Engine & MCP Server",
+    )
+    parser.add_argument(
+        "--version", "-v", action="version", version=f"extra {__version__}"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 

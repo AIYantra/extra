@@ -54,6 +54,9 @@ APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "chrome": {"target": "chrome.exe", "type": "browser", "proc": "chrome.exe"},
     "firefox": {"target": "firefox.exe", "type": "browser", "proc": "firefox.exe"},
     "brave": {"target": "brave.exe", "type": "browser", "proc": "brave.exe"},
+    "paint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
+    "mspaint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
+    "photos": {"target": "ms-photos:", "type": "uri", "proc": "Photos.exe"},
 }
 
 # Standard Browser Path Locations
@@ -180,7 +183,11 @@ def launch_app(
     existing_hwnds = {w.hwnd for w in list_windows(visible_only=False)}
 
     # Launch via ShellExecuteW
-    params = " ".join(args) if args else None
+    if clean_app == "photos" and args and len(args) > 0:
+        target = args[0]
+        params = None
+    else:
+        params = " ".join(args) if args else None
     res = shell32.ShellExecuteW(None, "open", target, params, None, SW_SHOWNORMAL)
 
     # ShellExecute returns > 32 on success

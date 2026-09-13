@@ -12,7 +12,7 @@ We actively provide security patches and updates for the following releases:
 
 | Version | Supported | Notes |
 | :--- | :--- | :--- |
-| **0.1.x (Current)** | :white_check_mark: | Latest release line |
+| **0.1.x (Current: 0.1.1)** | :white_check_mark: | Latest release line |
 | < 0.1.0 | :x: | Experimental / development prototypes |
 
 ---

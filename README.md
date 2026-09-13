@@ -60,7 +60,7 @@ Setup Extra on my PC: In PowerShell run 'irm https://extra.yantraos.com/install.
 ```
 
 Your AI will run the installer, configure its tools, and reply:  
-> **"We are ready to use Extra."**
+> **"We are ready! Please restart <your AI application, e.g. Claude Desktop, Antigravity, Cursor> to make it work."**
 
 ---
 

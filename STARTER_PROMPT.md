@@ -40,19 +40,19 @@ Your human operator has provided you with this file to empower you with direct, 
    - Always use `extra_browser` for web tasks to save vision tokens.
 
 4. **Your Mandatory Immediate Reply:**
-   Once you read and adopt this file, reply to the user with **EXACTLY** this opening message:
+   Once you read and adopt this file, reply to the user with this clear, action-oriented message (substituting `<AI client name>` with your actual client or app name, e.g. Claude Desktop, Antigravity, Cursor, Windsurf, etc.):
 
-   > **"We are ready to use Extra."**
+   > **"We are ready! Please restart <AI client name, e.g., Claude Desktop, Antigravity, Cursor> to make it work."**
    > 
-   > Extra is connected to your Windows system. You can ask me to perform any task on your PC, for example:
+   > Extra has been successfully configured for your Windows system. Once you restart this app so it connects to the new Extra MCP server, the full `extra_*` tool suite will be active, and you can ask me to perform any task on your PC, for example:
    > - *"Open Settings and check for Windows updates"*
-   > - *"Open Excel and calculate the quarterly totals"*
+   > - *"Open Calculator and compute our valuation ratios"*
    > - *"Organize the downloaded files in my Downloads folder"*
-   > - *"Open Notepad and draft a meeting summary"*
+   > - *"Open Notepad and draft an executive briefing"*
    > 
-   > What would you like me to do?
+   > Please restart your AI app now, and I'll be ready to control your PC!
 
-Do not burden the user with technical logs or JSON configs unless they ask. Confirm readiness and invite their first action.
+Do not burden the user with technical logs or JSON configs unless they ask. Confirm readiness and invite their restart.
 
 ---
 
@@ -114,13 +114,31 @@ Most automation tools behave like a human looking at a screen: they capture slow
 * If `"stall_status": "stalled" (Strike 2/2)`:
   * Halt immediately and inform the user or switch strategies to protect their API budget.
 
+### Rule 7: Live Desktop Execution (NO Headless or Terminating Scripts)
+* **Computer use MUST happen LIVE on the Windows desktop.**
+* **DO NOT** encapsulate the desktop UI workflow into a headless background Python runner script that executes invisibly or closes apps.
+* **DO USE Extra MCP tools directly** in sequence:
+  - `extra_launch` to open apps visibly in the foreground.
+  - `extra_focus_window` to bring windows to the front.
+  - `extra_type` to inject formulas or text directly into active windows.
+  - `extra_hotkey` to snap windows (`Win+Left`, `Win+Right`) and dismiss Snap Assist (`Esc`).
+  - `extra_screenshot` to visually confirm and present the completed desktop state.
+* **Persistent Windows:** Every application opened for the user (Notepad, Paint, Calculator, Edge) **MUST REMAIN OPEN AND VISIBLE**. NEVER call `.terminate()`, `kill`, or `taskkill` on apps opened as part of the task!
+
+### Rule 8: Anti-Stall Application Shortcuts (Never Pixel-Hunt)
+* **Window Snapping:** NEVER drag window title bars with the mouse. ALWAYS use `extra_hotkey(keys=["win", "left"])` or `extra_hotkey(keys=["win", "right"])`.
+* **Calculator:** NEVER click on-screen digit buttons with the mouse. Focus the window and inject the entire formula at once with `extra_type(text="<formula>=")`.
+* **Notepad & Docs:** NEVER type long texts key-by-key. Write the file directly to disk and launch `notepad.exe "<path>"`, or use atomic clipboard paste (`Ctrl+V`).
+* **MS Paint & Diagrams:** NEVER try to freehand drag geometric shapes or charts. Generate the image programmatically via `.NET System.Drawing` or `PIL`, save it, and open in `mspaint.exe` to display it.
+* **Explorer & Files:** NEVER drag-and-drop icons across desktop clutter. Create folders with `mkdir` and move files via filesystem commands, then launch `explorer.exe "<path>"`.
+
 ---
 
 ## 3. Complete Toolset Reference
 
 | Tool | Purpose | Key Parameters |
 | :--- | :--- | :--- |
-| `extra_launch` | Instant app launcher | `app_name: "settings"` \| `"calc"` \| `"notepad"` \| `"edge"` |
+| `extra_launch` | Instant app launcher | `app_name: "settings"` \| `"calc"` \| `"notepad"` \| `"edge"` \| `"mspaint"` \| `"photos"` |
 | `extra_inspect_ui` | Discover accessible controls | `window_title`, `interactive_only=True`, `max_elements=50` |
 | `extra_click_element`| Invoke/click inspected UI control | `element_id: int` |
 | `extra_screenshot` | Ultra-fast capture + optional badges | `annotate_ui: bool`, `crop_box: [l, t, r, b]` |

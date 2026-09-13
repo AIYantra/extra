@@ -284,6 +284,6 @@ Copy and paste this prompt into your AI (Claude, Antigravity, Cursor, AGY):
 👉  Setup $starterPromptPath
 
 Your AI will automatically configure its rules and reply:
-"We are ready to use Extra." You don't need to do anything manually!
+"We are ready! Please restart <your AI application> to make it work."
 ======================================================================
 "@ -ForegroundColor Green
