@@ -271,22 +271,44 @@ if ($agyCmd) {
             } catch {}
         }
         if (Test-Path $ruleSrc) {
-            # 1. Current working directory workspace if .agents exists or CWD is a project
-            $cwdAgentsRules = Join-Path (Get-Location) ".agents\rules"
-            if (-not (Test-Path $cwdAgentsRules)) {
-                New-Item -ItemType Directory -Path $cwdAgentsRules -Force | Out-Null
-            }
-            Copy-Item -Path $ruleSrc -Destination (Join-Path $cwdAgentsRules "extra_automation.md") -Force
-            Write-Success "Installed extra_automation.md to $(Join-Path $cwdAgentsRules 'extra_automation.md')"
+            $ruleContent = Get-Content -Path $ruleSrc -Raw
 
-            # 2. Global Antigravity CLI rules directory
-            $agyGlobalRules = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\rules"
-            if (Test-Path (Split-Path -Parent $agyGlobalRules)) {
-                if (-not (Test-Path $agyGlobalRules)) {
-                    New-Item -ItemType Directory -Path $agyGlobalRules -Force | Out-Null
-                }
-                Copy-Item -Path $ruleSrc -Destination (Join-Path $agyGlobalRules "extra_automation.md") -Force
-                Write-Success "Installed global rule to $(Join-Path $agyGlobalRules 'extra_automation.md')"
+            # 1. Global Skill: ~/.gemini/config/skills/extra-automation/SKILL.md (active anywhere agy is run)
+            $skillDir = Join-Path $env:USERPROFILE ".gemini\config\skills\extra-automation"
+            if (-not (Test-Path $skillDir)) {
+                New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
+            }
+            Copy-Item -Path $ruleSrc -Destination (Join-Path $skillDir "SKILL.md") -Force
+            Write-Success "Installed global skill to $(Join-Path $skillDir 'SKILL.md')"
+
+            # 2. Global Instructions: ~/.gemini/GEMINI.md (always active across all directories including System32)
+            $globalGeminiMd = Join-Path $env:USERPROFILE ".gemini\GEMINI.md"
+            if (-not (Test-Path $globalGeminiMd) -or (Get-Content $globalGeminiMd -Raw) -notlike "*Extra Windows Desktop Automation Protocol*") {
+                Add-Content -Path $globalGeminiMd -Value "`n`n$ruleContent" -Encoding UTF8
+                Write-Success "Registered always-on protocol in $globalGeminiMd"
+            }
+
+            # 3. Global MCP instructions: ~/.gemini/antigravity-cli/mcp/extra/instructions.md
+            $mcpExtraDir = Join-Path $env:USERPROFILE ".gemini\antigravity-cli\mcp\extra"
+            if (Test-Path $mcpExtraDir) {
+                Copy-Item -Path $ruleSrc -Destination (Join-Path $mcpExtraDir "instructions.md") -Force
+                Write-Success "Installed MCP instructions to $(Join-Path $mcpExtraDir 'instructions.md')"
+            }
+
+            # 4. User profile workspace: ~/.agents/rules/extra_automation.md
+            $userAgentsRules = Join-Path $env:USERPROFILE ".agents\rules"
+            if (-not (Test-Path $userAgentsRules)) {
+                New-Item -ItemType Directory -Path $userAgentsRules -Force | Out-Null
+            }
+            Copy-Item -Path $ruleSrc -Destination (Join-Path $userAgentsRules "extra_automation.md") -Force
+
+            # 5. Current working directory workspace (if not System32)
+            $cwd = (Get-Location).Path
+            if ($cwd -notlike "*system32*") {
+                $cwdRules = Join-Path $cwd ".agents\rules"
+                if (-not (Test-Path $cwdRules)) { New-Item -ItemType Directory -Path $cwdRules -Force | Out-Null }
+                Copy-Item -Path $ruleSrc -Destination (Join-Path $cwdRules "extra_automation.md") -Force
+                Write-Success "Installed workspace rule to $(Join-Path $cwdRules 'extra_automation.md')"
             }
         }
     } catch {
