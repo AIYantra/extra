@@ -9,6 +9,8 @@
 ### The Open-Source Astra 6 for your PC
 **Your AI can see, click, type, navigate, and get real work done on Windows.**
 
+<!-- mcp-name: io.github.AIYantra/extra -->
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows 11 / 10](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010-0078D6.svg)](https://microsoft.com/windows)
 [![Protocol: Model Context Protocol (MCP)](https://img.shields.io/badge/Protocol-MCP%20Native-orange.svg)](https://modelcontextprotocol.io)
