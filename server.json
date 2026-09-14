@@ -3,7 +3,7 @@
   "name": "io.github.AIYantra/extra",
   "title": "EXTRA - Native Computer Use",
   "description": "Flashless Windows 10/11 native computer-use engine for AI vision, mouse, keyboard & UI automation",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "websiteUrl": "https://extra.yantraos.com",
   "repository": {
     "url": "https://github.com/AIYantra/extra",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "extra-desktop",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "transport": {
         "type": "stdio"
       }

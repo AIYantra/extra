@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://extra.yantraos.com">
-  <img src="assets/logo.png" alt="Extra — Get extra from your AI" width="420" />
+  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/logo.png" alt="Extra — Get extra from your AI" width="420" />
 </a>
 
 # Extra
@@ -23,7 +23,7 @@
 <br/>
 
 <a href="https://extra.yantraos.com">
-  <img src="assets/demo.gif" alt="Extra in action — Live Windows desktop automation" width="100%" />
+  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/demo.gif" alt="Extra in action — Live Windows desktop automation" width="100%" />
 </a>
 
 </div>

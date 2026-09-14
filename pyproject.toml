@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "extra-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "Flashless Windows 10/11 Computer-Use Engine & Model Context Protocol (MCP) Server"
 readme = "README.md"
 requires-python = ">=3.10"
