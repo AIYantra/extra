@@ -360,7 +360,36 @@ def cmd_update(args: argparse.Namespace) -> int:
     print("\n[Repository Synchronization]")
     is_git_repo = (repo_dir / ".git").exists() and git_cmd is not None
     if not is_git_repo:
-        print(f"  [INFO] Not a git clone or git not available at {repo_dir}. Skipping git sync.")
+        if args.check:
+            print(f"  [INFO] ZIP-based installation detected at {repo_dir}.")
+            print("  Run 'extra update' to refresh to the latest release from GitHub.")
+            return 0
+
+        print(f"  [INFO] ZIP-based installation detected at {repo_dir}.")
+        print("  Downloading latest release from GitHub (https://github.com/AIYantra/extra)...")
+        import urllib.request
+        import zipfile
+        import tempfile
+
+        try:
+            zip_url = "https://github.com/AIYantra/extra/archive/refs/heads/main.zip"
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zip_file = Path(tmpdir) / "extra.zip"
+                urllib.request.urlretrieve(zip_url, zip_file)
+                with zipfile.ZipFile(zip_file, "r") as zf:
+                    zf.extractall(tmpdir)
+                extracted_app = Path(tmpdir) / "extra-main"
+                if extracted_app.exists():
+                    for item in extracted_app.rglob("*"):
+                        rel = item.relative_to(extracted_app)
+                        dest = repo_dir / rel
+                        if item.is_dir():
+                            dest.mkdir(parents=True, exist_ok=True)
+                        else:
+                            shutil.copy2(item, dest)
+                    print("  [OK] Repository updated to latest version from GitHub.")
+        except Exception as ex:
+            print(f"  [WARN] Failed to update repository via ZIP archive: {ex}")
     else:
         try:
             print("  Fetching latest commits from remote origin/main...")

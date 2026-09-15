@@ -152,24 +152,60 @@ if ($scriptDir -and (Test-Path "$scriptDir\requirements.txt")) {
         }
     } else {
         Write-Step "Existing installation found. Updating to latest version from GitHub..."
+        $updated = $false
         $git = Get-Command git.exe -ErrorAction SilentlyContinue
         if ($git -and (Test-Path "$installDir\.git")) {
             try {
-                & git -C $installDir pull origin main --quiet
-                Write-Success "Repository updated successfully."
+                & git -C $installDir fetch origin main --quiet
+                & git -C $installDir reset --hard origin/main --quiet
+                & git -C $installDir clean -fd --quiet
+                $updated = $true
+                Write-Success "Repository updated successfully via git."
             } catch {
-                Write-WarningMsg "Could not update via git pull: $_"
+                Write-WarningMsg "Git update encountered an issue: $_"
             }
-        } else {
-            $rulesDir = Join-Path $installDir "rules"
-            if (-not (Test-Path $rulesDir)) {
-                New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
-            }
-            try {
-                Invoke-WebRequest -Uri "https://extra.yantraos.com/extra_automation.md" -OutFile (Join-Path $rulesDir "extra_automation.md")
-                Write-Success "Fetched latest automation rules."
-            } catch {}
         }
+
+        if (-not $updated) {
+            Write-Step "Downloading latest Extra code archive from GitHub..."
+            $zipUrl = "https://github.com/AIYantra/extra/archive/refs/heads/main.zip"
+            $zipPath = Join-Path $extraHome "extra-update.zip"
+            $tempExtract = Join-Path $extraHome "temp_extract"
+            try {
+                Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+                if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue }
+                Expand-Archive -Path $zipPath -DestinationPath $tempExtract -Force
+                $extractedApp = Join-Path $tempExtract "extra-main"
+                if (Test-Path $extractedApp) {
+                    Get-ChildItem -Path $extractedApp -Recurse | ForEach-Object {
+                        $rel = $_.FullName.Substring($extractedApp.Length).TrimStart('\', '/')
+                        $dest = Join-Path $installDir $rel
+                        if ($_.PSIsContainer) {
+                            if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
+                        } else {
+                            Copy-Item -Path $_.FullName -Destination $dest -Force
+                        }
+                    }
+                    $updated = $true
+                    Write-Success "Repository updated successfully via GitHub archive."
+                }
+            } catch {
+                Write-WarningMsg "Could not update repository via ZIP: $_"
+            } finally {
+                if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+                if (Test-Path $tempExtract) { Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue }
+            }
+        }
+
+        # Sync rules fallback
+        $rulesDir = Join-Path $installDir "rules"
+        if (-not (Test-Path $rulesDir)) {
+            New-Item -ItemType Directory -Path $rulesDir -Force | Out-Null
+        }
+        try {
+            Invoke-WebRequest -Uri "https://extra.yantraos.com/extra_automation.md" -OutFile (Join-Path $rulesDir "extra_automation.md") -UseBasicParsing
+            Write-Success "Fetched latest automation rules."
+        } catch {}
     }
 }
 
@@ -192,7 +228,7 @@ Write-Step "Installing verified production dependencies (Playwright, MCP, PyWin3
 & $venvPython -m pip install --quiet --upgrade pip
 & $venvPython -m pip install --quiet -r "$installDir\requirements.txt"
 if (Test-Path "$installDir\pyproject.toml") {
-    & $venvPython -m pip install --quiet -e $installDir
+    & $venvPython -m pip install --quiet -e $installDir --no-deps
 }
 Write-Success "All dependencies successfully installed."
 
@@ -205,7 +241,7 @@ if (-not (Test-Path $binDir)) {
 
 $parentDir = Split-Path -Parent $installDir
 $cmdWrapper = Join-Path $binDir "extra.cmd"
-"@echo off`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
+"@echo off`nset PYTHONPATH=$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
 
 # Add ~/.extra/bin to User PATH if not already there
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
