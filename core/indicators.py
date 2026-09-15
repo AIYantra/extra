@@ -1,17 +1,17 @@
 """
-Project Extra — Task Indication & Human-Agent Awareness Subsystem
-Provides non-intrusive, zero-latency feedback during autonomous computer use:
-1. Ambient Screen Edge Pulse (Visual): Tells peripheral vision the computer is in autonomous use.
-   Flashes soft emerald green on completion.
-2. Audio Chime (Auditory): High-fidelity synthesized acoustic chime on completion so the user
-   knows the moment the task finishes even when away from the screen.
-3. Cursor Halo / Beacon (Tactile): Non-invasive glowing ring around the pointer during movement
-   with an animated ripple on click actions.
+Project Extra — Task Indication & Human-Agent Awareness Subsystem (V2 Polish)
+Provides high-end, zero-latency feedback during autonomous computer use:
+1. Ambient Screen Edge Glow (Visual): Multi-layered cascading neon bloom around the screen bezels
+   with organic chromatic breathing while active, erupting into a vibrant emerald-mint aurora on completion.
+2. Luxury Harmonic Audio Chime (Auditory): Multi-timbre glass marimba chord with sparkling overtones
+   and acoustic sub-bass resonance, informing the user the moment a task starts or finishes.
+3. Tactical Cursor Reticle & Shockwave (Tactile): High-precision targeting reticle with 4-point crosshairs
+   and animated dual-shockwave ripples on click actions.
 
 Engineered with:
 - WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE (100% click-through, zero focus stealing)
 - SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) so AI vision models see clean desktop screenshots
-  without hallucinating borders or beacons.
+  without hallucinating glowing borders or reticles.
 """
 
 from __future__ import annotations
@@ -49,8 +49,8 @@ WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
 class AudioIndicator:
     """
-    Synthesizes and plays clean, pleasant acoustic chimes without external audio assets.
-    Uses multi-harmonic sine waves with exponential decay envelopes.
+    Synthesizes and plays studio-grade acoustic glass chimes without external audio files.
+    Uses multi-harmonic sine waves with exponential decay envelopes and sub-bass body resonance.
     """
 
     def __init__(self) -> None:
@@ -62,39 +62,87 @@ class AudioIndicator:
             return self._cache[profile]
 
         sample_rate = 44100
-        if profile == "complete":
-            # Ascending two-tone chime: E6 (1318.5 Hz) -> B6 (1975.5 Hz)
-            tones = [(1318.51, 0.10), (1975.53, 0.35)]
-        elif profile == "start":
-            # Soft modern confirmation blip: A5 (880 Hz)
-            tones = [(880.0, 0.08)]
-        elif profile == "attention":
-            # Gentle descending chord: G5 (783.99 Hz) -> Eb5 (622.25 Hz)
-            tones = [(783.99, 0.12), (622.25, 0.28)]
-        else:
-            tones = [(1000.0, 0.10)]
-
         buf = io.BytesIO()
+
         with wave.open(buf, "wb") as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(sample_rate)
-            frames = []
-            for freq, duration in tones:
+            frames: List[bytes] = []
+
+            if profile == "complete":
+                # Luxury Glass Marimba Chord: E6 (1318.5 Hz) -> G#6 (1661.2 Hz) -> B6 (1975.5 Hz) + warm E4 (329.6 Hz)
+                duration = 0.55
                 n_samples = int(duration * sample_rate)
                 for i in range(n_samples):
                     t = i / sample_rate
-                    attack = min(1.0, t / 0.008)
-                    decay = math.exp(-4.5 * t / duration)
-                    env = attack * decay
-                    # Warm harmonics: fundamental (70%) + 2nd harmonic (22%) + 3rd (8%)
-                    val = (
-                        0.70 * math.sin(2 * math.pi * freq * t)
-                        + 0.22 * math.sin(4 * math.pi * freq * t)
-                        + 0.08 * math.sin(6 * math.pi * freq * t)
+                    # Note 1: E6 crystal strike at 0.0s
+                    env1 = min(1.0, t / 0.005) * math.exp(-5.5 * t)
+                    v1 = 0.42 * math.sin(2 * math.pi * 1318.51 * t) + 0.12 * math.sin(4 * math.pi * 1318.51 * t)
+
+                    # Note 2: G#6 major third overtone at 0.05s
+                    t2 = max(0.0, t - 0.05)
+                    env2 = (min(1.0, t2 / 0.005) * math.exp(-5.0 * t2)) if t >= 0.05 else 0.0
+                    v2 = 0.35 * math.sin(2 * math.pi * 1661.22 * t2) + 0.10 * math.sin(4 * math.pi * 1661.22 * t2)
+
+                    # Note 3: B6 sparkling crowning resonance at 0.11s
+                    t3 = max(0.0, t - 0.11)
+                    env3 = (min(1.0, t3 / 0.005) * math.exp(-4.2 * t3)) if t >= 0.11 else 0.0
+                    v3 = (
+                        0.50 * math.sin(2 * math.pi * 1975.53 * t3)
+                        + 0.18 * math.sin(4 * math.pi * 1975.53 * t3)
+                        + 0.06 * math.sin(6 * math.pi * 1975.53 * t3)
                     )
-                    sample = int(val * env * 28000)
+
+                    # Sub-bass body: E4 warmth
+                    env_sub = min(1.0, t / 0.012) * math.exp(-3.5 * t)
+                    v_sub = 0.22 * math.sin(2 * math.pi * 329.63 * t)
+
+                    mix = (v1 * env1 + v2 * env2 + v3 * env3 + v_sub * env_sub) * 0.78
+                    sample = int(mix * 31000)
                     frames.append(struct.pack("<h", max(-32767, min(32767, sample))))
+
+            elif profile == "start":
+                # Silky modern ascending blip: C5 (523.25 Hz) -> G5 (783.99 Hz)
+                duration = 0.20
+                n_samples = int(duration * sample_rate)
+                for i in range(n_samples):
+                    t = i / sample_rate
+                    # Tone 1 at 0.0s
+                    env1 = min(1.0, t / 0.006) * math.exp(-12.0 * t)
+                    v1 = 0.38 * math.sin(2 * math.pi * 523.25 * t) + 0.10 * math.sin(4 * math.pi * 523.25 * t)
+                    # Tone 2 at 0.06s
+                    t2 = max(0.0, t - 0.06)
+                    env2 = (min(1.0, t2 / 0.006) * math.exp(-9.0 * t2)) if t >= 0.06 else 0.0
+                    v2 = 0.48 * math.sin(2 * math.pi * 783.99 * t2) + 0.12 * math.sin(4 * math.pi * 783.99 * t2)
+
+                    mix = (v1 * env1 + v2 * env2) * 0.72
+                    sample = int(mix * 28000)
+                    frames.append(struct.pack("<h", max(-32767, min(32767, sample))))
+
+            elif profile == "attention":
+                # Warm descending attention chord: G5 (783.99 Hz) -> Eb5 (622.25 Hz)
+                duration = 0.35
+                n_samples = int(duration * sample_rate)
+                for i in range(n_samples):
+                    t = i / sample_rate
+                    t2 = max(0.0, t - 0.08)
+                    env1 = min(1.0, t / 0.008) * math.exp(-6.0 * t)
+                    env2 = (min(1.0, t2 / 0.008) * math.exp(-5.0 * t2)) if t >= 0.08 else 0.0
+                    v1 = 0.45 * math.sin(2 * math.pi * 783.99 * t)
+                    v2 = 0.45 * math.sin(2 * math.pi * 622.25 * t2)
+                    mix = (v1 * env1 + v2 * env2) * 0.75
+                    sample = int(mix * 28000)
+                    frames.append(struct.pack("<h", max(-32767, min(32767, sample))))
+            else:
+                tones = [(1000.0, 0.10)]
+                n_samples = int(0.10 * sample_rate)
+                for i in range(n_samples):
+                    t = i / sample_rate
+                    env = min(1.0, t / 0.008) * math.exp(-8.0 * t)
+                    sample = int(math.sin(2 * math.pi * 1000.0 * t) * env * 25000)
+                    frames.append(struct.pack("<h", max(-32767, min(32767, sample))))
+
             wf.writeframes(b"".join(frames))
 
         wav_bytes = buf.getvalue()
@@ -102,7 +150,7 @@ class AudioIndicator:
         return wav_bytes
 
     def play(self, profile: str = "complete") -> None:
-        """Plays the designated sound profile asynchronously in a worker thread."""
+        """Plays designated acoustic sound profile asynchronously without blocking execution."""
         if not self.enabled:
             return
 
@@ -119,17 +167,33 @@ class AudioIndicator:
 
 class IndicatorWorkerThread(threading.Thread):
     """
-    Dedicated Win32 UI thread managing transparent layered overlay windows:
-    1. Screen Perimeter Edge Window (Active pulse & completion flash)
-    2. Cursor Halo Window (Movement beacon & click ripple)
+    Dedicated Win32 UI thread managing multi-layered transparent layered overlay windows:
+    1. Cascading Ambient Neon Glow (Breathing Aurora pulse & emerald flash)
+    2. Tactical Targeting Reticle (Precision crosshairs & expanding shockwaves)
     """
 
     COLOR_KEY = 0x000000  # Black transparent chroma key
-    # BGR Colors for Win32 GDI
-    COLOR_ACTIVE_BORDER = 0xF16663   # Electric Indigo / Violet (RGB: 99, 102, 241)
-    COLOR_COMPLETE_BORDER = 0x5EC522 # Emerald Green (RGB: 34, 197, 94)
-    COLOR_HALO_DEFAULT = 0xF16663    # Electric Indigo
-    COLOR_HALO_RIPPLE = 0x5EC522     # Emerald Green accent on click
+
+    # Aurora Palette (BGR Format for Win32 GDI)
+    # Active: Electric Cyan, Vibrant Indigo, Neon Violet, Deep Velvet
+    ACTIVE_BLOOM_BANDS = [
+        (0xD4B606, 0, 2),  # Band 0: Crisp Cyber Cyan (RGB: 6, 182, 212)
+        (0xF16663, 2, 2),  # Band 1: Electric Indigo (RGB: 99, 102, 241)
+        (0xF755A8, 4, 3),  # Band 2: Neon Violet Bloom (RGB: 168, 85, 247)
+        (0x951D4C, 7, 4),  # Band 3: Deep Velvet Aura (RGB: 76, 29, 149)
+    ]
+
+    # Completion: Sparkling Mint, Vivid Emerald, Deep Jade, Forest Aurora
+    COMPLETE_BLOOM_BANDS = [
+        (0xD0F3A7, 0, 2),  # Band 0: Sparkling Mint (RGB: 167, 243, 208)
+        (0x81B910, 2, 3),  # Band 1: Vivid Emerald (RGB: 16, 185, 129)
+        (0x699605, 5, 4),  # Band 2: Deep Jade (RGB: 5, 150, 105)
+        (0x577804, 9, 5),  # Band 3: Forest Aurora (RGB: 4, 120, 87)
+    ]
+
+    COLOR_RETICLE_CORE = 0xF16663     # Electric Indigo
+    COLOR_RETICLE_ACCENT = 0xD4B606   # Cyber Cyan
+    COLOR_RETICLE_SHOCK = 0x5EC522    # Emerald Mint shockwave
 
     def __init__(self, command_queue: queue.Queue) -> None:
         super().__init__(daemon=True, name="ExtraIndicatorWorker")
@@ -140,7 +204,7 @@ class IndicatorWorkerThread(threading.Thread):
         self.state = "IDLE"  # IDLE, ACTIVE, COMPLETING
         self.state_start = 0.0
         self.last_action_time = 0.0
-        self.auto_timeout_seconds = 12.0
+        self.auto_timeout_seconds = 14.0
 
         # Multi-monitor bounds
         self.current_monitor_idx = 0
@@ -152,12 +216,12 @@ class IndicatorWorkerThread(threading.Thread):
         # Window handles
         self.hwnd_edge = 0
         self.hwnd_halo = 0
-        self.halo_size = 80
-        self.current_edge_color = 0
+        self.halo_size = 96  # High-resolution reticle canvas
+        self.current_edge_mode = ""
 
-        # Ripple tracking
-        self.ripple_active = False
-        self.ripple_start = 0.0
+        # Shockwave animation tracking
+        self.shockwave_active = False
+        self.shockwave_start = 0.0
 
     def _setup_windows(self) -> None:
         ensure_dpi_aware()
@@ -209,7 +273,7 @@ class IndicatorWorkerThread(threading.Thread):
             None,
         )
 
-        # Create Cursor Halo Window
+        # Create Cursor Reticle Window
         self.hwnd_halo = win32gui.CreateWindowEx(
             ex_style,
             "ExtraHaloOverlayClass",
@@ -267,10 +331,11 @@ class IndicatorWorkerThread(threading.Thread):
                     self.mon_h,
                     win32con.SWP_NOACTIVATE,
                 )
-                self.current_edge_color = 0  # Trigger border redraw
+                self.current_edge_mode = ""  # Trigger border redraw
                 break
 
-    def _draw_edge(self, color_bgr: int, thickness: int = 4) -> None:
+    def _draw_edge_bloom(self, bands: List[Tuple[int, int, int]]) -> None:
+        """Renders multi-layer cascading neon bloom rectangles into screen bezels."""
         if not self.hwnd_edge:
             return
 
@@ -279,29 +344,37 @@ class IndicatorWorkerThread(threading.Thread):
         bmp = win32gui.CreateCompatibleBitmap(hdc, self.mon_w, self.mon_h)
         win32gui.SelectObject(memdc, bmp)
 
-        # Fill background with Chroma Key
-        black_brush = win32gui.CreateSolidBrush(self.COLOR_KEY)
-        win32gui.FillRect(memdc, (0, 0, self.mon_w, self.mon_h), black_brush)
+        # Clear black chroma key
+        bk = win32gui.CreateSolidBrush(self.COLOR_KEY)
+        win32gui.FillRect(memdc, (0, 0, self.mon_w, self.mon_h), bk)
 
-        # Draw Perimeter Borders
-        border_brush = win32gui.CreateSolidBrush(color_bgr)
-        win32gui.FillRect(memdc, (0, 0, self.mon_w, thickness), border_brush)
-        win32gui.FillRect(memdc, (0, self.mon_h - thickness, self.mon_w, self.mon_h), border_brush)
-        win32gui.FillRect(memdc, (0, 0, thickness, self.mon_h), border_brush)
-        win32gui.FillRect(memdc, (self.mon_w - thickness, 0, self.mon_w, self.mon_h), border_brush)
+        # Draw cascading glow bands
+        for color_bgr, inset, thickness in bands:
+            br = win32gui.CreateSolidBrush(color_bgr)
+            # Top
+            win32gui.FillRect(memdc, (inset, inset, self.mon_w - inset, inset + thickness), br)
+            # Bottom
+            win32gui.FillRect(memdc, (inset, self.mon_h - inset - thickness, self.mon_w - inset, self.mon_h - inset), br)
+            # Left
+            win32gui.FillRect(memdc, (inset, inset, inset + thickness, self.mon_h - inset), br)
+            # Right
+            win32gui.FillRect(memdc, (self.mon_w - inset - thickness, inset, self.mon_w - inset, self.mon_h - inset), br)
+            win32gui.DeleteObject(br)
 
-        # Push to window
         win32gui.BitBlt(hdc, 0, 0, self.mon_w, self.mon_h, memdc, 0, 0, win32con.SRCCOPY)
 
-        # Cleanup GDI handles
-        win32gui.DeleteObject(border_brush)
-        win32gui.DeleteObject(black_brush)
+        win32gui.DeleteObject(bk)
         win32gui.DeleteObject(bmp)
         win32gui.DeleteDC(memdc)
         win32gui.ReleaseDC(self.hwnd_edge, hdc)
-        self.current_edge_color = color_bgr
 
-    def _draw_halo(self, radius: int, thickness: int = 2, color_bgr: int = 0xF16663) -> None:
+    def _draw_tactical_reticle(
+        self,
+        shockwave_radius: Optional[int] = None,
+        shockwave_alpha_ratio: float = 1.0,
+        flash_center: bool = False,
+    ) -> None:
+        """Renders high-precision targeting reticle with 4-point crosshairs and shockwave bloom."""
         if not self.hwnd_halo:
             return
 
@@ -312,31 +385,76 @@ class IndicatorWorkerThread(threading.Thread):
         win32gui.SelectObject(memdc, bmp)
 
         # Clear background
-        black_brush = win32gui.CreateSolidBrush(self.COLOR_KEY)
-        win32gui.FillRect(memdc, (0, 0, self.halo_size, self.halo_size), black_brush)
+        bk = win32gui.CreateSolidBrush(self.COLOR_KEY)
+        win32gui.FillRect(memdc, (0, 0, self.halo_size, self.halo_size), bk)
 
-        # Outer ring
-        pen = win32gui.CreatePen(win32con.PS_SOLID, thickness, color_bgr)
         null_brush = win32gui.GetStockObject(win32con.NULL_BRUSH)
-        win32gui.SelectObject(memdc, pen)
         win32gui.SelectObject(memdc, null_brush)
-        win32gui.Ellipse(memdc, half - radius, half - radius, half + radius, half + radius)
 
-        # Center target dot
-        dot_brush = win32gui.CreateSolidBrush(0xFFFFFF)
-        dot_pen = win32gui.CreatePen(win32con.PS_SOLID, 1, 0xFFFFFF)
+        # 1. Faint outer guidance aura ring (radius 24)
+        pen_aura = win32gui.CreatePen(win32con.PS_SOLID, 1, 0x4C1D95)  # Deep purple
+        win32gui.SelectObject(memdc, pen_aura)
+        win32gui.Ellipse(memdc, half - 24, half - 24, half + 24, half + 24)
+
+        # 2. Inner crisp reticle ring (radius 15)
+        pen_core = win32gui.CreatePen(win32con.PS_SOLID, 2, self.COLOR_RETICLE_CORE)
+        win32gui.SelectObject(memdc, pen_core)
+        win32gui.Ellipse(memdc, half - 15, half - 15, half + 15, half + 15)
+
+        # 3. Precision 4-point crosshair ticks (12, 3, 6, 9 o'clock)
+        pen_ticks = win32gui.CreatePen(win32con.PS_SOLID, 1, 0xFFFFFF)
+        win32gui.SelectObject(memdc, pen_ticks)
+        # Top tick
+        win32gui.MoveToEx(memdc, half, half - 26)
+        win32gui.LineTo(memdc, half, half - 17)
+        # Bottom tick
+        win32gui.MoveToEx(memdc, half, half + 17)
+        win32gui.LineTo(memdc, half, half + 26)
+        # Left tick
+        win32gui.MoveToEx(memdc, half - 26, half)
+        win32gui.LineTo(memdc, half - 17, half)
+        # Right tick
+        win32gui.MoveToEx(memdc, half + 17, half)
+        win32gui.LineTo(memdc, half + 26, half)
+
+        # 4. Animated expanding shockwave on click
+        if shockwave_radius:
+            shock_thickness = max(1, int(3 * shockwave_alpha_ratio))
+            pen_shock = win32gui.CreatePen(win32con.PS_SOLID, shock_thickness, self.COLOR_RETICLE_SHOCK)
+            win32gui.SelectObject(memdc, pen_shock)
+            win32gui.Ellipse(
+                memdc,
+                half - shockwave_radius,
+                half - shockwave_radius,
+                half + shockwave_radius,
+                half + shockwave_radius,
+            )
+            # Secondary ambient shockwave ring
+            outer_shock = min(half - 2, shockwave_radius + 6)
+            pen_outer_shock = win32gui.CreatePen(win32con.PS_SOLID, 1, self.COLOR_RETICLE_ACCENT)
+            win32gui.SelectObject(memdc, pen_outer_shock)
+            win32gui.Ellipse(memdc, half - outer_shock, half - outer_shock, half + outer_shock, half + outer_shock)
+            win32gui.DeleteObject(pen_shock)
+            win32gui.DeleteObject(pen_outer_shock)
+
+        # 5. Center laser pip
+        pip_color = 0x5EC522 if flash_center else 0xFFFFFF
+        dot_brush = win32gui.CreateSolidBrush(pip_color)
+        dot_pen = win32gui.CreatePen(win32con.PS_SOLID, 1, pip_color)
         win32gui.SelectObject(memdc, dot_brush)
         win32gui.SelectObject(memdc, dot_pen)
         win32gui.Ellipse(memdc, half - 3, half - 3, half + 3, half + 3)
 
-        # Push to window
+        # Push to screen
         win32gui.BitBlt(hdc, 0, 0, self.halo_size, self.halo_size, memdc, 0, 0, win32con.SRCCOPY)
 
-        # Cleanup
-        win32gui.DeleteObject(dot_brush)
+        # Cleanup handles
         win32gui.DeleteObject(dot_pen)
-        win32gui.DeleteObject(pen)
-        win32gui.DeleteObject(black_brush)
+        win32gui.DeleteObject(dot_brush)
+        win32gui.DeleteObject(pen_ticks)
+        win32gui.DeleteObject(pen_core)
+        win32gui.DeleteObject(pen_aura)
+        win32gui.DeleteObject(bk)
         win32gui.DeleteObject(bmp)
         win32gui.DeleteDC(memdc)
         win32gui.ReleaseDC(self.hwnd_halo, hdc)
@@ -357,7 +475,7 @@ class IndicatorWorkerThread(threading.Thread):
         self._setup_windows()
 
         while self.running:
-            # 1. Process all pending queue commands
+            # 1. Process pending queue commands
             try:
                 while True:
                     cmd, data = self.cmd_queue.get_nowait()
@@ -369,7 +487,6 @@ class IndicatorWorkerThread(threading.Thread):
                         self._update_monitor_bounds(mon_idx)
                         win32gui.ShowWindow(self.hwnd_edge, win32con.SW_SHOWNOACTIVATE)
                         win32gui.ShowWindow(self.hwnd_halo, win32con.SW_SHOWNOACTIVATE)
-                        # Position halo at current cursor
                         cur_x, cur_y = get_cursor_position()
                         self._set_halo_pos(cur_x, cur_y)
 
@@ -391,8 +508,8 @@ class IndicatorWorkerThread(threading.Thread):
 
                         action_type = data.get("action", "move")
                         if action_type == "click":
-                            self.ripple_active = True
-                            self.ripple_start = time.time()
+                            self.shockwave_active = True
+                            self.shockwave_start = time.time()
 
                     elif cmd == "COMPLETE":
                         self.state = "COMPLETING"
@@ -410,15 +527,16 @@ class IndicatorWorkerThread(threading.Thread):
             # 2. Pump Win32 messages
             win32gui.PumpWaitingMessages()
 
-            # 3. Animation state machine
+            # 3. Animation State Machine
             now = time.time()
             if self.state == "ACTIVE":
-                if self.current_edge_color != self.COLOR_ACTIVE_BORDER:
-                    self._draw_edge(self.COLOR_ACTIVE_BORDER, thickness=4)
+                if self.current_edge_mode != "ACTIVE":
+                    self._draw_edge_bloom(self.ACTIVE_BLOOM_BANDS)
+                    self.current_edge_mode = "ACTIVE"
 
-                # Breathing alpha pulse: oscillates between 110 and 220
+                # Breathing organic pulse: oscillates between alpha 125 and 230
                 elapsed = now - self.state_start
-                alpha = int(140 + 80 * math.sin(elapsed * 5.0))
+                alpha = int(145 + 85 * math.sin(elapsed * 4.0))
                 win32gui.SetLayeredWindowAttributes(
                     self.hwnd_edge,
                     self.COLOR_KEY,
@@ -426,18 +544,21 @@ class IndicatorWorkerThread(threading.Thread):
                     win32con.LWA_COLORKEY | win32con.LWA_ALPHA,
                 )
 
-                # Animate halo
-                if self.ripple_active:
-                    r_elapsed = now - self.ripple_start
-                    duration = 0.22
-                    if r_elapsed < duration:
-                        progress = r_elapsed / duration
-                        r = int(16 + progress * 20)
-                        h_alpha = max(20, int(240 * (1.0 - progress * 0.8)))
-                        self._draw_halo(
-                            r,
-                            thickness=max(1, int(3 * (1.0 - progress))),
-                            color_bgr=self.COLOR_HALO_RIPPLE,
+                # Animate tactical reticle & shockwave
+                if self.shockwave_active:
+                    s_elapsed = now - self.shockwave_start
+                    duration = 0.25
+                    if s_elapsed < duration:
+                        progress = s_elapsed / duration
+                        # Smooth cubic deceleration
+                        ease_out = 1.0 - (1.0 - progress) ** 3
+                        r = int(15 + ease_out * 27)
+                        alpha_ratio = max(0.0, 1.0 - progress)
+                        h_alpha = max(30, int(245 * alpha_ratio))
+                        self._draw_tactical_reticle(
+                            shockwave_radius=r,
+                            shockwave_alpha_ratio=alpha_ratio,
+                            flash_center=True,
                         )
                         win32gui.SetLayeredWindowAttributes(
                             self.hwnd_halo,
@@ -446,20 +567,20 @@ class IndicatorWorkerThread(threading.Thread):
                             win32con.LWA_COLORKEY | win32con.LWA_ALPHA,
                         )
                     else:
-                        self.ripple_active = False
-                        self._draw_halo(16, thickness=2, color_bgr=self.COLOR_HALO_DEFAULT)
+                        self.shockwave_active = False
+                        self._draw_tactical_reticle()
                         win32gui.SetLayeredWindowAttributes(
                             self.hwnd_halo,
                             self.COLOR_KEY,
-                            210,
+                            220,
                             win32con.LWA_COLORKEY | win32con.LWA_ALPHA,
                         )
                 else:
-                    self._draw_halo(16, thickness=2, color_bgr=self.COLOR_HALO_DEFAULT)
+                    self._draw_tactical_reticle()
                     win32gui.SetLayeredWindowAttributes(
                         self.hwnd_halo,
                         self.COLOR_KEY,
-                        210,
+                        220,
                         win32con.LWA_COLORKEY | win32con.LWA_ALPHA,
                     )
 
@@ -469,23 +590,23 @@ class IndicatorWorkerThread(threading.Thread):
 
             elif self.state == "COMPLETING":
                 elapsed = now - self.state_start
-                if self.current_edge_color != self.COLOR_COMPLETE_BORDER:
-                    self._draw_edge(self.COLOR_COMPLETE_BORDER, thickness=5)
-                    # Hide halo on complete
+                if self.current_edge_mode != "COMPLETE":
+                    self._draw_edge_bloom(self.COMPLETE_BLOOM_BANDS)
+                    self.current_edge_mode = "COMPLETE"
                     win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
 
-                if elapsed < 1.0:
-                    # Flash vibrant emerald green
+                if elapsed < 0.9:
+                    # Flash vibrant emerald-mint aurora
                     win32gui.SetLayeredWindowAttributes(
                         self.hwnd_edge,
                         self.COLOR_KEY,
-                        245,
+                        250,
                         win32con.LWA_COLORKEY | win32con.LWA_ALPHA,
                     )
                 elif elapsed < 1.6:
-                    # Smooth dissolution
-                    fade_progress = (elapsed - 1.0) / 0.6
-                    alpha = max(0, int(245 * (1.0 - fade_progress)))
+                    # Smooth optical dissolution
+                    fade_progress = (elapsed - 0.9) / 0.7
+                    alpha = max(0, int(250 * (1.0 - fade_progress)))
                     win32gui.SetLayeredWindowAttributes(
                         self.hwnd_edge,
                         self.COLOR_KEY,
@@ -498,12 +619,12 @@ class IndicatorWorkerThread(threading.Thread):
             elif self.state == "IDLE":
                 win32gui.ShowWindow(self.hwnd_edge, win32con.SW_HIDE)
                 win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
-                self.current_edge_color = 0
+                self.current_edge_mode = ""
                 time.sleep(0.04)
 
-            time.sleep(0.025)
+            time.sleep(0.02)
 
-        # Cleanup on thread exit
+        # Cleanup handles on exit
         if self.hwnd_edge:
             win32gui.DestroyWindow(self.hwnd_edge)
         if self.hwnd_halo:
@@ -549,15 +670,22 @@ class IndicatorController:
         """Enables or disables audio chime feedback."""
         self.audio.enabled = enabled
 
-    def task_start(self, task_name: Optional[str] = None, monitor_index: int = 0) -> None:
+    def task_start(
+        self,
+        task_name: Optional[str] = None,
+        monitor_index: int = 0,
+        play_chime: bool = True,
+    ) -> None:
         """
-        Activates the ambient screen edge pulse and cursor beacon.
-        Optionally plays a subtle confirmation blip.
+        Activates the cascading ambient screen edge bloom and tactical cursor reticle.
+        Plays a subtle modern confirmation sound.
         """
         if not self.enabled:
             return
         self._ensure_worker()
         self.cmd_queue.put(("START", {"task_name": task_name, "monitor_index": monitor_index}))
+        if play_chime:
+            self.audio.play("start")
         logger.info("Indicator: Task started ('%s')", task_name or "Autonomous")
 
     def task_action(
@@ -569,7 +697,7 @@ class IndicatorController:
     ) -> None:
         """
         Notifies of an input action (click, move, type, drag).
-        Refreshes ambient active mode and updates cursor halo coordinates.
+        Refreshes ambient active mode and updates cursor reticle coordinates / shockwaves.
         """
         if not self.enabled:
             return
@@ -594,9 +722,9 @@ class IndicatorController:
     ) -> None:
         """
         Triggers the task completion sequence:
-        1. Screen perimeter flashes soft emerald green for ~1.5s then dissolves.
-        2. Plays crisp multi-harmonic completion audio chime.
-        3. Fades and dismisses cursor beacon.
+        1. Screen perimeter erupts in an emerald-mint aurora bloom for ~1.5s then dissolves.
+        2. Plays luxury glass marimba chord with acoustic resonance.
+        3. Fades and dismisses cursor reticle.
         """
         if not self.enabled:
             return
