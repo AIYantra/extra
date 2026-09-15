@@ -171,6 +171,22 @@ user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
 user32.SetCursorPos.restype = wintypes.BOOL
 
 
+def _notify_indicator(
+    action: str,
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+    monitor_index: int = 0,
+) -> None:
+    """Helper to dispatch real-time feedback to indicator controller without latency."""
+    try:
+        from extra.core.indicators import get_indicator_controller
+        get_indicator_controller().task_action(
+            action=action, x=x, y=y, monitor_index=monitor_index
+        )
+    except Exception:
+        pass
+
+
 def _send_inputs(inputs: List[INPUT]) -> int:
     """Dispatches a batch of INPUT structs to the OS input pipeline."""
     if not inputs:
@@ -228,6 +244,7 @@ def instant_type(text: str, press_enter: bool = False) -> None:
         inputs.extend([kd_enter, ku_enter])
 
     _send_inputs(inputs)
+    _notify_indicator("type")
 
 
 def atomic_clipboard_paste(text: str, restore_delay: float = 0.02) -> None:
@@ -274,12 +291,14 @@ def atomic_clipboard_paste(text: str, restore_delay: float = 0.02) -> None:
                 pass
 
 
-def mouse_move(x: int, y: int, monitor_index: int = 0) -> None:
+def mouse_move(x: int, y: int, monitor_index: int = 0, notify: bool = True) -> None:
     """Positions the mouse cursor at exact physical display coordinates."""
     ensure_dpi_aware()
     attach_input_desktop()
     cx, cy = clamp_coordinates(x, y, monitor_index)
     user32.SetCursorPos(cx, cy)
+    if notify:
+        _notify_indicator("move", cx, cy, monitor_index)
 
 
 def mouse_down(button: str = "left") -> None:
@@ -323,8 +342,11 @@ def mouse_click(
     at the designated physical coordinates.
     """
     if x is not None and y is not None:
-        mouse_move(x, y, monitor_index)
+        mouse_move(x, y, monitor_index, notify=False)
         time.sleep(0.01)
+
+    target_x, target_y = (x, y) if x is not None else get_cursor_position()
+    _notify_indicator("click", target_x, target_y, monitor_index)
 
     for i in range(clicks):
         mouse_down(button)
@@ -365,6 +387,7 @@ def mouse_drag(
 
     time.sleep(0.02)
     mouse_up(button)
+    _notify_indicator("drag", end_x, end_y, monitor_index)
 
 
 def mouse_scroll(delta: int, horizontal: bool = False) -> None:
@@ -420,3 +443,4 @@ def send_hotkey(keys: List[str]) -> None:
         for vk in reversed(vk_codes)
     ]
     _send_inputs(up_inputs)
+    _notify_indicator("hotkey")

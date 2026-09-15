@@ -40,6 +40,7 @@ from extra.core.geometry import (
     get_monitors_info,
     normalize_coordinates,
 )
+from extra.core.indicators import get_indicator_controller
 from extra.core.input_engine import (
     atomic_clipboard_paste,
     instant_type,
@@ -432,6 +433,87 @@ def extra_drag(
 
     mouse_drag(sx, sy, ex, ey, button=button, monitor_index=monitor_index)
     return {"success": True, "start": [sx, sy], "end": [ex, ey]}
+
+
+@server.tool()
+def extra_task_start(
+    task_name: Optional[str] = None,
+    monitor_index: int = 0,
+) -> Dict[str, Any]:
+    """
+    Signals the start of an autonomous computer use task.
+    Activates the ambient screen edge pulse (visible to human peripheral vision)
+    and attaches the interactive cursor halo.
+    
+    NOTE: Both overlays are automatically excluded from screenshots via SetWindowDisplayAffinity.
+    
+    Args:
+        task_name: Human-readable description of the task (e.g. 'Generate Q3 Report in Excel').
+        monitor_index: 0-based monitor index to illuminate.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    ctrl = get_indicator_controller()
+    ctrl.task_start(task_name=task_name, monitor_index=monitor_index)
+    return {"success": True, "task_name": task_name, "status": "active"}
+
+
+@server.tool()
+def extra_task_complete(
+    summary: Optional[str] = None,
+    success: bool = True,
+    play_chime: bool = True,
+) -> Dict[str, Any]:
+    """
+    Signals that the autonomous computer use task is completed.
+    Triggers:
+    1. The ambient screen edge flashes soft emerald green for ~1.5s, then dissolves.
+    2. A pleasant multi-harmonic audio chime plays, informing the user immediately even if away from the screen.
+    3. The cursor beacon dismisses cleanly.
+    
+    Args:
+        summary: Optional completion summary (e.g. 'Spreadsheet saved to Desktop and email sent').
+        success: Whether the task succeeded (plays positive chime) or needs attention (plays alert). Default True.
+        play_chime: If True, plays the synthesized acoustic chime. Default True.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    ctrl = get_indicator_controller()
+    ctrl.task_complete(summary=summary, success=success, play_chime=play_chime)
+    return {
+        "success": True,
+        "summary": summary,
+        "status": "completed" if success else "failed",
+    }
+
+
+@server.tool()
+def extra_indicate_status(
+    status: str = "active",
+    message: Optional[str] = None,
+    play_sound: bool = False,
+) -> Dict[str, Any]:
+    """
+    Controls human-agent awareness indicators on the Windows desktop.
+    
+    Args:
+        status: One of 'active' (pulsing border + cursor halo), 'complete' (green flash + chime), or 'idle'/'stop' (hide indicators).
+        message: Optional status or summary note.
+        play_sound: Whether to play a chime.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    ctrl = get_indicator_controller()
+    st = status.lower().strip()
+    if st in ("active", "running", "busy"):
+        ctrl.task_start(task_name=message)
+    elif st in ("complete", "completed", "done", "success"):
+        ctrl.task_complete(summary=message, success=True, play_chime=play_sound)
+    elif st in ("fail", "failed", "error", "abort"):
+        ctrl.task_complete(summary=message, success=False, play_chime=play_sound)
+    else:
+        ctrl.task_stop()
+    return {"success": True, "status": st, "message": message}
 
 
 def main() -> None:

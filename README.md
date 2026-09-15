@@ -150,6 +150,9 @@ When connected to Extra, your AI assistant receives these native tools:
 | `extra_drag` | Drags and drops files, windows, or sliders between coordinates |
 | `extra_browser` | Directly extracts web page DOM content in Edge/Chrome without taking screenshots |
 | `extra_focus_window` | Brings any application window immediately to the front |
+| `extra_task_start` | Signals autonomous task execution; activates ambient screen edge pulse & cursor halo |
+| `extra_task_complete` | Signals task completion; flashes emerald green border, plays audio chime, and dissolves indicators |
+| `extra_indicate_status` | Direct programmatic control over active, complete, and idle desktop indicators |
 
 ---
 
@@ -161,6 +164,7 @@ extra/
 ├── core/                   # Core Windows Automation Engine
 │   ├── capture.py          # Sub-3ms screen capture (DXGI & MSS)
 │   ├── geometry.py         # PerMonitorV2 DPI scaling & display normalization
+│   ├── indicators.py       # Ambient screen edge pulse, cursor halo, and harmonic audio chime
 │   ├── input_engine.py     # Win32 SendInput Unicode & atomic clipboard injection
 │   ├── focus.py            # AttachThreadInput window focus forcing
 │   ├── uia_plane.py        # Windows UI Automation v3 COM client
@@ -170,7 +174,7 @@ extra/
 │   └── browser.py          # Playwright / Edge CDP DOM bridge
 ├── mcp/                    # Anthropic Model Context Protocol
 │   └── server.py           # Standard JSON-RPC stdio/SSE server
-├── cli.py                  # CLI runner (extra doctor, test, run, inspect, snap)
+├── cli.py                  # CLI runner (extra doctor, test, indicators, run, inspect, snap)
 ├── install.ps1             # 1-line PowerShell installer
 ├── pyproject.toml          # Package metadata and build configuration
 ├── requirements.txt        # Enterprise-audited dependency manifest

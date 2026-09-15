@@ -46,6 +46,9 @@ from extra.core import (
     mouse_move,
     normalize_bbox,
     normalize_coordinates,
+    IndicatorController,
+    AudioIndicator,
+    get_indicator_controller,
 )
 
 
@@ -150,8 +153,35 @@ def run_tests() -> None:
     assert out3.status == StallStatus.NORMAL and out3.strikes == 0
     print(f"  [OK] Visual Change Reset Strikes to 0: {out3.status.value}")
 
+    # 7. Human-Agent Awareness & Task Indicators
+    print("\n[7/7] Testing Human-Agent Awareness & Indicators (Edge, Halo, Audio)...")
+    indicator_ctrl = get_indicator_controller()
+    assert indicator_ctrl is not None
+    # Test audio synthesis
+    audio = AudioIndicator()
+    complete_wav = audio._synthesize("complete")
+    assert len(complete_wav) > 1000
+    start_wav = audio._synthesize("start")
+    assert len(start_wav) > 1000
+    print(f"  [OK] Audio Chimes Synthesized: complete={len(complete_wav)} bytes, start={len(start_wav)} bytes")
+
+    # Start indicator
+    indicator_ctrl.task_start("Test Autonomous Workflow", 0)
+    time.sleep(0.3)
+    print("  [OK] Ambient Screen Edge Pulse Initialized")
+
+    # Action dispatch
+    indicator_ctrl.task_action("click", 500, 300, 0)
+    time.sleep(0.2)
+    print("  [OK] Cursor Halo & Click Ripple Dispatched")
+
+    # Task completion
+    indicator_ctrl.task_complete("Test Workflow Completed", success=True, play_chime=True)
+    time.sleep(1.0)
+    print("  [OK] Completion Sequence Dispatched (Emerald Flash + Chime)")
+
     print("\n" + "=" * 60)
-    print(" ALL PHASE 1 CORE ENGINE MODULES VERIFIED & PASSING!")
+    print(" ALL CORE ENGINE & TASK INDICATION MODULES VERIFIED!")
     print("=" * 60)
 
 

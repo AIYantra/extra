@@ -36,6 +36,11 @@ from extra.core.geometry import (
     normalize_bbox,
     normalize_coordinates,
 )
+from extra.core.indicators import (
+    AudioIndicator,
+    IndicatorController,
+    get_indicator_controller,
+)
 from extra.core.input_engine import (
     atomic_clipboard_paste,
     instant_type,
@@ -110,4 +115,8 @@ __all__ = [
     "StallStatus",
     "ActionOutcome",
     "EmergencyAbortError",
+    # Task Indicators
+    "AudioIndicator",
+    "IndicatorController",
+    "get_indicator_controller",
 ]

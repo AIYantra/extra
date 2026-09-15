@@ -6,6 +6,7 @@ Provides `extra doctor`, `extra test`, `extra run`, `extra inspect`, and `extra 
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import platform
 import sys
@@ -188,6 +189,40 @@ def cmd_snap(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_indicators_demo() -> int:
+    """Demonstrates ambient edge pulse, cursor halo, and harmonic audio chime live."""
+    from extra.core.indicators import get_indicator_controller
+
+    ctrl = get_indicator_controller()
+    print("=" * 65)
+    print(" EXTRA TASK INDICATION & AWARENESS LIVE DEMO")
+    print("=" * 65)
+
+    print("\n[1/3] Activating Ambient Screen Edge Pulse (Electric Indigo/Cyan Breathing)...")
+    ctrl.task_start("Autonomous Task Demonstration", monitor_index=0)
+    time.sleep(1.2)
+
+    print("[2/3] Demonstrating Interactive Cursor Halo & Click Ripple...")
+    cur_x, cur_y = get_cursor_position()
+    for i in range(1, 6):
+        step_x = cur_x + i * 25
+        step_y = cur_y + int(18 * math.sin(i * 0.8))
+        ctrl.task_action("move", step_x, step_y)
+        time.sleep(0.08)
+
+    # Click ripple at target coordinate
+    ctrl.task_action("click", cur_x + 150, cur_y)
+    print("  [OK] Click ripple triggered at pointer coordinates.")
+    time.sleep(1.0)
+
+    print("[3/3] Completing Task: Flashing Soft Emerald Green & Playing Harmonic Chime...")
+    ctrl.task_complete("Task demonstrated and completed successfully", success=True, play_chime=True)
+    time.sleep(2.0)
+
+    print("\n[OK] Demo completed! All overlays smoothly dissolved.")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="extra",
@@ -203,6 +238,9 @@ def main() -> None:
 
     # test
     subparsers.add_parser("test", help="Run integration test suite")
+
+    # indicators
+    subparsers.add_parser("indicators", help="Demonstrate ambient screen pulse, cursor halo, and audio chime")
 
     # run
     run_parser = subparsers.add_parser("run", help="Start the MCP Server on stdio")
@@ -230,6 +268,8 @@ def main() -> None:
         sys.exit(cmd_doctor())
     elif args.command == "test":
         sys.exit(cmd_test())
+    elif args.command == "indicators":
+        sys.exit(cmd_indicators_demo())
     elif args.command == "run":
         sys.exit(cmd_run(args))
     elif args.command == "inspect":
