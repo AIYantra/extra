@@ -163,11 +163,14 @@ class AudioIndicator:
             try:
                 wav_data = self._synthesize(profile)
                 if NSSound is not None and NSData is not None:
-                    data = NSData.dataWithBytes_length_(wav_data, len(wav_data))
-                    sound = NSSound.alloc().initWithData_(data)
-                    if sound:
-                        sound.play()
-                        return
+                    try:
+                        data = NSData.dataWithBytes_length_(wav_data, len(wav_data))
+                        sound = NSSound.alloc().initWithData_(data)
+                        if sound:
+                            sound.play()
+                            return
+                    except Exception:
+                        pass
                 # Native macOS CLI audio player fallback
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                     f.write(wav_data)
@@ -234,7 +237,12 @@ class MacIndicatorOverlay:
         self.current_mode = "active"
         if self.panel:
             try:
-                self.panel.orderFrontRegardless()
+                if threading.current_thread() is threading.main_thread():
+                    self.panel.orderFrontRegardless()
+                elif hasattr(self.panel, "performSelectorOnMainThread_withObject_waitUntilDone_"):
+                    self.panel.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "orderFrontRegardless", None, False
+                    )
                 self.is_visible = True
             except Exception:
                 pass
@@ -243,7 +251,12 @@ class MacIndicatorOverlay:
         self.current_mode = "complete"
         if self.panel:
             try:
-                self.panel.orderFrontRegardless()
+                if threading.current_thread() is threading.main_thread():
+                    self.panel.orderFrontRegardless()
+                elif hasattr(self.panel, "performSelectorOnMainThread_withObject_waitUntilDone_"):
+                    self.panel.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "orderFrontRegardless", None, False
+                    )
                 self.is_visible = True
             except Exception:
                 pass
@@ -252,7 +265,12 @@ class MacIndicatorOverlay:
         self.current_mode = "idle"
         if self.panel:
             try:
-                self.panel.orderOut_(None)
+                if threading.current_thread() is threading.main_thread():
+                    self.panel.orderOut_(None)
+                elif hasattr(self.panel, "performSelectorOnMainThread_withObject_waitUntilDone_"):
+                    self.panel.performSelectorOnMainThread_withObject_waitUntilDone_(
+                        "orderOut:", None, False
+                    )
                 self.is_visible = False
             except Exception:
                 pass
