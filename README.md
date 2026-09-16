@@ -71,7 +71,7 @@ Copy and paste the single directive for your OS into **Claude Desktop**, **Googl
 
 * **🪟 For Windows (11 / 10):**
   ```text
-  Setup Extra on my PC: In PowerShell run 'irm https://extra.yantraos.com/install.ps1 | iex', then read and configure ~/.extra/app/STARTER_PROMPT.md so we are ready to use Extra.
+  Setup Extra on my PC: In PowerShell run 'iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"', then read and configure ~/.extra/app/STARTER_PROMPT.md so we are ready to use Extra.
   ```
 
 Your AI will run the installer, configure MCP and local rules, and reply:  
@@ -86,9 +86,9 @@ Your AI will run the installer, configure MCP and local rules, and reply:
   curl -sSL https://extra.yantraos.com/install.sh | bash
   ```
 
-* **🪟 Windows PowerShell:**
+* **🪟 Windows PowerShell (Staged, Defender-Clean):**
   ```powershell
-  irm https://extra.yantraos.com/install.ps1 | iex
+  iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"
   ```
 
 The automated installer will:

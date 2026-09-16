@@ -1,16 +1,19 @@
 <#
 .SYNOPSIS
     Extra — Windows 10/11 Flashless Computer-Use Engine & MCP Server Installer
-    One-liner execution: irm https://extra.yantraos.com/install.ps1 | iex
+    Safe Staged Execution:
+    iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"
 
 .DESCRIPTION
-    Automated zero-friction setup for AIYantra Extra:
+    Automated zero-friction, Defender-compliant setup for AIYantra Extra:
     1. Verifies 64-bit Windows 10/11 environment.
     2. Discovers or installs Python 3.10+.
     3. Creates isolated virtual environment (.venv).
-    4. Installs audited, enterprise-clean dependencies.
-    5. Automatically configures Claude Desktop (claude_desktop_config.json).
-    6. Creates global 'extra' command and runs system doctor diagnostic.
+    4. Provisions CFA-safe scratch workspace (~/.extra/workspace).
+    5. Configures Windows Defender Controlled Folder Access allowlists.
+    6. Installs audited, enterprise-clean dependencies.
+    7. Automatically configures Claude Desktop, Cursor, and Antigravity.
+    8. Creates global 'extra' command and runs system doctor diagnostic.
 #>
 
 [CmdletBinding()]
@@ -121,16 +124,25 @@ Write-Success "Using Python runtime: $pythonExe ($pyVersion)"
 # 3. Setup Target Directory & Isolated Environment
 Write-Step "Configuring application repository & virtual environment..."
 
+$extraHome = Join-Path $env:USERPROFILE ".extra"
+if (-not (Test-Path $extraHome)) {
+    New-Item -ItemType Directory -Path $extraHome -Force | Out-Null
+}
+
+$workspaceDir = Join-Path $extraHome "workspace"
+if (-not (Test-Path $workspaceDir)) {
+    New-Item -ItemType Directory -Path $workspaceDir -Force | Out-Null
+}
+[Environment]::SetEnvironmentVariable("EXTRA_WORKSPACE", $workspaceDir, "User")
+$env:EXTRA_WORKSPACE = $workspaceDir
+Write-Success "CFA-safe scratch workspace ready at $workspaceDir"
+
 # Check if script is running from inside the extra repository
 $scriptDir = $PSScriptRoot
 if ($scriptDir -and (Test-Path "$scriptDir\requirements.txt")) {
     $installDir = $scriptDir
     $venvDir = Join-Path $installDir ".venv"
 } else {
-    $extraHome = Join-Path $env:USERPROFILE ".extra"
-    if (-not (Test-Path $extraHome)) {
-        New-Item -ItemType Directory -Path $extraHome -Force | Out-Null
-    }
     $installDir = Join-Path $extraHome "app"
     $venvDir = Join-Path $extraHome "venv"
 
@@ -232,7 +244,26 @@ if (Test-Path "$installDir\pyproject.toml") {
 }
 Write-Success "All dependencies successfully installed."
 
-# 6. Global CLI Wrapper Setup
+# 6. Windows Defender Controlled Folder Access (CFA) Configuration
+Write-Step "Checking Windows Defender Controlled Folder Access (Ransomware Protection)..."
+try {
+    $cfa = (Get-MpPreference -ErrorAction SilentlyContinue).EnableControlledFolderAccess
+    if ($cfa -eq 1 -or $cfa -eq 2) {
+        $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        if ($isAdmin) {
+            Add-MpPreference -ControlledFolderAccessAllowedApplications $venvPython -ErrorAction SilentlyContinue
+            Write-Success "Whitelisted Extra virtual environment in Windows Defender CFA."
+        } else {
+            Write-Success "Controlled Folder Access active. Extra configured to use safe workspace at $workspaceDir."
+        }
+    } else {
+        Write-Success "Controlled Folder Access standard/inactive. Filesystem access unimpeded."
+    }
+} catch {
+    # Non-blocking check
+}
+
+# 7. Global CLI Wrapper Setup
 Write-Step "Creating global 'extra' command wrapper..."
 $binDir = Join-Path $env:USERPROFILE ".extra\bin"
 if (-not (Test-Path $binDir)) {
@@ -253,7 +284,7 @@ if ($userPath -notlike "*$binDir*") {
     Write-Success "Global CLI wrapper ready at $cmdWrapper."
 }
 
-# 7. Claude Desktop Configuration
+# 8. Claude Desktop Configuration
 if (-not $NoClaudeConfig) {
     Write-Step "Configuring Claude Desktop MCP Integration..."
     $claudeConfigDir = Join-Path $env:APPDATA "Claude"
@@ -289,7 +320,7 @@ if (-not $NoClaudeConfig) {
     Write-Success "Claude Desktop configuration updated: $claudeConfigFile"
 }
 
-# 8. Antigravity CLI (agy) Configuration
+# 9. Antigravity CLI (agy) Configuration
 $agyCmd = Get-Command agy.exe -ErrorAction SilentlyContinue
 if ($agyCmd) {
     Write-Step "Configuring Antigravity CLI (agy) MCP Integration & Rules..."
@@ -352,37 +383,10 @@ if ($agyCmd) {
     }
 }
 
-# 9. Run Extra Doctor Hardware Diagnostics
+# 10. Run Extra Doctor Hardware Diagnostics
 if (-not $SkipDoctor) {
     Write-Step "Running Extra Doctor Hardware Diagnostics..."
     & $venvPython -m extra.cli doctor
-}
-
-# 9. Anonymous Install Analytics (Non-blocking)
-if (-not $env:EXTRA_NO_TELEMETRY -and -not $NoTelemetry) {
-    try {
-        $pyVer = "unknown"
-        if ($venvPython -and (Test-Path $venvPython)) {
-            $pyVer = & $venvPython -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>$null
-        }
-        $payload = @{
-            event = "install_completed"
-            os = [Environment]::OSVersion.VersionString
-            arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
-            python = $pyVer
-            claude_configured = (-not $NoClaudeConfig)
-            timestamp = (Get-Date).ToUniversalTime().ToString("o")
-        } | ConvertTo-Json -Compress
-
-        $null = Invoke-RestMethod -Uri "https://extra.yantraos.com/api/telemetry" `
-            -Method POST `
-            -Body $payload `
-            -ContentType "application/json" `
-            -TimeoutSec 3 `
-            -ErrorAction SilentlyContinue
-    } catch {
-        # Safe failover — telemetry failure will never interrupt installation
-    }
 }
 
 $starterPromptPath = Join-Path $installDir "STARTER_PROMPT.md"
@@ -390,8 +394,11 @@ $starterPromptPath = Join-Path $installDir "STARTER_PROMPT.md"
 Write-Host @"
 
 ======================================================================
-  EXTRA IS INSTALLED AND READY!
+  EXTRA IS INSTALLED AND READY (DEFENDER CFA-COMPLIANT)
 ======================================================================
+
+Safe Scratch Workspace: $workspaceDir
+All agent files & charts are routed cleanly outside protected folders.
 
 How to use Extra (Just 1 step):
 Copy and paste this prompt into your AI (Claude, Antigravity, Cursor, AGY):

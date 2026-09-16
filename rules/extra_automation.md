@@ -51,12 +51,14 @@ To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100
   5. NEVER call `extra_inspect_ui` to read the result. Call `extra_screenshot()` directly once to present the result.
 - **Documents & Briefings (`notepad.exe`):**
   1. Write the document file directly to disk (`Path.write_text` or `write_to_file`) to avoid slow character-by-character typing.
+     - **Safe Path:** ALWAYS save to `%USERPROFILE%\.extra\workspace\<name>.txt` or the active project folder. **NEVER** write to `%USERPROFILE%\Documents` (blocked by Windows Defender Controlled Folder Access).
   2. Visibly launch Notepad with the file: `extra_launch(app_name="notepad", args=["<absolute_path>"])`.
 - **Diagrams & Charts (`mspaint.exe`):**
   1. Generate the clean, professional PNG image programmatically to disk via Python (`PIL`) or .NET.
+     - **Safe Path:** ALWAYS save to `%USERPROFILE%\.extra\workspace\<name>.png`. **NEVER** write to `%USERPROFILE%\Pictures` (blocked by Windows Defender Controlled Folder Access).
   2. Visibly launch Paint to display the chart: `extra_launch(app_name="mspaint", args=["<absolute_path>"])`.
 - **File Explorer & Desktop Folders:**
-  1. Create folders (`mkdir`) and move files on disk using filesystem commands (`shutil.move`).
+  1. Create folders (`mkdir`) and move files on disk using filesystem commands (`shutil.move`) inside `%USERPROFILE%\.extra\workspace\` or the project root.
   2. Visibly open the folder in Explorer: `extra_launch(app_name="explorer", args=["<folder_path>"])`.
 - **Web Navigation & Financial Quotes (`edge`):**
   1. Visibly open Microsoft Edge to the quote URL: `extra_launch(app_name="edge", args=["https://www.google.com/finance/quote/NVDA:NASDAQ"])`.
@@ -83,3 +85,11 @@ To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100
   - **STRICT PROHIBITION:** NEVER run `Reset-AppxPackage`, never crawl Event Viewer logs (`Get-WinEvent`), never search the Windows Registry, and never attempt system-level UWP repairs.
 - **ZERO Vision Pixel-Hunting:** Do NOT attempt 30–50 fragile vision-mouse clicks to find small buttons. Use keyboard shortcuts (`extra_hotkey`), text injection (`extra_type`), or direct launcher parameters.
 - **Verification:** Call `extra_screenshot()` ONCE at the end to confirm the visual arrangement, then conclude immediately.
+
+### 5. Windows Defender & Controlled Folder Access (CFA) Compliance
+- **STRICT DIRECTORY BOUNDARY:** NEVER create files or directories directly in Windows protected user folders:
+  - DO NOT write to `%USERPROFILE%\Documents`, `%USERPROFILE%\Pictures`, `%USERPROFILE%\Desktop`, `%USERPROFILE%\Videos`.
+  - Windows Defender Controlled Folder Access (Ransomware Protection) strictly blocks `python.exe` and `cmd.exe` from modifying these folders (Event 1123) and triggers alarming security toast popups for the user.
+- **MANDATORY SAFE WORKSPACE:** Always perform file creation, data extraction, reports, and diagram exports in:
+  - `%USERPROFILE%\.extra\workspace\` (or the active project repository).
+  - This folder is 100% exempt from CFA restrictions, guaranteeing zero Defender warnings, zero permission errors, and flawless visual presentation in Notepad, Paint, and Explorer.

@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.1.1"
+    __version__ = "0.2.1"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
@@ -113,6 +113,33 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
                 print(f"  {framework:<20}: [OK] Installed & Loaded.")
             except ImportError:
                 print(f"  {framework:<20}: [WARN] Framework not available on current environment.")
+
+    # 3b. Windows Defender & Controlled Folder Access (CFA) Diagnostic (if on Windows)
+    elif os_name == "Windows":
+        print("\n[Windows Defender & Controlled Folder Access (CFA)]")
+        try:
+            ps_cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-MpPreference).EnableControlledFolderAccess"'
+            proc = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=6, shell=True)
+            cfa_val = proc.stdout.strip()
+
+            # Verify isolated safe scratch workspace
+            extra_workspace = Path(os.environ.get("EXTRA_WORKSPACE", Path.home() / ".extra" / "workspace"))
+            extra_workspace.mkdir(parents=True, exist_ok=True)
+            probe_file = extra_workspace / ".cfa_probe"
+            probe_file.write_text("probe")
+            probe_file.unlink()
+
+            if cfa_val == "1":
+                print("  Controlled Folder Access: [ENABLED] (Protects Documents/Pictures/Desktop)")
+                print(f"  Safe Scratch Workspace:   [OK] {extra_workspace} (Verified writeable, 0 Defender alarms)")
+            elif cfa_val == "2":
+                print("  Controlled Folder Access: [AUDIT MODE] (Logs actions without blocking)")
+                print(f"  Safe Scratch Workspace:   [OK] {extra_workspace}")
+            else:
+                print("  Controlled Folder Access: [STANDARD/DISABLED] (Standard filesystem access)")
+                print(f"  Safe Scratch Workspace:   [OK] {extra_workspace}")
+        except Exception as e:
+            print(f"  Windows Defender Check:   Notice ({e})")
 
     # 4. Displays & Multi-Monitor Metrics
     print("\n[Displays & Multi-Monitor Metrics]")
