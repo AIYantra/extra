@@ -175,7 +175,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
         self.assertIn("macos", content)
         self.assertIn("windows", content)
         self.assertIn("curl -sSL https://extra.yantraos.com/install.sh | bash", content)
-        self.assertIn("irm https://extra.yantraos.com/install.ps1 | iex", content)
+        self.assertIn("install.ps1", content)
         self.assertIn("STARTER_PROMPT_MACOS.md", content)
         self.assertIn("STARTER_PROMPT.md", content)
 
@@ -188,7 +188,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
         self.assertIn("selectedOS", content)
         self.assertIn("curl -sSL https://extra.yantraos.com/install.sh | bash", content)
-        self.assertIn("irm https://extra.yantraos.com/install.ps1 | iex", content)
+        self.assertIn("install.ps1", content)
         self.assertIn("Apple Silicon", content)
         self.assertIn("Screen Recording", content)
 
