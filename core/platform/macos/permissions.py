@@ -140,7 +140,7 @@ def reset_permissions(client: str = "Terminal") -> Tuple[bool, str]:
 def get_guidance_card() -> str:
     """
     Renders the formatted interactive terminal guidance card
-    as specified in Pillar 3.3 of plan.md.
+    for macOS accessibility and screen capture permissions.
     """
     return """\
 ┌────────────────────────────────────────────────────────────────────────┐

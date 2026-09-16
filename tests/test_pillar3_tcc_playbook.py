@@ -36,7 +36,6 @@ class TestPillar3TCCPlaybook(unittest.TestCase):
 
     def setUp(self):
         self.root_dir = Path(__file__).resolve().parent.parent
-        self.plan_path = self.root_dir / "plan.md"
         self.readme_macos_path = self.root_dir / "README_MACOS.md"
 
     def test_deep_link_url_schemes(self):
@@ -122,15 +121,13 @@ class TestPillar3TCCPlaybook(unittest.TestCase):
         self.assertEqual(ret, 0)
 
     def test_documentation_sync(self):
-        """plan.md and README_MACOS.md must document deep links and reset commands."""
-        plan_text = self.plan_path.read_text(encoding="utf-8")
+        """README_MACOS.md must document deep links and reset commands."""
         readme_text = self.readme_macos_path.read_text(encoding="utf-8")
 
-        for doc in [plan_text, readme_text]:
-            self.assertIn(URL_ACCESSIBILITY, doc)
-            self.assertIn(URL_SCREEN_CAPTURE, doc)
-            self.assertIn("tccutil reset Accessibility", doc)
-            self.assertIn("tccutil reset ScreenCapture", doc)
+        self.assertIn(URL_ACCESSIBILITY, readme_text)
+        self.assertIn(URL_SCREEN_CAPTURE, readme_text)
+        self.assertIn("tccutil reset Accessibility", readme_text)
+        self.assertIn("tccutil reset ScreenCapture", readme_text)
 
 
 if __name__ == "__main__":

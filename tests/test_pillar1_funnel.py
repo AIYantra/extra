@@ -23,7 +23,6 @@ class TestPillar1Funnel(unittest.TestCase):
 
     def setUp(self):
         self.root_dir = Path(__file__).resolve().parent.parent
-        self.plan_path = self.root_dir / "plan.md"
         self.readme_macos_path = self.root_dir / "README_MACOS.md"
         self.readme_root_path = self.root_dir / "README.md"
         self.starter_prompt_path = self.root_dir / "STARTER_PROMPT_MACOS.md"
@@ -40,7 +39,7 @@ class TestPillar1Funnel(unittest.TestCase):
             "then read and configure ~/.extra/app/STARTER_PROMPT_MACOS.md so we are ready to use Extra."
         )
 
-        for path in [self.plan_path, self.readme_macos_path, self.readme_root_path, self.starter_prompt_path]:
+        for path in [self.readme_macos_path, self.readme_root_path, self.starter_prompt_path]:
             self.assertTrue(path.exists(), f"File {path.name} must exist")
             content = path.read_text(encoding="utf-8")
             self.assertIn(
@@ -52,7 +51,7 @@ class TestPillar1Funnel(unittest.TestCase):
     def test_entry_point_b_terminal_one_liner(self):
         """Entry Point B curl one-liner must be documented consistently."""
         expected_cmd = "curl -sSL https://extra.yantraos.com/install.sh | bash"
-        for path in [self.plan_path, self.readme_macos_path, self.readme_root_path]:
+        for path in [self.readme_macos_path, self.readme_root_path]:
             content = path.read_text(encoding="utf-8")
             self.assertIn(expected_cmd, content, f"Entry Point B missing in {path.name}")
 
@@ -60,7 +59,7 @@ class TestPillar1Funnel(unittest.TestCase):
         """Entry Point C clone path must clone into ~/.extra/app for seamless prompt resolution."""
         expected_clone = "git clone https://github.com/AIYantra/extra.git ~/.extra/app"
         expected_run = "cd ~/.extra/app && ./install.sh"
-        for path in [self.plan_path, self.readme_macos_path, self.readme_root_path]:
+        for path in [self.readme_macos_path, self.readme_root_path]:
             content = path.read_text(encoding="utf-8")
             self.assertIn(expected_clone, content, f"Entry Point C clone command missing in {path.name}")
             self.assertIn(expected_run, content, f"Entry Point C execution command missing in {path.name}")
