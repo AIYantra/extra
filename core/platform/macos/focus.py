@@ -123,19 +123,27 @@ def get_window_info(hwnd: int) -> Optional[WindowInfo]:
 
 
 def find_window_by_title(
-    query: str, exact: bool = False, visible_only: bool = True
+    query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
 ) -> Optional[WindowInfo]:
-    """Finds the first window matching query in title or process name."""
+    """Finds the first window matching query in title or process name, optionally polling up to timeout seconds."""
+    deadline = time.perf_counter() + max(0.0, timeout)
     q = query.strip().lower()
-    for win in list_windows(visible_only=visible_only):
-        title = win.title.lower()
-        proc = win.process_name.lower()
-        if exact:
-            if title == q or proc == q:
-                return win
-        else:
-            if q in title or q in proc:
-                return win
+
+    while True:
+        for win in list_windows(visible_only=visible_only):
+            title = win.title.lower()
+            proc = win.process_name.lower()
+            if exact:
+                if title == q or proc == q:
+                    return win
+            else:
+                if q in title or q in proc:
+                    return win
+
+        if time.perf_counter() >= deadline:
+            break
+        time.sleep(0.1)
+
     return None
 
 
@@ -218,9 +226,9 @@ class MacFocusManager(AbstractFocusManager):
         return list_windows(visible_only=visible_only)
 
     def find_window_by_title(
-        self, query: str, exact: bool = False, visible_only: bool = True
+        self, query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
     ) -> Optional[WindowInfo]:
-        return find_window_by_title(query, exact, visible_only)
+        return find_window_by_title(query, exact, visible_only, timeout=timeout)
 
     def find_windows_by_process(
         self, process_name: str, visible_only: bool = True

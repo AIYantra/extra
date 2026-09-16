@@ -56,6 +56,7 @@ APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "paint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "mspaint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "photos": {"target": "ms-photos:", "type": "uri", "proc": "Photos.exe"},
+    "blender": {"target": "blender.exe", "type": "exe", "proc": "blender.exe"},
 }
 
 # Standard Browser Path Locations
@@ -83,7 +84,8 @@ BROWSER_CANDIDATE_PATHS = {
 def resolve_executable(name: str) -> Optional[str]:
     """
     Resolves the exact absolute executable path for a given program name.
-    Inspects PATH, Program Files, LocalAppData, and Windows directories.
+    Inspects PATH, Program Files, LocalAppData, Microsoft Store WindowsApps, and Windows directories.
+    (Fixes #4: Resolves Store apps like Blender, Windows Terminal, Python, credit: @harshbuttru3)
     """
     clean_name = name.strip().lower()
 
@@ -111,10 +113,33 @@ def resolve_executable(name: str) -> Optional[str]:
         return found
 
     # Fallback to appending .exe if not present
-    if not target.endswith(".exe"):
-        found = shutil.which(f"{target}.exe")
-        if found:
-            return found
+    target_exe = target if target.endswith(".exe") else f"{target}.exe"
+    found = shutil.which(target_exe)
+    if found:
+        return found
+
+    # Check %LOCALAPPDATA%\Microsoft\WindowsApps (MSIX/Store execution aliases)
+    win_apps_dir = os.path.expandvars(r"%LocalAppData%\Microsoft\WindowsApps")
+    store_alias = os.path.join(win_apps_dir, target_exe)
+    if os.path.exists(store_alias):
+        return store_alias
+
+    # Check common 64-bit and 32-bit Program Files directories
+    program_candidates = [
+        os.path.expandvars(rf"%ProgramFiles%\{target}\{target_exe}"),
+        os.path.expandvars(rf"%ProgramFiles(x86)%\{target}\{target_exe}"),
+        os.path.expandvars(rf"%LocalAppData%\Programs\{target}\{target_exe}"),
+    ]
+    for cand in program_candidates:
+        if os.path.exists(cand):
+            return cand
+
+    # Specific check for Blender Foundation installations
+    if clean_name == "blender" or target.lower() in ("blender", "blender.exe"):
+        import glob
+        blender_dirs = glob.glob(os.path.expandvars(r"%ProgramFiles%\Blender Foundation\Blender*\blender.exe"))
+        if blender_dirs:
+            return sorted(blender_dirs)[-1]
 
     return target
 

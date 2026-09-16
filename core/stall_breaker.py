@@ -143,10 +143,13 @@ class StallBreaker:
         before_hwnd: Optional[int] = None,
         after_hwnd: Optional[int] = None,
         action_name: str = "action",
+        before_full_image: Optional[Image.Image] = None,
+        after_full_image: Optional[Image.Image] = None,
     ) -> ActionOutcome:
         """
         Compares screen state before and after an action using perceptual hashing
         and numpy pixel difference. Applies the 2-strike loop breaker rule.
+        Supports global fallback diffing when local ROI delta is zero (Fixes #4, credit: @harshbuttru3).
         """
         self.check_safety_abort()
 
@@ -157,18 +160,37 @@ class StallBreaker:
             and before_hwnd != after_hwnd
         )
 
-        # 2. Compute perceptual hash delta
+        # 2. Compute perceptual hash delta on ROI
         h_before = imagehash.phash(before_image)
         h_after = imagehash.phash(after_image)
         phash_diff = abs(h_before - h_after)
 
-        # 3. Compute structural pixel delta
+        # 3. Compute structural pixel delta on ROI
         arr_before = np.asarray(before_image, dtype=np.int16)
         arr_after = np.asarray(after_image, dtype=np.int16)
         pixel_diff = float(np.mean(np.abs(arr_before - arr_after)))
 
-        # Determine whether visible change occurred
+        # Determine whether visible change occurred locally
         has_visual_delta = (phash_diff > self.hash_threshold) or (pixel_diff > self.pixel_threshold)
+
+        # 4. Global Fallback Check (Fixes #4, credit: @harshbuttru3)
+        # If local ROI produced zero delta, check if distant screen regions (e.g. 3D viewports, canvas) changed
+        global_changed = False
+        full_pixel_diff = 0.0
+        if not has_visual_delta and not window_changed and before_full_image is not None and after_full_image is not None:
+            try:
+                # High-speed downsampled diff (sub-2ms via Nearest Neighbor + numpy mean)
+                small_before = before_full_image.resize((160, 90), Image.Resampling.NEAREST)
+                small_after = after_full_image.resize((160, 90), Image.Resampling.NEAREST)
+                full_arr_before = np.asarray(small_before, dtype=np.int16)
+                full_arr_after = np.asarray(small_after, dtype=np.int16)
+                full_pixel_diff = float(np.mean(np.abs(full_arr_before - full_arr_after)))
+                if full_pixel_diff > self.pixel_threshold:
+                    global_changed = True
+                    has_visual_delta = True
+            except Exception:
+                pass
+
         has_state_change = has_visual_delta or window_changed
 
         if has_state_change:
@@ -176,13 +198,18 @@ class StallBreaker:
             self._current_strikes = 0
             self._last_hash = h_after
             self._last_hwnd = after_hwnd
+            msg = (
+                f"Action '{action_name}' succeeded with remote visual change (global pixel_diff={full_pixel_diff:.2f})."
+                if global_changed
+                else f"Action '{action_name}' succeeded with visible change (phash_diff={phash_diff}, pixel_diff={pixel_diff:.2f})."
+            )
             return ActionOutcome(
                 status=StallStatus.NORMAL,
                 strikes=0,
                 phash_diff=phash_diff,
-                pixel_diff=round(pixel_diff, 3),
+                pixel_diff=round(full_pixel_diff if global_changed else pixel_diff, 3),
                 window_changed=window_changed,
-                message=f"Action '{action_name}' succeeded with visible change (phash_diff={phash_diff}, pixel_diff={pixel_diff:.2f}).",
+                message=msg,
             )
         else:
             # Action produced NO visual or window change

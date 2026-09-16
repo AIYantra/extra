@@ -373,9 +373,9 @@ class AbstractFocusManager(ABC):
 
     @abstractmethod
     def find_window_by_title(
-        self, query: str, exact: bool = False, visible_only: bool = True
+        self, query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
     ) -> Optional[WindowInfo]:
-        """Finds window matching title substring or exact string."""
+        """Finds window matching title substring or exact string, with optional polling timeout."""
         pass
 
     @abstractmethod

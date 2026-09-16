@@ -152,12 +152,12 @@ Most automation tools behave like a human looking at a screen: they capture slow
 | `extra_launch` | Instant app launcher | `app_name: "settings"` \| `"calc"` \| `"notepad"` \| `"edge"` \| `"mspaint"` \| `"photos"` |
 | `extra_inspect_ui` | Discover accessible controls | `window_title`, `interactive_only=True`, `max_elements=50` |
 | `extra_click_element`| Invoke/click inspected UI control | `element_id: int` |
-| `extra_screenshot` | Ultra-fast capture + optional badges | `annotate_ui: bool`, `crop_box: [l, t, r, b]` |
+| `extra_screenshot` | Ultra-fast capture + optional badges | `annotate_ui: bool`, `save_to_file: bool`, `crop_box: [l, t, r, b]` |
 | `extra_click` | Hardware click with DPI math | `x`, `y`, `button="left"`, `clicks=1`, `normalized=False` |
 | `extra_type` | Zero-latency Unicode injection | `text`, `press_enter=True`, `use_clipboard=False` |
 | `extra_hotkey` | Synchronized keyboard combos | `keys: ["ctrl", "c"]` \| `["win", "r"]` \| `["alt", "tab"]` |
 | `extra_browser` | Playwright web fast-path | `action: "navigate"` \| `"content"` \| `"click"` \| `"fill"` |
-| `extra_focus_window` | Force window foreground lock | `window_title: str` |
+| `extra_focus_window` | Force window foreground lock | `window_title: str`, `timeout: float = 3.0` |
 | `extra_scroll` | Mouse wheel scrolling | `delta: 5` (up) or `-5` (down) |
 | `extra_drag` | Smooth drag and drop | `start_x`, `start_y`, `end_x`, `end_y` |
 

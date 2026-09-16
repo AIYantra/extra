@@ -78,15 +78,22 @@ def extra_screenshot(
     monitor_index: int = 0,
     crop_box: Optional[List[int]] = None,
     annotate_ui: bool = False,
+    save_to_file: bool = True,
+    file_path: Optional[str] = None,
+    include_base64: bool = False,
 ) -> Dict[str, Any]:
     """
     Captures an ultra-fast screen frame (< 30ms) from the specified monitor.
     Optionally overlays Set-of-Mark (SoM) numbered badges on all detected interactive UI elements.
+    Saves screenshot to disk to avoid large Base64 payload truncation in AI clients (Fixes #4, credit: @harshbuttru3).
     
     Args:
         monitor_index: 0-based display index (0 = primary monitor).
         crop_box: Optional [left, top, right, bottom] physical pixel coordinates to crop.
         annotate_ui: If True, draws numbered badges [1], [2] on all interactive buttons and returns their positions.
+        save_to_file: If True (default), writes image to disk in the safe scratch workspace (~/.extra/workspace/screenshots/).
+        file_path: Optional custom file path to save screenshot.
+        include_base64: If True, includes full base64 string in response (default False to prevent LLM payload truncation).
     """
     ensure_dpi_aware()
     attach_input_desktop()
@@ -106,17 +113,33 @@ def extra_screenshot(
         # Inspect interactive UI elements
         elements = _uia_plane.inspect_window(interactive_only=True, max_elements=50)
         ann_img, mark_map = _som_annotator.annotate(cap.image, elements)
-        result["screenshot_base64"] = cap.to_base64()
-        # Also include annotated image
-        import io, base64
-        buf = io.BytesIO()
-        ann_img.save(buf, format="JPEG", quality=80)
-        result["screenshot_base64"] = base64.b64encode(buf.getvalue()).decode("utf-8")
+        final_img = ann_img
         result["annotated"] = True
         result["elements"] = [el.to_dict() for el in elements]
     else:
-        result["screenshot_base64"] = cap.to_base64()
+        final_img = cap.image
         result["annotated"] = False
+
+    # Save to file to prevent LLM tool payload truncation (Fixes #4, reported by @harshbuttru3)
+    if save_to_file:
+        from pathlib import Path
+        if not file_path:
+            workspace_dir = Path(os.environ.get("EXTRA_WORKSPACE", Path.home() / ".extra" / "workspace")) / "screenshots"
+            workspace_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"screenshot_{int(time.time() * 1000)}.png"
+            target_path = workspace_dir / filename
+        else:
+            target_path = Path(file_path)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        final_img.save(str(target_path), format="PNG")
+        result["file_path"] = str(target_path).replace("\\", "/")
+
+    if include_base64:
+        import io, base64
+        buf = io.BytesIO()
+        final_img.save(buf, format="JPEG", quality=80)
+        result["screenshot_base64"] = base64.b64encode(buf.getvalue()).decode("utf-8")
 
     return result
 
@@ -132,6 +155,7 @@ def extra_click(
 ) -> Dict[str, Any]:
     """
     Executes a hardware-level mouse click with PerMonitorV2 DPI compensation and closed-loop stall checking.
+    Supports global fallback visual diffing to eliminate false-stalls when distant viewports change (Fixes #4, credit: @harshbuttru3).
     
     Args:
         x: X-coordinate (physical pixel or normalized 0-1000).
@@ -151,9 +175,17 @@ def extra_click(
         phys_x, phys_y = x, y
 
     # Capture state before action for closed-loop verification
+    # Using full capture to slice ROI and retain global canvas for fallback diffing (Fixes #4 / @harshbuttru3)
     before_fg = get_foreground_window()
     before_hwnd = before_fg.hwnd if before_fg else None
-    cap_before = capture_roi(max(0, phys_x - 100), max(0, phys_y - 100), phys_x + 100, phys_y + 100, monitor_index)
+    cap_before = capture_screen(monitor_index=monitor_index)
+    roi_box = (
+        max(0, phys_x - 100),
+        max(0, phys_y - 100),
+        min(cap_before.width, phys_x + 100),
+        min(cap_before.height, phys_y + 100),
+    )
+    roi_before = cap_before.image.crop(roi_box)
 
     t0 = time.perf_counter()
     mouse_click(phys_x, phys_y, button=button, clicks=clicks, monitor_index=monitor_index)
@@ -165,14 +197,17 @@ def extra_click(
     # Capture state after action
     after_fg = get_foreground_window()
     after_hwnd = after_fg.hwnd if after_fg else None
-    cap_after = capture_roi(max(0, phys_x - 100), max(0, phys_y - 100), phys_x + 100, phys_y + 100, monitor_index)
+    cap_after = capture_screen(monitor_index=monitor_index)
+    roi_after = cap_after.image.crop(roi_box)
 
     outcome = _stall_breaker.evaluate_action(
-        cap_before.image,
-        cap_after.image,
+        roi_before,
+        roi_after,
         before_hwnd=before_hwnd,
         after_hwnd=after_hwnd,
         action_name=f"click({button}, x={phys_x}, y={phys_y})",
+        before_full_image=cap_before.image,
+        after_full_image=cap_after.image,
     )
 
     return {
@@ -374,25 +409,28 @@ def extra_browser(
 def extra_focus_window(
     window_title: Optional[str] = None,
     hwnd: Optional[int] = None,
+    timeout: float = 3.0,
 ) -> Dict[str, Any]:
     """
     Forces a target application window to the foreground, bypassing Windows lock restrictions.
+    Supports polling retry to handle asynchronously initializing windows (Fixes #4, credit: @harshbuttru3).
     
     Args:
         window_title: Window title query substring.
         hwnd: Direct window handle.
+        timeout: Maximum seconds to poll for the window if not immediately found (default: 3.0s).
     """
     ensure_dpi_aware()
     attach_input_desktop()
 
     target_hwnd = hwnd
     if not target_hwnd and window_title:
-        win = find_window_by_title(window_title)
+        win = find_window_by_title(window_title, timeout=timeout)
         if win:
             target_hwnd = win.hwnd
 
     if not target_hwnd:
-        return {"success": False, "error": f"Window '{window_title}' not found."}
+        return {"success": False, "error": f"Window '{window_title}' not found (timed out after {timeout:.1f}s)."}
 
     ok = force_activate_window(target_hwnd)
     return {"success": ok, "hwnd": target_hwnd}
