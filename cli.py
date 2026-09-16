@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.2.1"
+    __version__ = "0.2.2"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
@@ -138,6 +138,40 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
             else:
                 print("  Controlled Folder Access: [STANDARD/DISABLED] (Standard filesystem access)")
                 print(f"  Safe Scratch Workspace:   [OK] {extra_workspace}")
+
+            # Check if active working directory is inside a CFA-monitored folder
+            cwd = Path.cwd().resolve()
+            protected_roots = [Path.home() / "Documents", Path.home() / "Pictures", Path.home() / "Desktop"]
+            in_protected = None
+            for p in protected_roots:
+                try:
+                    cwd.relative_to(p.resolve())
+                    in_protected = p.name
+                    break
+                except ValueError:
+                    continue
+
+            if in_protected:
+                print(f"  Workspace Proximity:      [WARN] Active workspace is inside %USERPROFILE%\\{in_protected}.")
+                print("                            Defender may intercept CLI tools (agy, python, powershell).")
+                print("                            Run 'extra doctor --fix-cfa' or place projects in a custom folder (e.g. C:\\work).")
+
+            # Handle --fix-cfa flag
+            if args and getattr(args, "fix_cfa", False):
+                print("\n  [ACTION] Dispatching Administrator UAC request to whitelist developer tools in CFA...")
+                ps_exe = Path(os.environ.get("WINDIR", "C:\\Windows")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+                agy_bin = Path.home() / "AppData" / "Local" / "agy" / "bin" / "agy.exe"
+                venv_py = extra_workspace.parent / "venv" / "Scripts" / "python.exe"
+                allow_script = (
+                    f"$apps = @('{sys.executable}', '{venv_py}', '{agy_bin}', '{ps_exe}'); "
+                    "foreach ($a in $apps) { if (Test-Path $a) { Add-MpPreference -ControlledFolderAccessAllowedApplications $a -ErrorAction SilentlyContinue } }; "
+                    "Write-Host '`n[OK] Whitelisted developer tools in Windows Defender Controlled Folder Access.' -ForegroundColor Green; "
+                    "Start-Sleep -Seconds 2"
+                )
+                elevate_cmd = f'powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -Verb RunAs -ArgumentList \\"-NoProfile -ExecutionPolicy Bypass -Command {allow_script}\\""'
+                subprocess.run(elevate_cmd, shell=True)
+                print("  [OK] Whitelist request sent to Windows Security (confirm UAC prompt if shown).")
+
         except Exception as e:
             print(f"  Windows Defender Check:   Notice ({e})")
 
@@ -667,6 +701,7 @@ def main() -> None:
     # doctor
     doctor_parser = subparsers.add_parser("doctor", help="Run system health and capability diagnostics")
     doctor_parser.add_argument("--open", "-o", action="store_true", help="Open System Settings privacy panes if permissions missing")
+    doctor_parser.add_argument("--fix-cfa", action="store_true", help="Whitelist developer tools (agy, python, powershell) in Windows Defender Controlled Folder Access")
 
     # permissions
     perm_parser = subparsers.add_parser("permissions", help="Manage macOS TCC permissions (check, open, reset)")
