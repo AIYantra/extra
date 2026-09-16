@@ -19,16 +19,21 @@ class TestPillar4EdgeRouter(unittest.TestCase):
     """Test suite for Pillar 4 edge request router and delivery engine."""
 
     def setUp(self):
-        self.workspace_root = Path(__file__).resolve().parent.parent.parent
-        self.extra_root = self.workspace_root / "extra"
+        self.extra_root = Path(__file__).resolve().parent.parent
+        self.workspace_root = self.extra_root.parent
         self.web_root = self.workspace_root / "extra.yantraos.com"
+
+    def _require_web_portal(self):
+        """Skip web portal tests when running inside standalone core repo CI."""
+        if not self.web_root.exists():
+            self.skipTest("extra.yantraos.com repository not present in standalone CI checkout")
 
     def test_worker_js_exists_and_implements_routing_contract(self):
         """Verify worker.js implements all required routes and UA branching."""
-        worker_paths = [
-            self.web_root / "worker.js",
-            self.extra_root / "worker.js",
-        ]
+        worker_paths = [self.extra_root / "worker.js"]
+        if self.web_root.exists():
+            worker_paths.append(self.web_root / "worker.js")
+
         for wp in worker_paths:
             self.assertTrue(wp.exists(), f"Missing worker script at {wp}")
             content = wp.read_text(encoding="utf-8")
@@ -51,6 +56,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_edge_scripts_library_and_route_handlers(self):
         """Verify Next.js lib/edge-scripts.ts and route handler implementations."""
+        self._require_web_portal()
         edge_scripts = self.web_root / "lib" / "edge-scripts.ts"
         self.assertTrue(edge_scripts.exists(), "Missing lib/edge-scripts.ts")
         content = edge_scripts.read_text(encoding="utf-8")
@@ -113,6 +119,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_static_fallback_assets_parity(self):
         """Verify public fallback assets exist in web project and match source repo."""
+        self._require_web_portal()
         asset_pairs = [
             (self.extra_root / "install.sh", self.web_root / "public" / "install.sh"),
             (self.extra_root / "install.ps1", self.web_root / "public" / "install.ps1"),
@@ -146,6 +153,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_next_config_security_and_script_headers(self):
         """Verify next.config.ts configures nosniff and text/plain for script downloads."""
+        self._require_web_portal()
         next_config = self.web_root / "next.config.ts"
         self.assertTrue(next_config.exists(), "Missing next.config.ts")
         content = next_config.read_text(encoding="utf-8")
@@ -157,6 +165,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_install_section_adaptive_tabs(self):
         """Verify install-section.tsx has adaptive OS detection and manual switcher."""
+        self._require_web_portal()
         component = self.web_root / "components" / "install-section.tsx"
         self.assertTrue(component.exists(), "Missing install-section.tsx")
         content = component.read_text(encoding="utf-8")
@@ -172,6 +181,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_install_modal_adaptive_tabs(self):
         """Verify install-modal.tsx has adaptive OS detection and multi-OS checklists."""
+        self._require_web_portal()
         component = self.web_root / "components" / "install-modal.tsx"
         self.assertTrue(component.exists(), "Missing install-modal.tsx")
         content = component.read_text(encoding="utf-8")
@@ -184,6 +194,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_benchmark_table_apple_silicon_metrics(self):
         """Verify benchmark-table.tsx contains Apple Silicon M3/M4 metrics specified in plan.md."""
+        self._require_web_portal()
         component = self.web_root / "components" / "benchmark-table.tsx"
         self.assertTrue(component.exists(), "Missing benchmark-table.tsx")
         content = component.read_text(encoding="utf-8")
@@ -204,6 +215,7 @@ class TestPillar4EdgeRouter(unittest.TestCase):
 
     def test_page_renders_benchmark_table(self):
         """Verify page.tsx imports and renders the BenchmarkTable component."""
+        self._require_web_portal()
         page = self.web_root / "app" / "page.tsx"
         content = page.read_text(encoding="utf-8")
         self.assertIn("BenchmarkTable", content)
