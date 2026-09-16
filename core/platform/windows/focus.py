@@ -128,20 +128,27 @@ def list_windows(visible_only: bool = True) -> List[WindowInfo]:
 
 
 def find_window_by_title(
-    query: str, exact: bool = False, visible_only: bool = True
+    query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
 ) -> Optional[WindowInfo]:
-    """Finds the first window matching title substring or exact string."""
+    """Finds the first window matching title substring or exact string, optionally polling up to timeout seconds."""
+    deadline = time.perf_counter() + max(0.0, timeout)
     q = query.strip().lower()
-    windows = list_windows(visible_only=visible_only)
 
-    for win in windows:
-        w_title = win.title.lower()
-        if exact:
-            if w_title == q:
-                return win
-        else:
-            if q in w_title:
-                return win
+    while True:
+        windows = list_windows(visible_only=visible_only)
+        for win in windows:
+            w_title = win.title.lower()
+            if exact:
+                if w_title == q:
+                    return win
+            else:
+                if q in w_title:
+                    return win
+
+        if time.perf_counter() >= deadline:
+            break
+        time.sleep(0.1)
+
     return None
 
 
@@ -214,9 +221,9 @@ class WindowsFocusManager(AbstractFocusManager):
         return list_windows(visible_only=visible_only)
 
     def find_window_by_title(
-        self, query: str, exact: bool = False, visible_only: bool = True
+        self, query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
     ) -> Optional[WindowInfo]:
-        return find_window_by_title(query=query, exact=exact, visible_only=visible_only)
+        return find_window_by_title(query=query, exact=exact, visible_only=visible_only, timeout=timeout)
 
     def find_windows_by_process(
         self, process_name: str, visible_only: bool = True

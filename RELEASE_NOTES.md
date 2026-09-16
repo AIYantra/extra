@@ -1,3 +1,34 @@
+# Extra Release Notes — v0.2.3
+
+**Release Date:** September 16, 2026  
+**Release Title:** Desktop Automation Bottlenecks Resolution (Screenshot Persistence, StallBreaker Viewport Fallback, Window Focus Polling, and Microsoft Store/UWP App Resolution)  
+**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)  
+**Special Thanks & Attribution:** Special credit to [@harshbuttru3](https://github.com/harshbuttru3) for identifying and reporting these real-world automation bottlenecks in [Issue #4](https://github.com/AIYantra/extra/issues/4) during complex 3D modeling workflows in Blender 3.6 on Windows 11.
+
+---
+
+## 1. Executive Summary & Problem Resolution (v0.2.3)
+
+In real-world desktop automation sessions driving complex CAD and 3D modeling workflows (e.g., Blender 3.6 on Windows 11 with Antigravity / Gemini), four operational friction points were identified and resolved:
+
+### 1. `extra_screenshot` Payload Truncation Fix
+- **Problem:** Returning full-resolution screenshots as raw base64 strings in `result["screenshot_base64"]` generated 200 KB – 400 KB payloads, exceeding LLM tool output buffers (40 KB–50 KB). Client harnesses (Antigravity, Cursor, Claude Code) dumped output to disk `.txt` files, interrupting agent flows.
+- **Fix:** `extra_screenshot` now defaults to saving captures into the CFA-safe scratch workspace (`~/.extra/workspace/screenshots/screenshot_<timestamp>.png`) and returning `file_path`. The raw base64 string is omitted by default (`include_base64: bool = False`), keeping tool responses under 1 KB while providing immediate clickable file links.
+
+### 2. StallBreaker 200×200 ROI False-Stall Elimination
+- **Problem:** `StallBreaker` evaluated visual diffs over a localized 200×200 ROI around the clicked coordinate. In applications like Blender, CAD software, and IDEs, clicking a header icon or toolbar toggle updates a distant 3D viewport canvas or preview area while the local 200×200 ROI registers zero delta, causing premature `STALL DETECTED` aborts.
+- **Fix:** `extra_click` and `StallBreaker` now feature a zero-latency global fallback diff. If the local ROI shows zero change, `StallBreaker` downsamples the full monitor frame (sub-2ms via Nearest Neighbor downsampling + numpy mean diff). If remote screen areas changed, strikes are reset to 0 and the action succeeds with `remote visual change` status.
+
+### 3. `extra_focus_window` Retry Polling
+- **Problem:** `extra_focus_window` was an instantaneous single-shot check. When an application was launched asynchronously, calling `extra_focus_window` immediately failed with `Window not found`.
+- **Fix:** Added a `timeout: float = 3.0` parameter to `extra_focus_window` and `find_window_by_title` with an active 100ms polling loop, allowing asynchronously initializing windows to be focused reliably without artificial sleep scripts.
+
+### 4. Microsoft Store / MSIX / UWP App Resolution
+- **Problem:** Applications installed from the Microsoft Store or winget (Blender, Windows Terminal, Python) install execution aliases in `%LOCALAPPDATA%\Microsoft\WindowsApps`. `resolve_executable` previously failed to search this directory or common Program Files locations, causing launch resolution failures and `FileNotFoundError`.
+- **Fix:** `resolve_executable` now searches `%LOCALAPPDATA%\Microsoft\WindowsApps`, standard Program Files locations, and explicit Blender Foundation installation paths. Added `"blender"` to `APP_REGISTRY`.
+
+---
+
 # Extra Release Notes — v0.2.2
 
 **Release Date:** September 16, 2026  
