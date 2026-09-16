@@ -9,25 +9,43 @@ Desktop Automation Bottlenecks reported by @harshbuttru3:
 
 import os
 from pathlib import Path
+import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from PIL import Image
 
+from extra.core.platform.base import CaptureResult
 from extra.core.stall_breaker import StallBreaker, StallStatus
-from extra.core.platform.windows.shell import resolve_executable, APP_REGISTRY
-from extra.core.platform.windows.focus import find_window_by_title
 from extra.mcp.server import extra_screenshot, extra_focus_window
+
+if sys.platform == "win32":
+    from extra.core.platform.windows.shell import resolve_executable, APP_REGISTRY
+    from extra.core.platform.windows.focus import find_window_by_title
+else:
+    from extra.core.platform.macos.shell import resolve_executable, MAC_APP_REGISTRY as APP_REGISTRY
+    from extra.core.platform.macos.focus import find_window_by_title
 
 
 class TestIssue4Bottlenecks(unittest.TestCase):
     """Verifies all 4 operational friction point fixes reported in Issue #4 (credit: @harshbuttru3)."""
 
-    def test_screenshot_file_persistence_and_base64_flag(self):
+    @patch("extra.mcp.server.capture_screen")
+    def test_screenshot_file_persistence_and_base64_flag(self, mock_capture):
         """extra_screenshot must write to disk and omit heavy base64 strings by default to prevent LLM truncation."""
+        test_img = Image.new("RGB", (200, 150), color=(80, 120, 200))
+        mock_capture.return_value = CaptureResult(
+            image=test_img,
+            duration_ms=12.5,
+            monitor_index=0,
+            width=200,
+            height=150,
+        )
+
         with tempfile.TemporaryDirectory() as tmpdir:
             custom_path = os.path.join(tmpdir, "test_shot.png")
-            
+
             # Default behavior: saves to file, omits giant base64 payload
             res = extra_screenshot(save_to_file=True, file_path=custom_path, include_base64=False)
             self.assertIn("file_path", res)
@@ -94,15 +112,18 @@ class TestIssue4Bottlenecks(unittest.TestCase):
     def test_focus_window_polling_timeout(self):
         """extra_focus_window and find_window_by_title must poll for the specified timeout before failing."""
         t0 = time.perf_counter()
-        res = extra_focus_window(window_title="NonExistentWindow_Issue4_Test_12345", timeout=0.3)
+        res = extra_focus_window(window_title="NonExistentWindow_Issue4_Test_12345", timeout=0.2)
         duration = time.perf_counter() - t0
 
         self.assertFalse(res["success"])
         self.assertIn("timed out", res["error"])
-        self.assertGreaterEqual(duration, 0.25)
+        self.assertGreaterEqual(duration, 0.15)
 
     def test_resolve_executable_registry_and_store_paths(self):
-        """resolve_executable must recognize 'blender' and search Store execution aliases."""
+        """resolve_executable must recognize 'blender' and search Store execution aliases on Windows."""
+        if sys.platform != "win32":
+            self.skipTest("Windows-specific executable resolution test")
+
         self.assertIn("blender", APP_REGISTRY)
         self.assertEqual(APP_REGISTRY["blender"]["target"], "blender.exe")
 
