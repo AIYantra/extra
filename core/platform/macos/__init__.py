@@ -1,0 +1,158 @@
+"""
+Project Extra — macOS Native Platform Backend
+"""
+
+from extra.core.platform.macos.capture import (
+    ScreenCaptureEngine,
+    capture_roi,
+    capture_screen,
+    get_capture_engine,
+)
+from extra.core.platform.macos.focus import (
+    MacFocusManager,
+    WindowInfo,
+    find_window_by_title,
+    find_windows_by_process,
+    force_activate_window,
+    get_foreground_window,
+    get_window_info,
+    list_windows,
+)
+from extra.core.platform.macos.geometry import (
+    MacGeometry,
+    MonitorInfo,
+    attach_input_desktop,
+    clamp_coordinates,
+    denormalize_bbox,
+    denormalize_coordinates,
+    ensure_dpi_aware,
+    flip_y_quartz_to_topleft,
+    flip_y_topleft_to_quartz,
+    get_bbox_center,
+    get_cursor_position,
+    get_monitors_info,
+    get_primary_monitor,
+    get_virtual_screen_bounds,
+    normalize_bbox,
+    normalize_coordinates,
+    pixels_to_points,
+    points_to_pixels,
+)
+from extra.core.platform.macos.indicators import (
+    AudioIndicator,
+    IndicatorController,
+    get_indicator_controller,
+)
+from extra.core.platform.macos.input_engine import (
+    MacInputEngine,
+    atomic_clipboard_paste,
+    instant_type,
+    mouse_click,
+    mouse_double_click,
+    mouse_down,
+    mouse_drag,
+    mouse_move,
+    mouse_scroll,
+    mouse_up,
+    send_hotkey,
+)
+from extra.core.platform.macos.shell import (
+    MAC_APP_REGISTRY,
+    LaunchResult,
+    MacShellLauncher,
+    launch_app,
+    open_uri,
+    resolve_executable,
+)
+from extra.core.platform.macos.ax_plane import (
+    MacAccessibilityPlane,
+    SetOfMarkAnnotator,
+    UIElement,
+)
+
+__all__ = [
+    # Geometry
+    "ensure_dpi_aware",
+    "attach_input_desktop",
+    "get_monitors_info",
+    "get_primary_monitor",
+    "get_virtual_screen_bounds",
+    "normalize_coordinates",
+    "denormalize_coordinates",
+    "normalize_bbox",
+    "denormalize_bbox",
+    "get_bbox_center",
+    "clamp_coordinates",
+    "get_cursor_position",
+    "points_to_pixels",
+    "pixels_to_points",
+    "flip_y_quartz_to_topleft",
+    "flip_y_topleft_to_quartz",
+    "MonitorInfo",
+    "MacGeometry",
+    # Capture
+    "ScreenCaptureEngine",
+    "get_capture_engine",
+    "capture_screen",
+    "capture_roi",
+    # Input
+    "instant_type",
+    "atomic_clipboard_paste",
+    "mouse_move",
+    "mouse_down",
+    "mouse_up",
+    "mouse_click",
+    "mouse_double_click",
+    "mouse_drag",
+    "mouse_scroll",
+    "send_hotkey",
+    "MacInputEngine",
+    # Focus
+    "WindowInfo",
+    "get_window_info",
+    "get_foreground_window",
+    "list_windows",
+    "find_window_by_title",
+    "find_windows_by_process",
+    "force_activate_window",
+    "MacFocusManager",
+    # AX Plane
+    "MacAccessibilityPlane",
+    "SetOfMarkAnnotator",
+    "UIElement",
+    # Task Indicators
+    "AudioIndicator",
+    "IndicatorController",
+    "get_indicator_controller",
+    # Shell Launcher
+    "launch_app",
+    "open_uri",
+    "resolve_executable",
+    "MAC_APP_REGISTRY",
+    "LaunchResult",
+    "MacShellLauncher",
+    # Permissions
+    "check_accessibility",
+    "check_screen_recording",
+    "verify_all_permissions",
+    "open_accessibility_settings",
+    "open_screen_recording_settings",
+    "open_all_permissions_settings",
+    "reset_permissions",
+    "get_guidance_card",
+    "print_guidance_card",
+    "CLIENT_BUNDLE_MAP",
+]
+
+from extra.core.platform.macos.permissions import (
+    CLIENT_BUNDLE_MAP,
+    check_accessibility,
+    check_screen_recording,
+    get_guidance_card,
+    open_accessibility_settings,
+    open_all_permissions_settings,
+    open_screen_recording_settings,
+    print_guidance_card,
+    reset_permissions,
+    verify_all_permissions,
+)

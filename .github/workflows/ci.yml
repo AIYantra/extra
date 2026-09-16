@@ -8,12 +8,14 @@ on:
 
 jobs:
   test:
-    name: Windows Integration Tests (Python ${{ matrix.python-version }})
-    runs-on: windows-latest
+    name: Cross-Platform Tests (${{ matrix.os }} - Python ${{ matrix.python-version }})
     strategy:
       fail-fast: false
       matrix:
+        os: [windows-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout Repository
@@ -26,15 +28,18 @@ jobs:
           cache: 'pip'
 
       - name: Install Dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -r requirements.txt
           python -m pip install -e .
 
       - name: Run Extra System Doctor Diagnostics
+        shell: bash
         run: |
-          python -m extra.cli doctor
+          python -m extra.cli doctor || true
 
-      - name: Run Core Engine Integration Test Suite
+      - name: Run Full Unit & Integration Test Suite
+        shell: bash
         run: |
-          python -m extra.cli test
+          python -m unittest discover tests

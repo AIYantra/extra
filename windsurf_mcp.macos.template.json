@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "extra": {
+      "command": "/Users/REPLACE_WITH_USERNAME/.extra/venv/bin/python",
+      "args": [
+        "-m",
+        "extra.mcp.server"
+      ]
+    }
+  }
+}

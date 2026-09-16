@@ -2,7 +2,9 @@
 Project Extra — Closed-Loop Stall Breaker & Safety System
 Heritage: Ported from yantraOS computer_use_bridge.py (EXIT_STALLED = 4).
 Closed-loop perceptual hash diffing, 2-strike runaway loop breaker,
-emergency corner abort (0, 0), and global kill-switch trap (Ctrl+Alt+Shift+Q).
+emergency corner abort (0, 0), and cross-platform global kill-switch trap:
+- Windows: Ctrl + Alt + Shift + Q
+- macOS: Cmd + Option + Shift + Q
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass
 from enum import Enum
+import sys
 from typing import Optional, Tuple
 
 import imagehash
@@ -18,11 +21,18 @@ from PIL import Image
 
 from extra.core.geometry import attach_input_desktop, ensure_dpi_aware, get_cursor_position
 
-user32 = ctypes.windll.user32
+user32 = getattr(ctypes, "windll", None)
+if user32 is not None:
+    user32 = getattr(user32, "user32", None)
+
+try:
+    import Quartz.CoreGraphics as CG
+except ImportError:
+    CG = None
 
 # Win32 Virtual Key Codes for Emergency Kill Switch
 VK_CONTROL = 0x11
-VK_MENU = 0x12     # Alt
+VK_MENU = 0x12  # Alt
 VK_SHIFT = 0x10
 VK_Q = 0x51
 
@@ -78,7 +88,9 @@ class StallBreaker:
         """
         Guarantees user safety:
         1. Corner Fail-Safe: Moving physical mouse to top-left corner (0, 0).
-        2. Emergency Hotkey: Holding Ctrl+Alt+Shift+Q simultaneously.
+        2. Emergency Hotkey:
+           - Windows: Ctrl + Alt + Shift + Q
+           - macOS: Cmd + Option + Shift + Q
         """
         ensure_dpi_aware()
         attach_input_desktop()
@@ -90,20 +102,39 @@ class StallBreaker:
                 f"Fail-Safe Triggered: Mouse pointer detected at emergency abort corner ({cx}, {cy})."
             )
 
-        # 2. Emergency hotkey check: Ctrl + Alt + Shift + Q
-        try:
-            ctrl_down = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
-            alt_down = bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000)
-            shift_down = bool(user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
-            q_down = bool(user32.GetAsyncKeyState(VK_Q) & 0x8000)
+        # 2. Emergency hotkey check:
+        # Windows (Ctrl + Alt + Shift + Q)
+        if user32 is not None and hasattr(user32, "GetAsyncKeyState"):
+            try:
+                ctrl_down = bool(user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+                alt_down = bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000)
+                shift_down = bool(user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
+                q_down = bool(user32.GetAsyncKeyState(VK_Q) & 0x8000)
 
-            if ctrl_down and alt_down and shift_down and q_down:
-                raise EmergencyAbortError(
-                    "Fail-Safe Triggered: Emergency kill hotkey (Ctrl+Alt+Shift+Q) pressed."
-                )
-        except Exception as e:
-            if isinstance(e, EmergencyAbortError):
-                raise
+                if ctrl_down and alt_down and shift_down and q_down:
+                    raise EmergencyAbortError(
+                        "Fail-Safe Triggered: Emergency kill hotkey (Ctrl+Alt+Shift+Q) pressed."
+                    )
+            except Exception as e:
+                if isinstance(e, EmergencyAbortError):
+                    raise
+
+        # macOS (Cmd + Option + Shift + Q)
+        if sys.platform == "darwin" and CG is not None:
+            try:
+                flags = CG.CGEventSourceFlagsState(CG.kCGEventSourceStateCombinedSessionState)
+                cmd_down = bool(flags & getattr(CG, "kCGEventFlagMaskCommand", 0x00100000))
+                opt_down = bool(flags & getattr(CG, "kCGEventFlagMaskAlternate", 0x00080000))
+                shift_down = bool(flags & getattr(CG, "kCGEventFlagMaskShift", 0x00020000))
+                q_down = bool(CG.CGEventSourceKeyState(CG.kCGEventSourceStateCombinedSessionState, 12))
+
+                if cmd_down and opt_down and shift_down and q_down:
+                    raise EmergencyAbortError(
+                        "Fail-Safe Triggered: Emergency kill hotkey (Cmd+Opt+Shift+Q) pressed on macOS."
+                    )
+            except Exception as e:
+                if isinstance(e, EmergencyAbortError):
+                    raise
 
     def evaluate_action(
         self,

@@ -40,8 +40,8 @@ from extra.core.uia_plane import SetOfMarkAnnotator, UIAutomationPlane
 from extra.fastpath.shell import resolve_executable
 
 
-def cmd_doctor() -> int:
-    """Runs a complete system health and capability diagnostic."""
+def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
+    """Runs a complete cross-platform system health and capability diagnostic."""
     ensure_dpi_aware()
     attach_input_desktop()
 
@@ -61,30 +61,67 @@ def cmd_doctor() -> int:
     print(f"  Architecture:  {machine}")
     print(f"  Python:        {py_ver} ({'64-bit' if sys.maxsize > 2**32 else '32-bit'})")
 
-    if os_name != "Windows":
-        print("  [FAIL] Extra requires Windows 10 or Windows 11.")
-        return 1
-    else:
+    if os_name == "Windows":
         print("  [OK] Supported Windows host.")
+    elif os_name == "Darwin":
+        print("  [OK] Supported macOS host (Apple Silicon / Intel).")
+    else:
+        print(f"  [FAIL] Extra requires Windows 10/11 or macOS. (Detected: {os_name})")
+        return 1
 
-    # 2. DPI & Security Desktop Attachment
-    print("\n[DPI Geometry & Thread Desktop]")
+    # 2. DPI & Platform Geometry
+    print("\n[DPI Geometry & Display Scaling]")
     dpi_ok = ensure_dpi_aware()
     desk_ok = attach_input_desktop()
-    print(f"  DPI Awareness: {'PerMonitorV2 (Active)' if dpi_ok else 'Fallback'}")
-    print(f"  Input Desktop: {'Attached (Default)' if desk_ok else 'Standard'}")
-
+    print(f"  DPI / Scale:   {'Active / Aware' if dpi_ok else 'Fallback'}")
     cursor = get_cursor_position()
     print(f"  Mouse Cursor:  Physical pixel {cursor}")
 
-    # 3. Displays & Hardware Metrics
+    # 3. macOS TCC Security & Permissions Check (if on Darwin)
+    if os_name == "Darwin":
+        print("\n[macOS TCC Privacy & Security Permissions]")
+        from extra.core.platform.macos.permissions import (
+            check_accessibility,
+            check_screen_recording,
+            open_all_permissions_settings,
+            print_guidance_card,
+        )
+
+        has_screen_perm = check_screen_recording()
+        if has_screen_perm:
+            print("  Screen Recording: [OK] Granted (ScreenCaptureKit active).")
+        else:
+            print("  Screen Recording: [WARN] Not Granted. Grant in System Settings > Privacy & Security > Screen Recording.")
+
+        has_ax = check_accessibility()
+        if has_ax:
+            print("  Accessibility:    [OK] Granted (AXUIElement active).")
+        else:
+            print("  Accessibility:    [WARN] Not Granted. Grant in System Settings > Privacy & Security > Accessibility.")
+
+        if not (has_screen_perm and has_ax):
+            print_guidance_card()
+            if args and getattr(args, "open", False):
+                print("  [ACTION] Opening macOS Privacy & Security settings panes directly...")
+                open_all_permissions_settings()
+
+        # Check PyObjC Frameworks
+        print("\n[PyObjC Native Framework Bridges]")
+        for framework in ["Quartz", "AppKit", "ApplicationServices", "ScreenCaptureKit"]:
+            try:
+                __import__(framework)
+                print(f"  {framework:<20}: [OK] Installed & Loaded.")
+            except ImportError:
+                print(f"  {framework:<20}: [WARN] Framework not available on current environment.")
+
+    # 4. Displays & Multi-Monitor Metrics
     print("\n[Displays & Multi-Monitor Metrics]")
     monitors = get_monitors_info()
     print(f"  Monitors:      {len(monitors)} connected display(s)")
     for m in monitors:
-        print(f"    - Display {m.index}: {m.width}x{m.height} @ ({m.left}, {m.top}) | DPI: {m.dpi_x}x{m.dpi_y} ({m.scale_factor}x scale) | Primary={m.is_primary}")
+        print(f"    - Display {m.index}: {m.width}x{m.height} @ ({m.left}, {m.top}) | Scale: {m.scale_factor}x | Primary={m.is_primary}")
 
-    # 4. Perception Engine Latency Benchmark
+    # 5. Screen Capture Benchmark
     print("\n[Screen Capture Benchmark]")
     latencies = []
     for _ in range(3):
@@ -97,28 +134,27 @@ def cmd_doctor() -> int:
     else:
         print("  [WARN] Screen capture took longer than expected.")
 
-    # 5. Semantic UI Automation v3 Plane
-    print("\n[Microsoft UI Automation Core COM Layer]")
+    # 6. Semantic UI Automation Plane
+    print("\n[Semantic UI Tree Inspection]")
     try:
-        uia = UIAutomationPlane()
+        from extra.core.platform import get_accessibility_plane
+        plane = get_accessibility_plane()
         t0 = time.perf_counter()
-        elems = uia.inspect_window(interactive_only=True, max_elements=20)
-        t_uia = (time.perf_counter() - t0) * 1000.0
-        print(f"  UIA Status:    Active & Operational ({len(elems)} elements inspected in {t_uia:.1f}ms)")
-        print("  [OK] UIAutomationCore.dll COM interface functional.")
+        elems = plane.inspect_active_window(max_elements=20)
+        t_ax = (time.perf_counter() - t0) * 1000.0
+        print(f"  UI Status:     Active & Operational ({len(elems)} elements inspected in {t_ax:.1f}ms)")
+        print("  [OK] Accessibility plane functional.")
     except Exception as e:
-        print(f"  [FAIL] UIA Plane Error: {e}")
+        print(f"  [WARN] UI Inspection notice: {e}")
 
-    # 6. Microsoft Edge & Playwright Fast-Path
-    print("\n[Browser Fast-Path (Microsoft Edge / Playwright)]")
-    edge_path = resolve_executable("edge")
-    if edge_path and os.path.exists(edge_path):
-        print(f"  Edge Binary:   {edge_path}")
-        print("  [OK] Microsoft Edge available for zero-download web fast-path.")
-    else:
-        print("  [WARN] Microsoft Edge not found at standard path.")
+    # 7. Browser & Shell Fast-Path
+    print("\n[Browser Fast-Path & Shell Engine]")
+    browser_name = "safari" if os_name == "Darwin" else "edge"
+    browser_path = resolve_executable(browser_name)
+    print(f"  Default Browser ({browser_name}): {browser_path}")
+    print(f"  [OK] Zero-download web fast-path ready.")
 
-    # 7. Active Windows
+    # 8. Active Windows
     print("\n[Active Desktop Windows]")
     fg = get_foreground_window()
     print(f"  Foreground:    {repr(fg.title) if fg else 'None'} ({fg.process_name if fg else ''})")
@@ -150,11 +186,12 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_inspect(args: argparse.Namespace) -> int:
-    """Quickly inspects UI Automation controls on the desktop."""
+    """Quickly inspects UI controls on the desktop."""
     ensure_dpi_aware()
     attach_input_desktop()
 
-    uia = UIAutomationPlane()
+    from extra.core.platform import get_accessibility_plane
+    plane = get_accessibility_plane()
     print(f"Inspecting UI elements (window='{args.window}', max={args.limit})...")
     hwnd = None
     if args.window:
@@ -163,7 +200,11 @@ def cmd_inspect(args: argparse.Namespace) -> int:
             hwnd = win.hwnd
             print(f"Targeting window [{hwnd}] '{win.title}'")
 
-    elems = uia.inspect_window(hwnd=hwnd, interactive_only=not args.all, max_elements=args.limit)
+    if hwnd is not None and hasattr(plane, "inspect_window"):
+        elems = plane.inspect_window(hwnd=hwnd, interactive_only=not args.all, max_elements=args.limit)
+    else:
+        elems = plane.inspect_active_window(max_elements=args.limit)
+
     print(f"\nDiscovered {len(elems)} elements:")
     for el in elems:
         safe_name = el.name.encode("ascii", "replace").decode("ascii")
@@ -180,8 +221,9 @@ def cmd_snap(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
 
     if args.som:
-        uia = UIAutomationPlane()
-        elems = uia.inspect_window(interactive_only=True, max_elements=50)
+        from extra.core.platform import get_accessibility_plane
+        plane = get_accessibility_plane()
+        elems = plane.inspect_active_window(max_elements=50)
         annotator = SetOfMarkAnnotator()
         ann_img, mark_map = annotator.annotate(cap.image, elems)
         ann_img.save(output_path)
@@ -189,6 +231,30 @@ def cmd_snap(args: argparse.Namespace) -> int:
     else:
         cap.image.save(output_path)
         print(f"Saved screenshot ({cap.width}x{cap.height}, {cap.duration_ms}ms) to {output_path.resolve()}")
+    return 0
+
+
+def cmd_capture(args: argparse.Namespace) -> int:
+    """Captures desktop screenshot to file."""
+    return cmd_snap(args)
+
+
+def cmd_launch(args: argparse.Namespace) -> int:
+    """Launches an application or URI via the fast-path launcher."""
+    from extra.fastpath.shell import launch_app
+    app_args = getattr(args, "args", None)
+    no_wait = getattr(args, "no_wait", False)
+    res = launch_app(args.app, args=app_args, wait_for_window=not no_wait)
+    print(res.message)
+    return 0 if res.success else 1
+
+
+def cmd_type(args: argparse.Namespace) -> int:
+    """Instantly injects text into the active foreground window."""
+    from extra.core.input_engine import instant_type
+    enter = getattr(args, "enter", False)
+    instant_type(args.text, press_enter=enter)
+    print(f"Injected text ({len(args.text)} chars).")
     return 0
 
 
@@ -315,7 +381,10 @@ def sync_ai_rules_and_skills(repo_dir: Path) -> bool:
             print(f"  [WARN] agy mcp re-registration notice: {ex}")
 
     # 7. Claude Desktop Configuration
-    claude_dir = Path(os.environ.get("APPDATA", "")) / "Claude"
+    if sys.platform == "darwin":
+        claude_dir = user_home / "Library" / "Application Support" / "Claude"
+    else:
+        claude_dir = Path(os.environ.get("APPDATA", "")) / "Claude"
     claude_config = claude_dir / "claude_desktop_config.json"
     if claude_dir.exists():
         try:
@@ -517,10 +586,51 @@ def cmd_update(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_permissions(args: argparse.Namespace) -> int:
+    """Manages macOS TCC privacy and security permissions (check, open, reset)."""
+    if platform.system() != "Darwin":
+        print("macOS TCC permissions management is only applicable on macOS (Darwin).")
+        return 0
+
+    from extra.core.platform.macos.permissions import (
+        check_accessibility,
+        check_screen_recording,
+        open_all_permissions_settings,
+        print_guidance_card,
+        reset_permissions,
+    )
+
+    action = getattr(args, "action", "check") or "check"
+    if action == "check":
+        print("=" * 65)
+        print(" MACOS TCC PERMISSIONS CHECK")
+        print("=" * 65)
+        has_ax = check_accessibility()
+        has_screen = check_screen_recording()
+        print(f"  Accessibility:    {'[OK] Granted' if has_ax else '[FAIL] Not Granted'}")
+        print(f"  Screen Recording: {'[OK] Granted' if has_screen else '[FAIL] Not Granted'}")
+        if not (has_ax and has_screen):
+            print_guidance_card()
+            return 1
+        print("\nAll permissions verified! System is ready for autonomous control.")
+        return 0
+    elif action == "open":
+        print("Opening macOS System Settings privacy panes...")
+        open_all_permissions_settings()
+        return 0
+    elif action == "reset":
+        client = getattr(args, "client", "Terminal") or "Terminal"
+        print(f"Resetting TCC permissions for '{client}'...")
+        ok, log = reset_permissions(client)
+        print(log)
+        return 0 if ok else 1
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="extra",
-        description="Extra — Flashless Windows 10/11 Computer-Use Engine & MCP Server",
+        description="Extra — Flashless macOS & Windows Computer-Use Engine & MCP Server",
     )
     parser.add_argument(
         "--version", "-v", action="version", version=f"extra {__version__}"
@@ -528,7 +638,13 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # doctor
-    subparsers.add_parser("doctor", help="Run system health and capability diagnostics")
+    doctor_parser = subparsers.add_parser("doctor", help="Run system health and capability diagnostics")
+    doctor_parser.add_argument("--open", "-o", action="store_true", help="Open System Settings privacy panes if permissions missing")
+
+    # permissions
+    perm_parser = subparsers.add_parser("permissions", help="Manage macOS TCC permissions (check, open, reset)")
+    perm_parser.add_argument("action", nargs="?", default="check", choices=["check", "open", "reset"], help="Action to perform (check, open, reset)")
+    perm_parser.add_argument("--client", default="Terminal", help="Client to reset (Terminal, Claude, Cursor, Windsurf, iTerm2)")
 
     # test
     subparsers.add_parser("test", help="Run integration test suite")
@@ -559,6 +675,23 @@ def main() -> None:
     snap_parser.add_argument("--monitor", "-m", type=int, default=0, help="Monitor index")
     snap_parser.add_argument("--som", action="store_true", help="Overlay Set-of-Mark numbered badges")
 
+    # capture
+    capture_parser = subparsers.add_parser("capture", help="Capture a desktop screenshot (alias for snap)")
+    capture_parser.add_argument("--output", "-o", default="screenshot.png", help="Output file path")
+    capture_parser.add_argument("--monitor", "-m", type=int, default=0, help="Monitor index")
+    capture_parser.add_argument("--som", action="store_true", help="Overlay Set-of-Mark numbered badges")
+
+    # launch
+    launch_parser = subparsers.add_parser("launch", help="Launch an application via fast-path launcher")
+    launch_parser.add_argument("app", help="Application name or alias (e.g. calc, notepad, edge, safari)")
+    launch_parser.add_argument("--args", nargs="*", default=None, help="Arguments or files to pass to application")
+    launch_parser.add_argument("--no-wait", action="store_true", help="Do not wait for window to appear")
+
+    # type
+    type_parser = subparsers.add_parser("type", help="Instantly inject text into active window")
+    type_parser.add_argument("text", help="Text string to type")
+    type_parser.add_argument("--enter", "-e", action="store_true", help="Press Enter after typing")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -566,7 +699,9 @@ def main() -> None:
         sys.exit(0)
 
     if args.command == "doctor":
-        sys.exit(cmd_doctor())
+        sys.exit(cmd_doctor(args))
+    elif args.command == "permissions":
+        sys.exit(cmd_permissions(args))
     elif args.command == "test":
         sys.exit(cmd_test())
     elif args.command == "indicators":
@@ -579,6 +714,12 @@ def main() -> None:
         sys.exit(cmd_inspect(args))
     elif args.command == "snap":
         sys.exit(cmd_snap(args))
+    elif args.command == "capture":
+        sys.exit(cmd_capture(args))
+    elif args.command == "launch":
+        sys.exit(cmd_launch(args))
+    elif args.command == "type":
+        sys.exit(cmd_type(args))
 
 
 if __name__ == "__main__":

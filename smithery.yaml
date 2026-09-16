@@ -1,0 +1,28 @@
+# Smithery configuration for Extra MCP server
+# Enables 1-click installation on Claude Desktop, Cursor, and Windsurf via Smithery CLI
+name: extra
+displayName: Extra Native Computer Use
+description: Flashless macOS & Windows native computer-use engine for AI vision, mouse, keyboard & UI automation.
+homepage: https://extra.yantraos.com
+repository: https://github.com/AIYantra/extra
+license: MIT
+version: "0.2.0"
+
+startCommand:
+  type: stdio
+  config:
+    command: extra
+    args: []
+
+features:
+  tools: true
+  resources: false
+  prompts: false
+
+supportedPlatforms:
+  - macos-arm64
+  - macos-x64
+  - windows-x64
+
+install:
+  command: pip install extra-desktop
