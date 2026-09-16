@@ -171,7 +171,9 @@ class TestMacOSEndToEndIntegration(unittest.TestCase):
         # ── Step 7: Task Complete & Dissolve ─────────────────────────────────
         with patch.object(self.indicators.audio, "play") as mock_audio_play, patch.object(
             self.indicators.overlay, "show_complete"
-        ) as mock_overlay_complete:
+        ) as mock_overlay_complete, patch.object(
+            self.indicators.overlay, "hide"
+        ) as mock_overlay_hide:
             self.indicators.task_complete("Calculation finished: 336", success=True, play_chime=True)
             mock_audio_play.assert_called_with("complete")
             mock_overlay_complete.assert_called_once()

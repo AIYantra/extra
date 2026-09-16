@@ -99,7 +99,9 @@ class TestMacOSIndicators(unittest.TestCase):
         self.assertEqual(overlay.current_mode, "idle")
         mock_panel_instance.orderOut_.assert_called()
 
-    def test_indicator_controller_interface(self):
+    @patch("extra.core.platform.macos.indicators.NSSound")
+    @patch("extra.core.platform.macos.indicators.NSPanel")
+    def test_indicator_controller_interface(self, mock_nspanel, mock_nssound):
         ctrl = get_indicator_controller()
         self.assertIsInstance(ctrl, AbstractIndicatorController)
 
