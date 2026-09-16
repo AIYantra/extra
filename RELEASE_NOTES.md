@@ -1,3 +1,66 @@
+# Extra Release Notes — v0.2.2
+
+**Release Date:** September 16, 2026  
+**Release Title:** Developer Binary Auto-Whitelisting & Controlled Folder Access (CFA) Workspace Diagnostics  
+**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)
+
+---
+
+## 1. Executive Summary & Root Cause Analysis (v0.2.2)
+
+Following the successful release of v0.2.1 (which achieved **zero AMSI/Trojan malware detections** on Windows Defender), follow-up testing on host `SURYA` uncovered a subtle, recurring friction point in user environments:
+
+### Incident C: The 5 Post-Update Controlled Folder Access (CFA) Blocks
+In `defenderhistory (2).md` recorded on **16-Sep-2026 at 12:47 IST**, 5 additional Controlled Folder Access (Event ID 1123) blocks were registered:
+```
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.agents\rules  | Process: agy.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.agents\skills | Process: agy.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.extra         | Process: agy.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work                | Process: python.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work                | Process: powershell.exe
+```
+
+### Forensic Diagnosis:
+1. **The Culprit: Working Inside Windows Protected Libraries**
+   - The user initialized or cloned their project directory inside `C:\Users\Surya\Documents\work`.
+   - Windows Defender Controlled Folder Access monitors `Documents`, `Pictures`, `Desktop`, `Videos`, and `Music` indiscriminately.
+   - When `agy` launched to supervise coding tasks, `agy.exe`, Python, and PowerShell attempted to read/write project metadata (`.agents/skills`, `.extra`, git worktrees).
+   - Because `agy.exe` and user/venv Python instances were not explicitly in the Defender CFA allowlist, Defender blocked each write attempt, triggering toast alerts.
+
+2. **The Dual Solution in v0.2.2:**
+   - **Automated Binary Whitelisting:** `install.ps1` now proactively registers `agy.exe`, the active Python interpreter, the `.extra` virtualenv Python, and `powershell.exe` in Defender's `ControlledFolderAccessAllowedApplications`.
+   - **Workspace Location Diagnostics:** `extra doctor` now inspects the current directory. If the user runs `extra doctor` inside a protected folder (e.g. `Documents`), it emits an actionable warning and offers a one-click elevated fix via `extra doctor --fix-cfa`.
+
+---
+
+## 2. What Was Added in v0.2.2
+
+### 1. Developer Binary Whitelisting in `install.ps1`
+Step 6 of `install.ps1` automatically detects active developer toolchains and whitelists them:
+```powershell
+Add-MpPreference -ControlledFolderAccessAllowedApplications `
+    "$agyPath", "$sysPython", "$venvPython", "$psPath"
+```
+Even if a developer chooses to place their workspace inside `Documents\my-project`, Defender recognizes `agy.exe` and Python as trusted tools and allows operations without alerts.
+
+### 2. Workspace Proximity Guard in `extra doctor`
+Running `extra doctor` now checks if `Get-Location` is inside `Documents`, `Desktop`, `Pictures`, `Videos`, or `Music`:
+```text
+[!] WARNING: Current workspace is inside a Windows Protected Folder:
+    C:\Users\Surya\Documents\work
+    Windows Defender Controlled Folder Access (CFA) may block write operations.
+    Recommended: Move project to C:\work or run 'extra doctor --fix-cfa' to allowlist.
+```
+
+### 3. One-Click UAC Elevation Repair: `extra doctor --fix-cfa`
+Users or automated agents can trigger instant, clean Windows UAC elevation to allowlist developer tools:
+```powershell
+extra doctor --fix-cfa
+```
+This triggers a native Windows UAC prompt (`Start-Process powershell -Verb RunAs`) to execute `Add-MpPreference` for all discovered developer binaries without requiring manual PowerShell administration.
+
+---
+
 # Extra Release Notes — v0.2.1
 
 **Release Date:** September 16, 2026  

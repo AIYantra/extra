@@ -251,10 +251,18 @@ try {
     if ($cfa -eq 1 -or $cfa -eq 2) {
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         if ($isAdmin) {
-            Add-MpPreference -ControlledFolderAccessAllowedApplications $venvPython -ErrorAction SilentlyContinue
-            Write-Success "Whitelisted Extra virtual environment in Windows Defender CFA."
+            $appsToAllow = @($venvPython)
+            if ($pythonExe -and (Test-Path $pythonExe)) { $appsToAllow += $pythonExe }
+            $agyPath = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"
+            if (Test-Path $agyPath) { $appsToAllow += $agyPath }
+            $psPath = Join-Path $env:windir "System32\WindowsPowerShell\v1.0\powershell.exe"
+            if (Test-Path $psPath) { $appsToAllow += $psPath }
+
+            Add-MpPreference -ControlledFolderAccessAllowedApplications $appsToAllow -ErrorAction SilentlyContinue
+            Write-Success "Whitelisted developer tools (Extra venv, Python, agy, PowerShell) in Windows Defender CFA."
         } else {
             Write-Success "Controlled Folder Access active. Extra configured to use safe workspace at $workspaceDir."
+            Write-Host " [TIP] If you keep project folders inside Documents, run in Admin terminal: extra doctor --fix-cfa" -ForegroundColor Cyan
         }
     } else {
         Write-Success "Controlled Folder Access standard/inactive. Filesystem access unimpeded."
