@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  actions: write
 
 jobs:
   build:
@@ -40,6 +41,7 @@ jobs:
         with:
           name: python-package-distributions
           path: dist/
+          retention-days: 1
 
   test-matrix:
     name: Cross-Platform Pre-Flight Verification
@@ -122,3 +124,15 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+
+      - name: Clean Up Temporary Build Artifacts from GitHub
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Cleaning up temporary build artifacts from GitHub Actions..."
+          ARTIFACT_IDS=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts --jq '.artifacts[].id' || true)
+          for id in $ARTIFACT_IDS; do
+            echo "Deleting artifact $id..."
+            gh api -X DELETE repos/${{ github.repository }}/actions/artifacts/$id || true
+          done
