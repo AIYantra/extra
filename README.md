@@ -6,18 +6,18 @@
 
 # Extra
 
-### The Open-Source Astra 6 for your PC
-**Your AI can see, click, type, navigate, and get real work done on Windows.**
+### The Open-Source Astra 6 for your Mac & PC
+**Your AI can see, click, type, navigate, and get real work done on macOS & Windows.**
 
 <!-- mcp-name: io.github.AIYantra/extra -->
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: Windows 11 / 10](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010-0078D6.svg)](https://microsoft.com/windows)
+[![Platform: macOS 12.3+ & Windows 10/11](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-0078D6.svg)](https://extra.yantraos.com)
 [![Protocol: Model Context Protocol (MCP)](https://img.shields.io/badge/Protocol-MCP%20Native-orange.svg)](https://modelcontextprotocol.io)
 [![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
 [![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
 
-[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](ARCHITECTURE.md) • [Contributing](CONTRIBUTING.md) • [License](LICENSE)
+[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [macOS Guide](README_MACOS.md) • [Architecture](ARCHITECTURE.md) • [License](LICENSE)
 
 <br/>
 <br/>
@@ -58,36 +58,58 @@ Once Extra is running, you can talk to your AI like a real human assistant sitti
 
 ## ⚡ Quickstart (1 Minute)
 
-You can set up Extra in two easy ways:
+You can set up Extra in seconds on **macOS** or **Windows**:
 
-### Option A: Ask Your AI To Set It Up (Easiest)
+### Option A: Ask Your AI To Set It Up (Primary Funnel — Easiest)
 
-Simply copy and paste this single prompt into your AI (Claude, Antigravity, Cursor, AGY):
+Copy and paste the single directive for your OS into **Claude Desktop**, **Google Antigravity**, **Cursor**, **Windsurf**, or any MCP agent:
 
-```text
-Setup Extra on my PC: In PowerShell run 'irm https://extra.yantraos.com/install.ps1 | iex', then read and configure ~/.extra/app/STARTER_PROMPT.md so we are ready to use Extra.
-```
+* **🍏 For macOS (Apple Silicon M1-M4 & Intel):**
+  ```text
+  Setup Extra on my Mac: In Terminal run 'curl -sSL https://extra.yantraos.com/install.sh | bash', then read and configure ~/.extra/app/STARTER_PROMPT_MACOS.md so we are ready to use Extra.
+  ```
 
-Your AI will run the installer, configure its tools, and reply:  
-> **"We are ready! Please restart <your AI application, e.g. Claude Desktop, Antigravity, Cursor> to make it work."**
+* **🪟 For Windows (11 / 10):**
+  ```text
+  Setup Extra on my PC: In PowerShell run 'irm https://extra.yantraos.com/install.ps1 | iex', then read and configure ~/.extra/app/STARTER_PROMPT.md so we are ready to use Extra.
+  ```
+
+Your AI will run the installer, configure MCP and local rules, and reply:  
+> **"We are ready! Please restart <your AI application, e.g. Claude Desktop, Antigravity, Cursor, Windsurf> to make it work."**
 
 ---
 
-### Option B: Run PowerShell Yourself
+### Option B: Run the One-Liner Yourself
 
-1. Open standard **Windows PowerShell** (no admin elevation required).
-2. Paste and run this one command:
+* **🍏 macOS Terminal:**
+  ```bash
+  curl -sSL https://extra.yantraos.com/install.sh | bash
+  ```
 
-```powershell
-irm https://extra.yantraos.com/install.ps1 | iex
-```
+* **🪟 Windows PowerShell:**
+  ```powershell
+  irm https://extra.yantraos.com/install.ps1 | iex
+  ```
 
 The automated installer will:
-* Verify Windows 10/11 64-bit architecture.
-* Discover or configure Python 3.10+.
-* Create an isolated environment at `~/.extra`.
-* Automatically connect to **Claude Desktop** (`claude_desktop_config.json`).
-* Run a complete system doctor diagnostic.
+* Verify OS architecture (macOS 12.3+ or Windows 10/11 64-bit).
+* Provision isolated Python 3.10+ runtime (`~/.extra/venv`).
+* Auto-configure **Claude Desktop**, **Cursor**, **Windsurf**, and **Antigravity** (`agy`).
+* Run the health diagnostic doctor and present the 1-step starter prompt.
+
+---
+
+### Option C: Developer Git Clone
+
+```bash
+# macOS:
+git clone https://github.com/AIYantra/extra.git ~/.extra/app
+cd ~/.extra/app && ./install.sh
+
+# Windows:
+git clone https://github.com/AIYantra/extra.git "$HOME\.extra\app"
+cd "$HOME\.extra\app" ; .\install.ps1
+```
 
 ---
 

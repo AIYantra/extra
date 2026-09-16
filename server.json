@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.AIYantra/extra",
   "title": "EXTRA - Native Computer Use",
-  "description": "Flashless Windows 10/11 native computer-use engine for AI vision, mouse, keyboard & UI automation",
-  "version": "0.1.2",
+  "description": "Flashless macOS & Windows native computer-use engine for AI vision, mouse, keyboard & UI automation via ScreenCaptureKit, AXUIElement, and Win32 DXGI",
+  "version": "0.2.0",
   "websiteUrl": "https://extra.yantraos.com",
   "repository": {
     "url": "https://github.com/AIYantra/extra",
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "extra-desktop",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "transport": {
         "type": "stdio"
       }

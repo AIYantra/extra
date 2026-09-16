@@ -1,0 +1,202 @@
+"""
+Project Extra — Platform Abstraction Layer (PAL) Dynamic OS Loader
+Dispatches dynamically between Windows and macOS native backends based on sys.platform.
+"""
+
+from __future__ import annotations
+
+import sys
+
+from extra.core.platform.base import (
+    AbstractAccessibilityPlane,
+    AbstractCaptureEngine,
+    AbstractFocusManager,
+    AbstractGeometry,
+    AbstractIndicatorController,
+    AbstractInputEngine,
+    AbstractShellLauncher,
+    CaptureResult,
+    LaunchResult,
+    MonitorInfo,
+    UIElement,
+    WindowInfo,
+    get_bbox_center,
+    image_to_base64,
+)
+
+if sys.platform == "darwin":
+    from extra.core.platform.macos import (
+        AudioIndicator,
+        IndicatorController,
+        MacAccessibilityPlane as AccessibilityPlane,
+        MacFocusManager as FocusManager,
+        MacGeometry as PlatformGeometry,
+        MacInputEngine as InputEngine,
+        MacShellLauncher as ShellLauncher,
+        ScreenCaptureEngine,
+        SetOfMarkAnnotator,
+        attach_input_desktop,
+        atomic_clipboard_paste,
+        capture_roi,
+        capture_screen,
+        clamp_coordinates,
+        denormalize_bbox,
+        denormalize_coordinates,
+        ensure_dpi_aware,
+        find_window_by_title,
+        find_windows_by_process,
+        force_activate_window,
+        get_capture_engine,
+        get_cursor_position,
+        get_foreground_window,
+        get_indicator_controller,
+        get_monitors_info,
+        get_primary_monitor,
+        get_virtual_screen_bounds,
+        get_window_info,
+        instant_type,
+        launch_app,
+        list_windows,
+        mouse_click,
+        mouse_double_click,
+        mouse_down,
+        mouse_drag,
+        mouse_move,
+        mouse_scroll,
+        mouse_up,
+        normalize_bbox,
+        normalize_coordinates,
+        open_uri,
+        resolve_executable,
+        send_hotkey,
+    )
+    UIAutomationPlane = AccessibilityPlane
+else:
+    # Default to Windows (win32)
+    from extra.core.platform.windows import (
+        AudioIndicator,
+        IndicatorController,
+        ScreenCaptureEngine,
+        SetOfMarkAnnotator,
+        UIAutomationPlane,
+        WindowsFocusManager as FocusManager,
+        WindowsGeometry as PlatformGeometry,
+        WindowsInputEngine as InputEngine,
+        WindowsShellLauncher as ShellLauncher,
+        attach_input_desktop,
+        atomic_clipboard_paste,
+        capture_roi,
+        capture_screen,
+        clamp_coordinates,
+        denormalize_bbox,
+        denormalize_coordinates,
+        ensure_dpi_aware,
+        find_window_by_title,
+        find_windows_by_process,
+        force_activate_window,
+        get_capture_engine,
+        get_cursor_position,
+        get_foreground_window,
+        get_indicator_controller,
+        get_monitors_info,
+        get_primary_monitor,
+        get_virtual_screen_bounds,
+        get_window_info,
+        instant_type,
+        launch_app,
+        list_windows,
+        mouse_click,
+        mouse_double_click,
+        mouse_down,
+        mouse_drag,
+        mouse_move,
+        mouse_scroll,
+        mouse_up,
+        normalize_bbox,
+        normalize_coordinates,
+        open_uri,
+        resolve_executable,
+        send_hotkey,
+    )
+    AccessibilityPlane = UIAutomationPlane
+
+_accessibility_plane: Optional[AbstractAccessibilityPlane] = None
+
+
+def get_accessibility_plane() -> AbstractAccessibilityPlane:
+    """Returns the singleton accessibility / UI automation plane for the platform."""
+    global _accessibility_plane
+    if _accessibility_plane is None:
+        _accessibility_plane = AccessibilityPlane()
+    return _accessibility_plane
+
+__all__ = [
+    # Base interfaces
+    "AbstractCaptureEngine",
+    "AbstractGeometry",
+    "AbstractInputEngine",
+    "AbstractAccessibilityPlane",
+    "AbstractFocusManager",
+    "AbstractShellLauncher",
+    "AbstractIndicatorController",
+    # Dataclasses
+    "CaptureResult",
+    "MonitorInfo",
+    "WindowInfo",
+    "UIElement",
+    "LaunchResult",
+    # Geometry
+    "ensure_dpi_aware",
+    "attach_input_desktop",
+    "get_monitors_info",
+    "get_primary_monitor",
+    "get_virtual_screen_bounds",
+    "normalize_coordinates",
+    "denormalize_coordinates",
+    "normalize_bbox",
+    "denormalize_bbox",
+    "get_bbox_center",
+    "clamp_coordinates",
+    "get_cursor_position",
+    "PlatformGeometry",
+    # Capture
+    "ScreenCaptureEngine",
+    "get_capture_engine",
+    "capture_screen",
+    "capture_roi",
+    "image_to_base64",
+    # Input
+    "instant_type",
+    "atomic_clipboard_paste",
+    "mouse_move",
+    "mouse_down",
+    "mouse_up",
+    "mouse_click",
+    "mouse_double_click",
+    "mouse_drag",
+    "mouse_scroll",
+    "send_hotkey",
+    "InputEngine",
+    # Focus
+    "get_window_info",
+    "get_foreground_window",
+    "list_windows",
+    "find_window_by_title",
+    "find_windows_by_process",
+    "force_activate_window",
+    "FocusManager",
+    # Semantic UI / Accessibility
+    "AccessibilityPlane",
+    "UIAutomationPlane",
+    "SetOfMarkAnnotator",
+    "get_accessibility_plane",
+    # Indicators
+    "AudioIndicator",
+    "IndicatorController",
+    "get_indicator_controller",
+    # Shell Launcher
+    "launch_app",
+    "open_uri",
+    "resolve_executable",
+    "ShellLauncher",
+]
