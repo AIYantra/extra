@@ -14,6 +14,7 @@ from pathlib import Path
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 # Ensure project root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -78,8 +79,25 @@ class TestMacOSPerceptionAndGeometry(unittest.TestCase):
         self.assertTrue(geom.ensure_dpi_aware())
         self.assertTrue(geom.attach_input_desktop())
 
-    def test_retina_point_pixel_conversion(self) -> None:
+    @patch("extra.core.platform.macos.geometry.get_monitors_info")
+    def test_retina_point_pixel_conversion(self, mock_get_monitors) -> None:
         """Asserts exact 2.0x Retina point-to-pixel and pixel-to-point mappings."""
+        mock_get_monitors.return_value = [
+            MonitorInfo(
+                index=0,
+                left=0,
+                top=0,
+                right=2880,
+                bottom=1800,
+                width=2880,
+                height=1800,
+                is_primary=True,
+                device_name="Mocked Retina Display",
+                dpi_x=144,
+                dpi_y=144,
+                scale_factor=2.0,
+            )
+        ]
         # 100 points @ 2x = 200 pixels
         px, py = points_to_pixels(100.0, 250.5, monitor_index=0)
         self.assertEqual(px, 200)
