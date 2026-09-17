@@ -64,16 +64,25 @@ To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100
      - **Safe Path:** ALWAYS save to `%USERPROFILE%\.extra\workspace\<name>.png`. **NEVER** write to `%USERPROFILE%\Pictures` (blocked by Windows Defender Controlled Folder Access).
   2. Visibly launch Paint to display the chart: `extra_launch(app_name="mspaint", args=["<absolute_path>"])`.
 - **Canvas & Design Apps (Canva, Figma, Web-in-App / Electron):**
-  1. Electron canvas tools render inside an internal WebGL/HTML5 canvas that does **not** expose clickable Win32 elements to UIAutomation.
-  2. **NEVER spend 20+ turns hunting coordinates or guessing template buttons in Canva/Figma.**
-  3. **High-Speed Fast-Path Protocol:**
-     a. Generate the pixel-perfect design asset programmatically to disk via Python (`PIL`) inside `%USERPROFILE%\.extra\workspace\<name>.png`. **NEVER** write to `%USERPROFILE%\Pictures`.
-     b. Copy the image directly to the Windows Clipboard using PowerShell:
-        `powershell -STA -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('<safe_png_path>'))"`
-     c. Bring Canva / Figma to foreground: `extra_focus_window(window_title="Canva")`.
-     d. Open/focus the target canvas with a single hotkey/click, then instantly paste: `extra_hotkey(keys=["ctrl", "v"])`.
-     e. Snap windows side-by-side (`win+left`, `win+right`).
-  4. Eliminates coordinate thrashing, prevents StallBreaker aborts, and delivers flawless results in under 60 seconds.
+  1. **UI Architecture Understanding:**
+     - Canva and Figma desktop applications are built on Electron.
+     - Top navigation bars, search inputs, home screen category icons, and sidebars ARE standard web elements that CAN be interacted with via clicks, hotkeys, and searches.
+     - Only the inner drawing canvas area (where individual shapes, vectors, and text layers sit) renders in an opaque HTML5/WebGL canvas that does not expose Win32 UIA accessibility nodes.
+  2. **How to Create & Open Designs in Canva:**
+     - **Primary (Most Reliable): Use Home Screen Category Icons or Search Bar:**
+       - On the Canva home screen, click the visible category icons directly (e.g. "Presentation", "Instagram Post", "Doc", "Whiteboard") or click the prominent search box: *"What would you like to create?"* at the top of the home screen, type the desired format (e.g. "Instagram Post" or "Presentation"), and press Enter.
+       - **CRITICAL CAVEAT ON `Ctrl + N`:** In Canva desktop, pressing `Ctrl + N` often defaults keyboard focus to the **"Open a design link:"** box at the bottom of the popup! DO NOT blindly type design names after pressing `Ctrl + N`. If you see "Please enter a valid design link", press `extra_hotkey(keys=["esc"])` once to dismiss the popup, and click the category icon or search box on the main home screen!
+  3. **Honoring User Intent (Templates vs Custom Graphics):**
+     - **When the user requests to use Canva templates:**
+       - Search for the template in Canva's search bar or click "Templates" on the left navigation bar.
+       - Select a template and use Canva's native tools. Do NOT fight the user's explicit request to use Canva templates.
+     - **When generating custom graphics or high-speed posters (Fast-Path):**
+       - You can generate high-resolution PNG assets programmatically to disk via Python (`PIL`) inside `%USERPROFILE%\.extra\workspace\<name>.png`.
+       - Copy directly to the Windows Clipboard using PowerShell STA:
+         `powershell -STA -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('<safe_png_path>'))"`
+       - Bring Canva to foreground (`extra_focus_window(window_title="Canva")`), click the canvas, and paste: `extra_hotkey(keys=["ctrl", "v"])`.
+  4. Snap windows side-by-side (`win+left`, `win+right`).
+
 - **File Explorer & Desktop Folders:**
   1. Create folders (`mkdir`) and move files on disk using filesystem commands (`shutil.move`) inside `%USERPROFILE%\.extra\workspace\` or the project root.
   2. Visibly open the folder in Explorer: `extra_launch(app_name="explorer", args=["<folder_path>"])`.
@@ -95,7 +104,8 @@ To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100
     3. `extra_hotkey(keys=["esc"])` (dismisses Windows 11 Snap Assist menu)
 
 ### 4. Strict Anti-Stall Guardrails (ZERO Rabbit Holes, ZERO Test Scripts)
-- **ZERO Modular Test Scripts:** NEVER write exploratory scripts (`test_photos.py`, `test_coords.py`, `test_quotes.py`, `check_modules.py`). Testing code across multiple files wastes 4+ minutes. Perform actions directly.
+- **ZERO Modular Test Scripts:** NEVER write exploratory scripts (`test_photos.py`, `test_coords.py`, `check_fg.py`, `press_up.py`, `canvas_click.py`). Testing code across multiple files or trying to write `ctypes` mouse drivers wastes 4+ minutes. Perform actions directly with Extra MCP tools (`extra_click`, `extra_type`, `extra_hotkey`).
+- **ZERO Panic Scripting & Error Looping:** If an application shows a validation error (such as "Please enter a valid design link" in Canva), NEVER get stuck in a tunnel-vision loop trying to type into the wrong box. Press `extra_hotkey(keys=["esc"])` once to dismiss the dialog, and check the web (`search_web`) or look at the main UI screen to find the correct button.
 - **ZERO System Admin Rabbit Holes:**
   - If Windows Photos shows an error dialog (e.g. UWP file system error): send `extra_hotkey(keys=["esc"])` once to dismiss.
   - If Photos fails to display the image within 1 second, **FALL BACK IMMEDIATELY** to MS Paint: `extra_launch(app_name="mspaint", args=["<image_path>"])`.

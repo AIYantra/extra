@@ -298,6 +298,24 @@ def mouse_move(x: int, y: int, monitor_index: int = 0, notify: bool = True) -> N
     attach_input_desktop()
     cx, cy = clamp_coordinates(x, y, monitor_index)
     user32.SetCursorPos(cx, cy)
+    
+    # Also dispatch via SendInput for 100% reliable hardware positioning across all desktop sessions
+    w = user32.GetSystemMetrics(0)
+    h = user32.GetSystemMetrics(1)
+    if w > 0 and h > 0:
+        nx = int(cx * 65535 / (w - 1))
+        ny = int(cy * 65535 / (h - 1))
+        inp = INPUT(type=INPUT_MOUSE)
+        inp.mi = MOUSEINPUT(
+            dx=nx,
+            dy=ny,
+            mouseData=0,
+            dwFlags=MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK,
+            time=0,
+            dwExtraInfo=0,
+        )
+        _send_inputs([inp])
+
     if notify:
         _notify_indicator("move", cx, cy, monitor_index)
 

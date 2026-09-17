@@ -291,6 +291,7 @@ def extra_type(
         instant_type(text, press_enter=press_enter)
         method = "vk_packet"
     duration_ms = (time.perf_counter() - t0) * 1000.0
+    _stall_breaker.reset()
 
     record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard}, duration_ms)
     return {
@@ -317,6 +318,7 @@ def extra_hotkey(keys: List[str]) -> Dict[str, Any]:
     t0 = time.perf_counter()
     send_hotkey(keys)
     duration_ms = (time.perf_counter() - t0) * 1000.0
+    _stall_breaker.reset()
 
     record_action_step("extra_hotkey", {"keys": keys}, duration_ms)
     return {
@@ -410,6 +412,8 @@ def extra_launch(app_name: str, args: Optional[List[str]] = None) -> Dict[str, A
     attach_input_desktop()
 
     res = launch_app(app_name=app_name, args=args, wait_for_window=True)
+    if res.success:
+        _stall_breaker.reset()
     record_action_app(app_name=app_name, exe_path=getattr(res, "target_executed", None))
     record_action_step("extra_launch", {"app_name": app_name, "args": args})
     return res.to_dict()
@@ -465,6 +469,8 @@ def extra_focus_window(
         return {"success": False, "error": f"Window '{window_title}' not found (timed out after {timeout:.1f}s)."}
 
     ok = force_activate_window(target_hwnd)
+    if ok:
+        _stall_breaker.reset()
     return {"success": ok, "hwnd": target_hwnd}
 
 
@@ -492,6 +498,7 @@ def extra_scroll(
         final_delta = -5
 
     mouse_scroll(final_delta, horizontal=is_horizontal)
+    _stall_breaker.reset()
     record_action_step("extra_scroll", {"delta": final_delta, "horizontal": is_horizontal})
     return {"success": True, "delta": final_delta, "horizontal": is_horizontal}
 
@@ -544,6 +551,7 @@ def extra_task_start(
     ctrl = get_indicator_controller()
     ctrl.task_start(task_name=task_name, monitor_index=monitor_index)
     start_memory_recording(task_name=task_name or "Autonomous Task", goal=task_objective)
+    _stall_breaker.reset()
     return {"success": True, "task_name": task_name, "status": "active"}
 
 
