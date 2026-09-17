@@ -6,12 +6,13 @@ and system utilities to macOS bundles, bypassing visual searching.
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from extra.core.platform.base import AbstractShellLauncher, LaunchResult
 from extra.core.platform.macos.focus import (
@@ -19,7 +20,7 @@ from extra.core.platform.macos.focus import (
     list_windows,
 )
 
-MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = {
+BUILTIN_MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "calc": {"target": "Calculator", "bundle": "/System/Applications/Calculator.app", "proc": "Calculator", "type": "app"},
     "calculator": {"target": "Calculator", "bundle": "/System/Applications/Calculator.app", "proc": "Calculator", "type": "app"},
     "notepad": {"target": "TextEdit", "bundle": "/System/Applications/TextEdit.app", "proc": "TextEdit", "type": "app"},
@@ -42,6 +43,102 @@ MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "vscode": {"target": "Visual Studio Code", "bundle": "/Applications/Visual Studio Code.app", "proc": "Code", "type": "app"},
 }
 
+MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_MAC_APP_REGISTRY)
+
+
+def get_user_registry_path() -> Path:
+    """Returns the sovereign persistent user-level registry JSON path in ~/.extra/."""
+    p = Path.home() / ".extra"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "app_registry_macos.json"
+
+
+def load_user_registry(custom_path: Optional[Path] = None) -> Dict[str, Dict[str, str]]:
+    """
+    Loads dynamic user-registered applications from ~/.extra/app_registry_macos.json
+    and merges them into the active in-memory MAC_APP_REGISTRY.
+    """
+    reg_path = custom_path or get_user_registry_path()
+    if not reg_path.exists():
+        return {}
+    try:
+        with open(reg_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    if isinstance(v, dict) and "target" in v:
+                        clean_k = k.strip().lower()
+                        MAC_APP_REGISTRY[clean_k] = {
+                            "target": v.get("target", ""),
+                            "bundle": v.get("bundle", ""),
+                            "type": v.get("type", "app"),
+                            "proc": v.get("proc", os.path.basename(v.get("target", ""))),
+                        }
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def register_app(
+    name: str,
+    target: str,
+    bundle: Optional[str] = None,
+    proc: Optional[str] = None,
+    app_type: str = "app",
+    persist: bool = True,
+    custom_path: Optional[Path] = None,
+) -> bool:
+    """
+    Registers a new application into Extra's macOS MAC_APP_REGISTRY
+    and persists it to ~/.extra/app_registry_macos.json.
+    """
+    clean_name = name.strip().lower()
+    if not clean_name or not target:
+        return False
+
+    proc_name = proc or os.path.basename(target)
+    entry = {
+        "target": target,
+        "bundle": bundle or target,
+        "type": app_type,
+        "proc": proc_name,
+    }
+    MAC_APP_REGISTRY[clean_name] = entry
+
+    if persist:
+        try:
+            reg_path = custom_path or get_user_registry_path()
+            existing_data: Dict[str, Any] = {}
+            if reg_path.exists():
+                try:
+                    with open(reg_path, "r", encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    existing_data = {}
+            existing_data[clean_name] = entry
+            tmp_file = reg_path.with_suffix(".tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2, ensure_ascii=False)
+            tmp_file.replace(reg_path)
+            return True
+        except Exception:
+            return False
+    return True
+
+
+def get_registered_apps() -> Dict[str, Dict[str, str]]:
+    """Returns a copy of all currently registered applications on macOS."""
+    return dict(MAC_APP_REGISTRY)
+
+
+# Cold-start merge of persistent user registry
+try:
+    load_user_registry()
+except Exception:
+    pass
+
+
 STANDARD_APP_DIRS = [
     "/Applications",
     "/System/Applications",
@@ -50,9 +147,10 @@ STANDARD_APP_DIRS = [
 ]
 
 
-def resolve_executable(name: str) -> Optional[str]:
+def resolve_executable(name: str, auto_register: bool = True) -> Optional[str]:
     """
     Resolves application bundle name, target executable, or URI scheme.
+    Dynamically auto-registers newly discovered applications into ~/.extra/app_registry_macos.json.
     """
     clean = name.strip().lower()
 
@@ -66,6 +164,12 @@ def resolve_executable(name: str) -> Optional[str]:
 
     # Absolute path check
     if os.path.exists(name):
+        alias = Path(name).stem.lower()
+        if auto_register:
+            if alias not in MAC_APP_REGISTRY:
+                register_app(alias, target=name, proc=os.path.basename(name))
+            if clean not in MAC_APP_REGISTRY and clean != alias:
+                register_app(clean, target=name, proc=os.path.basename(name))
         return name
 
     # Search standard macOS App directories
@@ -73,11 +177,15 @@ def resolve_executable(name: str) -> Optional[str]:
     for d in STANDARD_APP_DIRS:
         full_path = os.path.join(d, candidate_app)
         if os.path.exists(full_path):
+            if auto_register and clean not in MAC_APP_REGISTRY:
+                register_app(clean, target=name, bundle=full_path, proc=name)
             return full_path
 
     # Check PATH binaries
     which_bin = shutil.which(name)
     if which_bin:
+        if auto_register and clean not in MAC_APP_REGISTRY:
+            register_app(clean, target=which_bin, proc=os.path.basename(which_bin))
         return which_bin
 
     return name
@@ -243,3 +351,21 @@ class MacShellLauncher(AbstractShellLauncher):
         if not resolved:
             return None
         return (resolved, "app")
+
+    def register_app(
+        self,
+        name: str,
+        target: str,
+        bundle: Optional[str] = None,
+        proc: Optional[str] = None,
+        app_type: str = "app",
+        persist: bool = True,
+    ) -> bool:
+        return register_app(name=name, target=target, bundle=bundle, proc=proc, app_type=app_type, persist=persist)
+
+    def get_registered_apps(self) -> Dict[str, Dict[str, str]]:
+        return get_registered_apps()
+
+    def load_user_registry(self, custom_path: Optional[Path] = None) -> Dict[str, Dict[str, str]]:
+        return load_user_registry(custom_path=custom_path)
+

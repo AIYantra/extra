@@ -101,6 +101,7 @@ else:
         get_monitors_info,
         get_primary_monitor,
         get_virtual_screen_bounds,
+        get_window_executable_path,
         get_window_info,
         instant_type,
         launch_app,
@@ -115,6 +116,7 @@ else:
         normalize_bbox,
         normalize_coordinates,
         open_uri,
+        register_app,
         resolve_executable,
         send_hotkey,
     )
@@ -184,6 +186,7 @@ __all__ = [
     "find_window_by_title",
     "find_windows_by_process",
     "force_activate_window",
+    "get_window_executable_path",
     "FocusManager",
     # Semantic UI / Accessibility
     "AccessibilityPlane",
@@ -198,5 +201,6 @@ __all__ = [
     "launch_app",
     "open_uri",
     "resolve_executable",
+    "register_app",
     "ShellLauncher",
 ]

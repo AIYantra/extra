@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from extra.core.platform.base import AbstractShellLauncher, LaunchResult
 from extra.core.platform.windows.focus import (
@@ -39,7 +40,7 @@ shell32.ShellExecuteW.restype = wintypes.HINSTANCE
 SW_SHOWNORMAL = 1
 
 # Standard Windows Built-in Tools & Common Applications
-APP_REGISTRY: Dict[str, Dict[str, str]] = {
+BUILTIN_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "calc": {"target": "calc.exe", "type": "exe", "proc": "CalculatorApp.exe"},
     "calculator": {"target": "calc.exe", "type": "exe", "proc": "CalculatorApp.exe"},
     "notepad": {"target": "notepad.exe", "type": "exe", "proc": "Notepad.exe"},
@@ -61,6 +62,99 @@ APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "store": {"target": "ms-windows-store:", "type": "uri", "proc": "WinStore.App.exe"},
     "canva": {"target": "Canva.exe", "type": "exe", "proc": "Canva.exe"},
 }
+
+APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_APP_REGISTRY)
+
+
+def get_user_registry_path() -> Path:
+    """Returns the sovereign persistent user-level registry JSON path in ~/.extra/."""
+    p = Path.home() / ".extra"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / "app_registry.json"
+
+
+def load_user_registry(custom_path: Optional[Path] = None) -> Dict[str, Dict[str, str]]:
+    """
+    Loads dynamic user-registered applications from ~/.extra/app_registry.json
+    and merges them into the active in-memory APP_REGISTRY.
+    """
+    reg_path = custom_path or get_user_registry_path()
+    if not reg_path.exists():
+        return {}
+    try:
+        with open(reg_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    if isinstance(v, dict) and "target" in v:
+                        clean_k = k.strip().lower()
+                        APP_REGISTRY[clean_k] = {
+                            "target": v.get("target", ""),
+                            "type": v.get("type", "exe"),
+                            "proc": v.get("proc", os.path.basename(v.get("target", ""))),
+                        }
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def register_app(
+    name: str,
+    target: str,
+    proc: Optional[str] = None,
+    app_type: str = "exe",
+    persist: bool = True,
+    custom_path: Optional[Path] = None,
+) -> bool:
+    """
+    Registers a new application into Extra's Fast-Path APP_REGISTRY
+    and persists it to ~/.extra/app_registry.json.
+    """
+    clean_name = name.strip().lower()
+    if not clean_name or not target:
+        return False
+
+    proc_name = proc or os.path.basename(target)
+    entry = {
+        "target": target,
+        "type": app_type,
+        "proc": proc_name,
+    }
+    APP_REGISTRY[clean_name] = entry
+
+    if persist:
+        try:
+            reg_path = custom_path or get_user_registry_path()
+            existing_data: Dict[str, Any] = {}
+            if reg_path.exists():
+                try:
+                    with open(reg_path, "r", encoding="utf-8") as f:
+                        existing_data = json.load(f)
+                except Exception:
+                    existing_data = {}
+            existing_data[clean_name] = entry
+            tmp_file = reg_path.with_suffix(".tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, indent=2, ensure_ascii=False)
+            tmp_file.replace(reg_path)
+            return True
+        except Exception:
+            return False
+    return True
+
+
+def get_registered_apps() -> Dict[str, Dict[str, str]]:
+    """Returns a copy of all currently registered applications."""
+    return dict(APP_REGISTRY)
+
+
+# Cold-start merge of persistent user registry
+try:
+    load_user_registry()
+except Exception:
+    pass
+
 
 # Standard Browser Path Locations
 BROWSER_CANDIDATE_PATHS = {
@@ -84,16 +178,23 @@ BROWSER_CANDIDATE_PATHS = {
 }
 
 
-def resolve_executable(name: str) -> Optional[str]:
+def resolve_executable(name: str, auto_register: bool = True) -> Optional[str]:
     """
     Resolves the exact absolute executable path for a given program name.
     Inspects PATH, Program Files, LocalAppData, Microsoft Store WindowsApps, and Windows directories.
     (Fixes #4: Resolves Store apps like Blender, Windows Terminal, Python, credit: @harshbuttru3)
+    Dynamically auto-registers newly discovered applications into ~/.extra/app_registry.json.
     """
     clean_name = name.strip().lower()
 
     # If already an existing full path
     if os.path.isabs(name) and os.path.exists(name):
+        alias = Path(name).stem.lower()
+        if auto_register:
+            if alias not in APP_REGISTRY:
+                register_app(alias, target=name, proc=os.path.basename(name), app_type="exe")
+            if clean_name not in APP_REGISTRY and clean_name != alias:
+                register_app(clean_name, target=name, proc=os.path.basename(name), app_type="exe")
         return name
 
     # Check App Registry
@@ -108,23 +209,31 @@ def resolve_executable(name: str) -> Optional[str]:
     if target in BROWSER_CANDIDATE_PATHS:
         for p in BROWSER_CANDIDATE_PATHS[target]:
             if os.path.exists(p):
+                if auto_register and clean_name not in APP_REGISTRY:
+                    register_app(clean_name, target=p, proc=os.path.basename(p), app_type="browser")
                 return p
 
     # Check system PATH
     found = shutil.which(target)
     if found:
+        if auto_register and clean_name not in APP_REGISTRY:
+            register_app(clean_name, target=found, proc=os.path.basename(found), app_type="exe")
         return found
 
     # Fallback to appending .exe if not present
     target_exe = target if target.endswith(".exe") else f"{target}.exe"
     found = shutil.which(target_exe)
     if found:
+        if auto_register and clean_name not in APP_REGISTRY:
+            register_app(clean_name, target=found, proc=os.path.basename(found), app_type="exe")
         return found
 
     # Check %LOCALAPPDATA%\Microsoft\WindowsApps (MSIX/Store execution aliases)
     win_apps_dir = os.path.expandvars(r"%LocalAppData%\Microsoft\WindowsApps")
     store_alias = os.path.join(win_apps_dir, target_exe)
     if os.path.exists(store_alias):
+        if auto_register and clean_name not in APP_REGISTRY:
+            register_app(clean_name, target=store_alias, proc=os.path.basename(store_alias), app_type="exe")
         return store_alias
 
     # Check common 64-bit and 32-bit Program Files directories
@@ -139,6 +248,8 @@ def resolve_executable(name: str) -> Optional[str]:
     ]
     for cand in program_candidates:
         if os.path.exists(cand) and (clean_name in cand.lower() or target_exe.lower() in cand.lower()):
+            if auto_register and clean_name not in APP_REGISTRY:
+                register_app(clean_name, target=cand, proc=os.path.basename(cand), app_type="exe")
             return cand
 
     # Specific check for Blender Foundation installations
@@ -146,7 +257,10 @@ def resolve_executable(name: str) -> Optional[str]:
         import glob
         blender_dirs = glob.glob(os.path.expandvars(r"%ProgramFiles%\Blender Foundation\Blender*\blender.exe"))
         if blender_dirs:
-            return sorted(blender_dirs)[-1]
+            resolved_blender = sorted(blender_dirs)[-1]
+            if auto_register and clean_name not in APP_REGISTRY:
+                register_app(clean_name, target=resolved_blender, proc=os.path.basename(resolved_blender), app_type="exe")
+            return resolved_blender
 
     return target
 
@@ -284,3 +398,20 @@ class WindowsShellLauncher(AbstractShellLauncher):
         reg_entry = APP_REGISTRY.get(app_name.lower().strip())
         target_type = reg_entry["type"] if reg_entry else "exe"
         return (target, target_type)
+
+    def register_app(
+        self,
+        name: str,
+        target: str,
+        proc: Optional[str] = None,
+        app_type: str = "exe",
+        persist: bool = True,
+    ) -> bool:
+        return register_app(name=name, target=target, proc=proc, app_type=app_type, persist=persist)
+
+    def get_registered_apps(self) -> Dict[str, Dict[str, str]]:
+        return get_registered_apps()
+
+    def load_user_registry(self, custom_path: Optional[Path] = None) -> Dict[str, Dict[str, str]]:
+        return load_user_registry(custom_path=custom_path)
+

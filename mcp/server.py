@@ -30,6 +30,7 @@ from extra.core.focus import (
     find_window_by_title,
     force_activate_window,
     get_foreground_window,
+    get_window_executable_path,
     list_windows,
 )
 from extra.core.geometry import (
@@ -471,6 +472,17 @@ def extra_focus_window(
     ok = force_activate_window(target_hwnd)
     if ok:
         _stall_breaker.reset()
+        try:
+            exe_path = get_window_executable_path(target_hwnd)
+            if exe_path and os.path.exists(exe_path):
+                from pathlib import Path
+                app_alias = Path(exe_path).stem.lower()
+                from extra.fastpath.shell import APP_REGISTRY, register_app
+                if app_alias not in APP_REGISTRY:
+                    register_app(name=app_alias, target=exe_path, proc=os.path.basename(exe_path))
+                record_action_app(app_name=app_alias, exe_path=exe_path)
+        except Exception:
+            pass
     return {"success": ok, "hwnd": target_hwnd}
 
 

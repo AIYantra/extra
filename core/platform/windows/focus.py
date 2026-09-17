@@ -84,6 +84,36 @@ def get_window_info(hwnd: int) -> Optional[WindowInfo]:
     )
 
 
+def get_window_executable_path(hwnd: int) -> Optional[str]:
+    """Retrieves the full executable file path for the process hosting the window handle."""
+    if not hwnd or not win32gui.IsWindow(hwnd):
+        return None
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        if not pid:
+            return None
+        if psutil is not None:
+            try:
+                proc = psutil.Process(pid)
+                exe = proc.exe()
+                if exe and os.path.exists(exe):
+                    return exe
+            except Exception:
+                pass
+        # Pure Win32 fallback
+        h_proc = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if h_proc:
+            buf = ctypes.create_unicode_buffer(512)
+            size = wintypes.DWORD(512)
+            res = kernel32.QueryFullProcessImageNameW(h_proc, 0, buf, ctypes.byref(size))
+            kernel32.CloseHandle(h_proc)
+            if res and os.path.exists(buf.value):
+                return buf.value
+    except Exception:
+        pass
+    return None
+
+
 def get_foreground_window() -> Optional[WindowInfo]:
     """Returns the WindowInfo for the currently focused foreground window."""
     ensure_dpi_aware()
