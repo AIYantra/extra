@@ -372,47 +372,43 @@ def sync_ai_rules_and_skills(repo_dir: Path) -> bool:
 
     # 2. Always-On Protocol: ~/.gemini/GEMINI.md
     gemini_md = user_home / ".gemini" / "GEMINI.md"
-    if gemini_md.exists():
-        existing = gemini_md.read_text(encoding="utf-8")
-        if "Extra Windows Desktop Automation Protocol" not in existing:
-            gemini_md.write_text(existing + "\n\n" + rule_content, encoding="utf-8")
-            print(f"  [OK] Registered always-on protocol in {gemini_md}")
-        else:
-            print(f"  [OK] Always-on protocol already active in {gemini_md}")
-    else:
-        gemini_md.parent.mkdir(parents=True, exist_ok=True)
-        gemini_md.write_text(rule_content, encoding="utf-8")
-        print(f"  [OK] Created always-on protocol in {gemini_md}")
+    gemini_md.parent.mkdir(parents=True, exist_ok=True)
+    gemini_md.write_text(rule_content, encoding="utf-8")
+    print(f"  [OK] Synchronized always-on protocol in {gemini_md}")
 
-    # 3. Antigravity MCP Instructions & Tool Schemas: ~/.gemini/antigravity-cli/mcp/extra/
-    mcp_extra_dir = user_home / ".gemini" / "antigravity-cli" / "mcp" / "extra"
-    if mcp_extra_dir.exists():
-        (mcp_extra_dir / "instructions.md").write_text(rule_content, encoding="utf-8")
-        print(f"  [OK] Updated MCP instructions: {mcp_extra_dir / 'instructions.md'}")
+    # 3. Antigravity MCP Instructions & Tool Schemas
+    mcp_dirs = [
+        user_home / ".gemini" / "antigravity-cli" / "mcp" / "extra",
+        user_home / ".gemini" / "antigravity-ide" / "mcp" / "extra",
+    ]
+    for mcp_extra_dir in mcp_dirs:
+        if mcp_extra_dir.exists():
+            (mcp_extra_dir / "instructions.md").write_text(rule_content, encoding="utf-8")
+            print(f"  [OK] Updated MCP instructions: {mcp_extra_dir / 'instructions.md'}")
 
-        # Update JSON tool schemas
-        try:
-            import asyncio
-            from extra.mcp.server import server
+            # Update JSON tool schemas
+            try:
+                import asyncio
+                from extra.mcp.server import server
 
-            async def _dump():
-                tools = await server.list_tools()
-                count = 0
-                for t in tools:
-                    schema = {
-                        "name": t.name,
-                        "description": t.description,
-                        "parameters": getattr(t, "input_schema", getattr(t, "inputSchema", {})),
-                    }
-                    fp = mcp_extra_dir / f"{t.name}.json"
-                    fp.write_text(json.dumps(schema), encoding="utf-8")
-                    count += 1
-                return count
+                async def _dump(target_dir=mcp_extra_dir):
+                    tools = await server.list_tools()
+                    count = 0
+                    for t in tools:
+                        schema = {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": getattr(t, "input_schema", getattr(t, "inputSchema", {})),
+                        }
+                        fp = target_dir / f"{t.name}.json"
+                        fp.write_text(json.dumps(schema), encoding="utf-8")
+                        count += 1
+                    return count
 
-            tool_count = asyncio.run(_dump())
-            print(f"  [OK] Synchronized {tool_count} MCP schema definitions.")
-        except Exception as ex:
-            print(f"  [WARN] Could not refresh MCP schemas: {ex}")
+                tool_count = asyncio.run(_dump())
+                print(f"  [OK] Synchronized {tool_count} MCP schema definitions in {mcp_extra_dir}.")
+            except Exception as ex:
+                print(f"  [WARN] Could not refresh MCP schemas in {mcp_extra_dir}: {ex}")
 
     # 4. User Profile Rules: ~/.agents/rules/extra_automation.md
     user_agents_dir = user_home / ".agents" / "rules"
