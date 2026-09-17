@@ -38,6 +38,7 @@ env/
 *.jpeg
 !assets/**
 !docs/images/**
+*-help.txt
 
 # Testing caches
 .pytest_cache/
