@@ -15,6 +15,7 @@ from extra.core.platform.windows.focus import (
     find_windows_by_process,
     force_activate_window,
     get_foreground_window,
+    get_window_executable_path,
     get_window_info,
     list_windows,
 )
@@ -55,10 +56,15 @@ from extra.core.platform.windows.input_engine import (
 from extra.core.platform.windows.shell import (
     APP_REGISTRY,
     BROWSER_CANDIDATE_PATHS,
+    BUILTIN_APP_REGISTRY,
     LaunchResult,
     WindowsShellLauncher,
+    get_registered_apps,
+    get_user_registry_path,
     launch_app,
+    load_user_registry,
     open_uri,
+    register_app,
     resolve_executable,
 )
 from extra.core.platform.windows.uia_plane import (
@@ -108,6 +114,7 @@ __all__ = [
     "find_window_by_title",
     "find_windows_by_process",
     "force_activate_window",
+    "get_window_executable_path",
     "WindowsFocusManager",
     # UIA Plane
     "UIAutomationPlane",
@@ -122,6 +129,11 @@ __all__ = [
     "open_uri",
     "resolve_executable",
     "APP_REGISTRY",
+    "BUILTIN_APP_REGISTRY",
+    "register_app",
+    "load_user_registry",
+    "get_registered_apps",
+    "get_user_registry_path",
     "BROWSER_CANDIDATE_PATHS",
     "LaunchResult",
     "WindowsShellLauncher",
