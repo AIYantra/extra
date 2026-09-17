@@ -105,6 +105,35 @@ CURATED_INTELLIGENCE: Dict[str, Dict[str, Any]] = {
             "Honoring Intent: When the user asks for Canva templates, use Canva's native search bar and template gallery instead of forcing custom script generation.",
         ],
     },
+    "vlc": {
+        "summary": "Cross-platform open-source multimedia player and framework with Qt UI and Direct3D video output.",
+        "ui_surface_caveat": "Video playback canvas renders directly via Direct3D/OpenGL surface without accessible UIAutomation nodes. Control toolbar, menus, and playlist are standard accessible Qt widgets.",
+        "fast_paths": [
+            "CLI Playback Fast-Path: Launch directly with media file `extra_launch(app_name='vlc', args=[media_path])`.",
+            "Universal Playback Hotkeys: Space (Play/Pause), F (Toggle Fullscreen), Ctrl + Up/Down (Volume +/-), S (Stop).",
+        ],
+        "hotkeys": [
+            {"key": "Space", "action": "Play / Pause playback", "category": "Playback"},
+            {"key": "F", "action": "Toggle Fullscreen", "category": "View"},
+            {"key": "Esc", "action": "Exit Fullscreen", "category": "View"},
+            {"key": "Ctrl + Up", "action": "Increase Volume", "category": "Audio"},
+            {"key": "Ctrl + Down", "action": "Decrease Volume", "category": "Audio"},
+            {"key": "M", "action": "Mute / Unmute Audio", "category": "Audio"},
+            {"key": "S", "action": "Stop Playback", "category": "Playback"},
+            {"key": "Shift + Right", "action": "Jump 3 seconds forward", "category": "Navigation"},
+            {"key": "Shift + Left", "action": "Jump 3 seconds backward", "category": "Navigation"},
+            {"key": "Ctrl + O", "action": "Open File dialog", "category": "File"},
+        ],
+        "cli_options": [
+            {"flag": "--fullscreen, -f", "description": "Start video in fullscreen mode", "example": "vlc.exe --fullscreen video.mp4"},
+            {"flag": "--volume <0-512>", "description": "Set playback audio volume", "example": "vlc.exe --volume 256 song.mp3"},
+            {"flag": "--play-and-exit", "description": "Play media item and exit immediately upon completion", "example": "vlc.exe --play-and-exit alert.wav"},
+        ],
+        "anti_stall_guardrails": [
+            "Use Space for Play/Pause and F for Fullscreen instead of clicking small transport buttons.",
+            "Do not coordinate click inside the active video display surface.",
+        ],
+    },
     "figma": {
         "summary": "Collaborative vector design tool built on WebGL / WebAssembly canvas.",
         "ui_surface_caveat": "Canvas objects are rendered via WebGL in WebAssembly. UIAutomation plane cannot traverse frames, shapes, or text layers inside the canvas.",
