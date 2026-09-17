@@ -1,3 +1,30 @@
+# Extra Release Notes — v0.2.4
+
+**Release Date:** September 17, 2026  
+**Release Title:** macOS Integration Test Resilience, High-DPI Retina Stall Recovery Fallback, and Multi-Path CLI Diagnostic Suite  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Problem Resolution (v0.2.4)
+
+In multi-platform testing across macOS Sonoma/Sequoia systems (e.g. MacBook Air Retina displays) and fresh package installations, two key issues were identified and resolved:
+
+### 1. macOS StallBreaker False-Stall on Pending Accessibility Permissions
+- **Problem:** When running `extra test` on a macOS machine where Accessibility permissions have not yet been granted to Terminal, `inspect_window()` returns 0 interactive UI elements. Because 0 elements were present, `SetOfMarkAnnotator` generated an annotated image (`ann_img`) 100% identical to the raw screen capture (`cap.image`). In Phase 6, the test verifies that a visual change successfully resets stall strikes back to 0. Passing `cap.image` and `ann_img` into `StallBreaker` registered zero perceptual hash and zero pixel difference, causing the supervisor to interpret the recovery step as a 3rd stall strike and throwing an unhandled `AssertionError`.
+- **Root Cause & Retina Display Dynamics:** On high-resolution Retina displays (such as MacBook Air 2880×1800), even small local fallback bounding boxes (e.g. 50×50 px) occupy less than 0.05% of the total pixel area, which averages out to less than `pixel_threshold = 0.5` and downsamples to zero in standard 8×8 pHash.
+- **Fix:** In `test_core_engine.py` (Phase 6), when `len(elements) == 0`, the test applies a global visual invert fallback (`ImageOps.invert(cap.image.convert("RGB"))`). This ensures a 100% perceptual hash difference and high pixel delta across all display scales (from 720p to 5K/8K Retina), reliably verifying the stall recovery logic even when Accessibility permissions are pending.
+
+### 2. Multi-Path Test Suite Resolution in CLI (`extra test`)
+- **Problem:** Running `extra test` (`python -m extra.cli test`) imported from `extra.test_core_engine`, which failed with `ModuleNotFoundError` if tests were distributed inside `tests/` or in custom project directories.
+- **Fix:** `cmd_test()` in `extra/cli.py` now resolves test suites through a resilient fallback cascade (`extra.tests.test_core_engine` -> `extra.test_core_engine` -> `test_core_engine` -> local `Artifacts/extra` path). Added `tests/test_core_engine.py` as an official part of the package test distribution.
+
+### 3. Test Progress Indexing & Universal Platform Symmetry
+- **Problem:** The integration test suite had inconsistent progress counters (`[1/6]` through `[6/6]`, followed by `[7/7]`), and printed `"Testing Win32 Input Engine Mechanics..."` on macOS systems.
+- **Fix:** Progress counters are normalized to `[1/7]` through `[7/7]`, and logging is standardized to platform-neutral `"Testing Input Engine Mechanics..."`.
+
+---
+
 # Extra Release Notes — v0.2.3
 
 **Release Date:** September 16, 2026  
