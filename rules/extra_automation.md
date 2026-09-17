@@ -20,7 +20,7 @@ Whenever automating Windows desktop applications or executing computer use:
   - `extra_inspect_ui`: `call_mcp_tool(ServerName="extra", ToolName="extra_inspect_ui", Arguments={"window_title": "<title>", "interactive_only": true, "max_elements": 50})`
   - `extra_click_element`: `call_mcp_tool(ServerName="extra", ToolName="extra_click_element", Arguments={"element_id": <int>})`
   - `extra_click`: `call_mcp_tool(ServerName="extra", ToolName="extra_click", Arguments={"x": <int>, "y": <int>, "button": "left"})`
-  - `extra_scroll`: `call_mcp_tool(ServerName="extra", ToolName="extra_scroll", Arguments={"clicks": -5, "direction": "vertical"})`
+  - `extra_scroll`: `call_mcp_tool(ServerName="extra", ToolName="extra_scroll", Arguments={"clicks": -5, "direction": "vertical"})` or `Arguments={"delta": -500, "horizontal": false}`.
   - `extra_drag`: `call_mcp_tool(ServerName="extra", ToolName="extra_drag", Arguments={"start_x": <int>, "start_y": <int>, "end_x": <int>, "end_y": <int>})`
   - `extra_browser`: `call_mcp_tool(ServerName="extra", ToolName="extra_browser", Arguments={"action": "navigate"|"content"|"click", "url": "..."})`
   - `extra_task_start`: `call_mcp_tool(ServerName="extra", ToolName="extra_task_start", Arguments={"task_name": "<name>"})`
@@ -28,6 +28,12 @@ Whenever automating Windows desktop applications or executing computer use:
   - `extra_task_complete`: `call_mcp_tool(ServerName="extra", ToolName="extra_task_complete", Arguments={"summary": "<summary>", "success": true})`
     Signals task completion: flashes emerald green border, plays acoustic chime, and dissolves indicators.
   - `extra_indicate_status`: `call_mcp_tool(ServerName="extra", ToolName="extra_indicate_status", Arguments={"status": "active"|"complete"|"idle", "message": "..."})`
+  - `extra_recall_memory`: `call_mcp_tool(ServerName="extra", ToolName="extra_recall_memory", Arguments={"query": "<query>", "app_name": "<app>", "top_k": 3})`
+    Recalls past task workflows, artifacts, and known quirks via KùzuDB + FastEmbed (< 3ms).
+  - `extra_scout_app`: `call_mcp_tool(ServerName="extra", ToolName="extra_scout_app", Arguments={"app_name": "<app>", "force_refresh": false})`
+    Discovers UI framework (Electron/Win32/Viewport), universal hotkeys, CLI flags, and generates SKILL.md.
+  - `extra_evolve_skill`: `call_mcp_tool(ServerName="extra", ToolName="extra_evolve_skill", Arguments={"app_name": "<app>", "workflow_summary": "<summary>", "instructions": "<playbook>"})`
+    Crystallizes newly verified zero-stall fast paths into permanent skill playbooks.
 - **Execute Immediately:** On Turn 1, jump directly to calling `call_mcp_tool(ServerName="extra", ...)` without calling `list_dir` or `view_file` on `mcp/extra/`.
 
 ### 1. The Live Computer Use Mandate (NO Headless/Silent Execution)
@@ -57,6 +63,17 @@ To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100
   1. Generate the clean, professional PNG image programmatically to disk via Python (`PIL`) or .NET.
      - **Safe Path:** ALWAYS save to `%USERPROFILE%\.extra\workspace\<name>.png`. **NEVER** write to `%USERPROFILE%\Pictures` (blocked by Windows Defender Controlled Folder Access).
   2. Visibly launch Paint to display the chart: `extra_launch(app_name="mspaint", args=["<absolute_path>"])`.
+- **Canvas & Design Apps (Canva, Figma, Web-in-App / Electron):**
+  1. Electron canvas tools render inside an internal WebGL/HTML5 canvas that does **not** expose clickable Win32 elements to UIAutomation.
+  2. **NEVER spend 20+ turns hunting coordinates or guessing template buttons in Canva/Figma.**
+  3. **High-Speed Fast-Path Protocol:**
+     a. Generate the pixel-perfect design asset programmatically to disk via Python (`PIL`) inside `%USERPROFILE%\.extra\workspace\<name>.png`. **NEVER** write to `%USERPROFILE%\Pictures`.
+     b. Copy the image directly to the Windows Clipboard using PowerShell:
+        `powershell -STA -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('<safe_png_path>'))"`
+     c. Bring Canva / Figma to foreground: `extra_focus_window(window_title="Canva")`.
+     d. Open/focus the target canvas with a single hotkey/click, then instantly paste: `extra_hotkey(keys=["ctrl", "v"])`.
+     e. Snap windows side-by-side (`win+left`, `win+right`).
+  4. Eliminates coordinate thrashing, prevents StallBreaker aborts, and delivers flawless results in under 60 seconds.
 - **File Explorer & Desktop Folders:**
   1. Create folders (`mkdir`) and move files on disk using filesystem commands (`shutil.move`) inside `%USERPROFILE%\.extra\workspace\` or the project root.
   2. Visibly open the folder in Explorer: `extra_launch(app_name="explorer", args=["<folder_path>"])`.

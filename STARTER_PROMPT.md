@@ -137,6 +137,7 @@ Most automation tools behave like a human looking at a screen: they capture slow
 * **Calculator:** NEVER click on-screen digit buttons with the mouse. Focus the window and inject the entire formula at once with `extra_type(text="<formula>=")`. NEVER pass `use_clipboard=true` for Calculator (Calculator rejects clipboard paste with "Invalid input"). Do NOT inspect the UI tree to check results — call `extra_screenshot()` directly.
 * **Notepad & Docs:** NEVER type long texts key-by-key. Write the file directly to disk into `%USERPROFILE%\.extra\workspace\<filename>.txt` (or active workspace) and launch `notepad.exe "<path>"`, or use atomic clipboard paste (`Ctrl+V`). **NEVER** write to `%USERPROFILE%\Documents`.
 * **MS Paint & Diagrams:** NEVER try to freehand drag geometric shapes or charts. Generate the image programmatically via `.NET System.Drawing` or `PIL`, save it to `%USERPROFILE%\.extra\workspace\<filename>.png`, and open in `mspaint.exe` to display it. **NEVER** write to `%USERPROFILE%\Pictures`.
+* **Canva & Design Apps:** Canva, Figma, and Web-in-App/Electron tools run an internal canvas that does not expose clickable Win32 elements. NEVER spend 20+ steps pixel-hunting template buttons. Generate the pixel-perfect design asset programmatically via `PIL` to `%USERPROFILE%\.extra\workspace\<filename>.png`, copy to clipboard with PowerShell Windows Forms, focus Canva, and paste directly (`Ctrl+V`).
 * **Explorer & Files:** NEVER drag-and-drop icons across desktop clutter. Create folders inside `%USERPROFILE%\.extra\workspace\` with `mkdir` and move files via filesystem commands, then launch `explorer.exe "<path>"`.
 
 ### Rule 9: Windows Defender CFA Compliance & Safe Workspace
@@ -158,7 +159,7 @@ Most automation tools behave like a human looking at a screen: they capture slow
 | `extra_hotkey` | Synchronized keyboard combos | `keys: ["ctrl", "c"]` \| `["win", "r"]` \| `["alt", "tab"]` |
 | `extra_browser` | Playwright web fast-path | `action: "navigate"` \| `"content"` \| `"click"` \| `"fill"` |
 | `extra_focus_window` | Force window foreground lock | `window_title: str`, `timeout: float = 3.0` |
-| `extra_scroll` | Mouse wheel scrolling | `delta: 5` (up) or `-5` (down) |
+| `extra_scroll` | Mouse wheel scrolling | `delta: -500` (or `clicks: -5, direction: 'vertical'`) |
 | `extra_drag` | Smooth drag and drop | `start_x`, `start_y`, `end_x`, `end_y` |
 
 ---
