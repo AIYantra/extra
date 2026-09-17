@@ -57,6 +57,9 @@ APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "mspaint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "photos": {"target": "ms-photos:", "type": "uri", "proc": "Photos.exe"},
     "blender": {"target": "blender.exe", "type": "exe", "proc": "blender.exe"},
+    "vlc": {"target": "vlc.exe", "type": "exe", "proc": "vlc.exe"},
+    "store": {"target": "ms-windows-store:", "type": "uri", "proc": "WinStore.App.exe"},
+    "canva": {"target": "Canva.exe", "type": "exe", "proc": "Canva.exe"},
 }
 
 # Standard Browser Path Locations
@@ -129,9 +132,13 @@ def resolve_executable(name: str) -> Optional[str]:
         os.path.expandvars(rf"%ProgramFiles%\{target}\{target_exe}"),
         os.path.expandvars(rf"%ProgramFiles(x86)%\{target}\{target_exe}"),
         os.path.expandvars(rf"%LocalAppData%\Programs\{target}\{target_exe}"),
+        os.path.expandvars(r"%ProgramFiles%\VideoLAN\VLC\vlc.exe"),
+        os.path.expandvars(r"%ProgramFiles(x86)%\VideoLAN\VLC\vlc.exe"),
+        os.path.expandvars(r"%LocalAppData%\Programs\Canva\Canva.exe"),
+        os.path.expandvars(r"%ProgramFiles%\7-Zip\7zFM.exe"),
     ]
     for cand in program_candidates:
-        if os.path.exists(cand):
+        if os.path.exists(cand) and (clean_name in cand.lower() or target_exe.lower() in cand.lower()):
             return cand
 
     # Specific check for Blender Foundation installations
