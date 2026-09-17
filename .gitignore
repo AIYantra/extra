@@ -1,13 +1,22 @@
-# Byte-compiled / optimized / DLL files
+# ==============================================================================
+# Project Extra — Production Git Ignore Specification
+# Target Architecture: Universal (Windows 10/11 x64/ARM64 & macOS Sonoma/Sequoia)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Bytecode & Compiled Runtimes
+# ------------------------------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
-*.so
 *.pyd
+*.so
+*.dylib
+*.dll
 
-# Distribution / packaging
+# ------------------------------------------------------------------------------
+# 2. Build Toolchains & Packaging Distribution
+# ------------------------------------------------------------------------------
 .Python
 build/
 develop-eggs/
@@ -27,13 +36,92 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Virtual environments
+# ------------------------------------------------------------------------------
+# 3. Virtual Environments & Local Interpreters
+# ------------------------------------------------------------------------------
 .venv/
 venv/
 ENV/
 env/
+.direnv/
 
-# Screenshots, recordings and scratch media
+# ------------------------------------------------------------------------------
+# 4. Testing, Code Coverage & Profiling
+# ------------------------------------------------------------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.coverage
+nosetests.xml
+coverage.xml
+.tox/
+.nox/
+
+# ------------------------------------------------------------------------------
+# 5. Type Checking & Static Analysis Caches
+# ------------------------------------------------------------------------------
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ------------------------------------------------------------------------------
+# 6. Operating System Artifacts & Metadata
+# ------------------------------------------------------------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ------------------------------------------------------------------------------
+# 7. IDE, Editors & Development Workspace
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.agents/
+
+# Preserve production Cursor MCP template, ignore user workspace state
+.cursor/*
+!.cursor/mcp.json
+
+# ------------------------------------------------------------------------------
+# 8. Local Embedded Memory, Databases & Sovereign State
+# ------------------------------------------------------------------------------
+.extra/
+*.kuzu/
+*.duckdb
+*.db
+*.sqlite
+*.sqlite3
+
+# ------------------------------------------------------------------------------
+# 9. Knowledge Graph & Automated Code Analysis
+# ------------------------------------------------------------------------------
+graphify-out/
+
+# ------------------------------------------------------------------------------
+# 10. Ephemeral Media, Screen Recordings & Scratch Captures
+# ------------------------------------------------------------------------------
 *.png
 *.jpg
 *.jpeg
@@ -44,53 +132,32 @@ env/
 !docs/images/**
 *-help.txt
 
-# Testing & Coverage caches
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-*.coverage
-
-# Operating System Files
-Thumbs.db
-ehthumbs.db
-.DS_Store
-
-# IDE and Agent metadata
-.agents/
-.idea/
-.vscode/
-
-# Knowledge Graph & Graphify
-graphify-out/
-
-# Local databases, memory graphs & user caches
-.extra/
-*.kuzu/
-*.duckdb
-*.db
-*.sqlite3
-
-# Logs & temporary files
+# ------------------------------------------------------------------------------
+# 11. System Diagnostics, Logs & Temporary Files
+# ------------------------------------------------------------------------------
 *.log
 *.tmp
 *.bak
+*.dmp
 scratch/
 tmp/
 temp/
+hn.txt
 
-# Root scratch scripts (must live in tests/ or Artifacts/extra/)
+# ------------------------------------------------------------------------------
+# 12. Repository Hygiene Boundary (Zero Clutter Policy)
+# Note: Root test scripts belong in tests/, and benchmark/tasksuite artifacts
+#       belong exclusively in D:\yantra_workspace\Artifacts\extra\
+# ------------------------------------------------------------------------------
 /test_*.py
 /check_*.py
 /scratch_*.py
 /temp_*.py
 /run_*.py
 
-# Artifacts, test plans & benchmark catalogs (must live in Artifacts/extra/)
 /tasksuite*.md
 /test_sets*.md
 /plan*.md
 /*_plan*.md
 /*_report*.md
 /TASK_SUITE*.md
-hn.txt
