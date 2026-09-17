@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-VERSION="${1:-0.2.3}"
+VERSION="${1:-0.2.4}"
 TARBALL_URL="https://github.com/AIYantra/extra/archive/refs/tags/v${VERSION}.tar.gz"
 FORMULA_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/Formula/extra.rb"
 

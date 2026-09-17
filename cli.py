@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.2.3"
+    __version__ = "0.2.4"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
@@ -230,7 +230,19 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
 
 def cmd_test() -> int:
     """Runs the full integration test suite."""
-    from extra.test_core_engine import run_tests
+    try:
+        from extra.tests.test_core_engine import run_tests
+    except ImportError:
+        try:
+            from extra.test_core_engine import run_tests
+        except ImportError:
+            try:
+                from test_core_engine import run_tests
+            except ImportError:
+                artifacts_dir = Path(__file__).resolve().parent.parent / "Artifacts" / "extra"
+                if str(artifacts_dir) not in sys.path:
+                    sys.path.insert(0, str(artifacts_dir))
+                from test_core_engine import run_tests
     try:
         run_tests()
         return 0
