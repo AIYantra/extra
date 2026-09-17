@@ -118,8 +118,24 @@ def _inspect_directory_framework(dir_path: str) -> str:
     return "win32"
 
 
+# Known pure GUI applications that ignore CLI flags and launch GUI windows if probed
+GUI_ONLY_APPS = {
+    "calc", "calc.exe", "calculator", "calculatorapp.exe",
+    "notepad", "notepad.exe",
+    "mspaint", "mspaint.exe", "pbrush.exe",
+    "explorer", "explorer.exe",
+    "photos", "photos.exe",
+    "snippingtool", "snippingtool.exe",
+    "applicationframehost.exe",
+}
+
+
 def _probe_cli_help(executable: str) -> Optional[str]:
     """Runs application with --help / -h with a strict timeout to avoid blocking."""
+    exe_name = os.path.basename(executable).lower()
+    if exe_name in GUI_ONLY_APPS or executable.lower() in GUI_ONLY_APPS:
+        return None
+
     flags = ["--help", "-h", "/?"]
     flags_blender = ["-b", "-h"]  # Blender needs -b to avoid launching GUI
 
