@@ -5,6 +5,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.pyd
 
 # Distribution / packaging
 .Python
@@ -32,18 +33,23 @@ venv/
 ENV/
 env/
 
-# Screenshots and scratch images
+# Screenshots, recordings and scratch media
 *.png
 *.jpg
 *.jpeg
+*.gif
+*.mp4
+*.webm
 !assets/**
 !docs/images/**
 *-help.txt
 
-# Testing caches
+# Testing & Coverage caches
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+*.coverage
 
 # Operating System Files
 Thumbs.db
@@ -52,5 +58,39 @@ ehthumbs.db
 
 # IDE and Agent metadata
 .agents/
+.idea/
+.vscode/
 
+# Knowledge Graph & Graphify
+graphify-out/
+
+# Local databases, memory graphs & user caches
+.extra/
+*.kuzu/
+*.duckdb
+*.db
+*.sqlite3
+
+# Logs & temporary files
+*.log
+*.tmp
+*.bak
+scratch/
+tmp/
+temp/
+
+# Root scratch scripts (must live in tests/ or Artifacts/extra/)
+/test_*.py
+/check_*.py
+/scratch_*.py
+/temp_*.py
+/run_*.py
+
+# Artifacts, test plans & benchmark catalogs (must live in Artifacts/extra/)
+/tasksuite*.md
+/test_sets*.md
+/plan*.md
+/*_plan*.md
+/*_report*.md
+/TASK_SUITE*.md
 hn.txt
