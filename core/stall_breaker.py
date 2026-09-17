@@ -79,6 +79,7 @@ class StallBreaker:
         self._current_strikes = 0
         self._last_hash: Optional[imagehash.ImageHash] = None
         self._last_hwnd: Optional[int] = None
+        self._last_action: Optional[str] = None
 
     @property
     def current_strikes(self) -> int:
@@ -198,6 +199,7 @@ class StallBreaker:
             self._current_strikes = 0
             self._last_hash = h_after
             self._last_hwnd = after_hwnd
+            self._last_action = action_name
             msg = (
                 f"Action '{action_name}' succeeded with remote visual change (global pixel_diff={full_pixel_diff:.2f})."
                 if global_changed
@@ -213,12 +215,18 @@ class StallBreaker:
             )
         else:
             # Action produced NO visual or window change
-            self._current_strikes += 1
+            # If target changed from previous action, start a new strike count rather than compounding
+            if self._last_action and self._last_action != action_name:
+                self._current_strikes = 1
+            else:
+                self._current_strikes += 1
+
+            self._last_action = action_name
             if self._current_strikes >= self.max_strikes:
                 status = StallStatus.STALLED
                 message = (
-                    f"STALL DETECTED: 2 consecutive actions produced zero screen or window changes. "
-                    f"Action '{action_name}' failed to progress. Aborting loop to protect token burn."
+                    f"STALL DETECTED: {self._current_strikes} consecutive attempts on '{action_name}' produced zero screen or window changes. "
+                    f"Consider scrolling, using keyboard shortcuts, or targeting a different UI element."
                 )
             else:
                 status = StallStatus.WARNING
@@ -241,3 +249,4 @@ class StallBreaker:
         self._current_strikes = 0
         self._last_hash = None
         self._last_hwnd = None
+        self._last_action = None

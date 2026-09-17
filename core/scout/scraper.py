@@ -81,12 +81,11 @@ CURATED_INTELLIGENCE: Dict[str, Dict[str, Any]] = {
     },
     "canva": {
         "summary": "Web/Electron-based design suite rendering into an HTML5/WebGL canvas element.",
-        "ui_surface_caveat": "Canvas interior is a single opaque rendering surface with zero Win32 UIA accessibility nodes. Mouse clicking coordinates on template search results causes massive stall loops.",
+        "ui_surface_caveat": "Electron shell: Top search bar ('What would you like to create?'), category icons, and left sidebar are standard clickable web elements. Only the inner canvas drawing viewport renders in WebGL/HTML5 without Win32 accessibility nodes.",
         "fast_paths": [
-            "High-Speed Fast-Path Protocol: Generate the exact pixel-perfect design asset programmatically to disk via Python (PIL) inside `%USERPROFILE%\\.extra\\workspace\\<name>.png`.",
-            "Copy the image directly to the Windows Clipboard using PowerShell STA: `powershell -STA -Command \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard]::SetImage([System.Drawing.Image]::FromFile('<safe_png_path>'))\"`",
-            "Bring Canva to foreground: `extra_focus_window(window_title='Canva')`.",
-            "Focus canvas and paste instantly: `extra_hotkey(keys=['ctrl', 'v'])`.",
+            "Native Template Fast-Path: On the Canva home screen, click the visible category icons (e.g. 'Presentation', 'Instagram Post') or click the prominent search bar 'What would you like to create?', type the topic, press Enter, and click a template card to open and edit.",
+            "Clipboard Fast-Path (Rapid Custom Assets): Generate pixel-perfect graphics programmatically to disk via Python (PIL) inside `%USERPROFILE%\\.extra\\workspace\\<name>.png`. Copy to Windows Clipboard via PowerShell STA, focus Canva (`extra_focus_window(window_title='Canva')`), click the canvas viewport, and paste instantly (`Ctrl + V`).",
+            "Canvas Elements Hotkeys: When the design canvas is open, press `T` for Text, `R` for Rectangle, `C` for Circle, `L` for Line.",
         ],
         "hotkeys": [
             {"key": "T", "action": "Add Text Box to canvas", "category": "Elements"},
@@ -101,9 +100,9 @@ CURATED_INTELLIGENCE: Dict[str, Dict[str, Any]] = {
         ],
         "cli_options": [],
         "anti_stall_guardrails": [
-            "NEVER spend turns searching for template cards or drag-and-drop handles.",
-            "Always paste completed PIL graphics directly to canvas.",
-            "Snap windows side-by-side with Notepad/Paint to display finished state.",
+            "CRITICAL CAVEAT ON Ctrl + N: Pressing Ctrl + N in Canva desktop often defaults focus to the 'Open a design link:' field. If 'Please enter a valid design link' appears, press Esc immediately to dismiss and use the home screen search bar or category icons.",
+            "ZERO Panic Scripting: Never write ad-hoc ctypes mouse or keyboard scripts. Use Extra MCP tools directly.",
+            "Honoring Intent: When the user asks for Canva templates, use Canva's native search bar and template gallery instead of forcing custom script generation.",
         ],
     },
     "figma": {
