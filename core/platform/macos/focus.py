@@ -233,8 +233,27 @@ def snap_layout(
     return {"success": False, "message": "Snap layout not supported on macOS"}
 
 
+def get_window_executable_path(hwnd: int) -> Optional[str]:
+    """Retrieves the full executable file path for the process hosting the window handle."""
+    windows = list_windows(visible_only=False)
+    for win in windows:
+        if win.hwnd == hwnd and win.process_id:
+            try:
+                import psutil
+                proc = psutil.Process(win.process_id)
+                exe = proc.exe()
+                if exe and os.path.exists(exe):
+                    return exe
+            except Exception:
+                pass
+    return None
+
+
 class MacFocusManager(AbstractFocusManager):
     """macOS implementation of the AbstractFocusManager interface."""
+
+    def get_window_executable_path(self, hwnd: int) -> Optional[str]:
+        return get_window_executable_path(hwnd)
 
     def get_window_info(self, hwnd: int) -> Optional[WindowInfo]:
         return get_window_info(hwnd)

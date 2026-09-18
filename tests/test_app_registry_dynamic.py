@@ -7,9 +7,13 @@ cold-start restoration, and window executable discovery.
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows dynamic app registry tests skipped on non-Windows")
 
 from extra.core.platform.windows.shell import (
     APP_REGISTRY,

@@ -6,7 +6,12 @@ URI protocols, fuzzy title matching, window bounds, and docking mathematics.
 
 import os
 import re
+import sys
 import unittest
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-specific process shell exhaustive tests skipped on non-Windows")
+
 from extra.core.platform.windows.shell import (
     APP_REGISTRY,
     resolve_executable,

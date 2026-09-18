@@ -26,6 +26,10 @@ from extra.core.platform.base import (
     get_bbox_center,
     image_to_base64,
 )
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-specific universal tasksuite tests skipped on non-Windows")
+
 from extra.core.platform.windows.geometry import (
     clamp_coordinates,
     denormalize_bbox,

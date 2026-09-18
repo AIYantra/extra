@@ -4,7 +4,12 @@ Contains 250 discrete test cases covering normalization, denormalization, DPI sc
 bounding boxes, multi-monitor topologies, clamping, and edge cases.
 """
 
+import sys
 import unittest
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-specific geometry exhaustive tests skipped on non-Windows")
+
 from extra.core.platform.windows.geometry import (
     clamp_coordinates,
     normalize_coordinates,
