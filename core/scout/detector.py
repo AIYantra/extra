@@ -13,7 +13,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Any
 
-from extra.core.platform.windows.shell import resolve_executable
+from extra.core.platform import resolve_executable
 
 logger = logging.getLogger("extra.scout.detector")
 

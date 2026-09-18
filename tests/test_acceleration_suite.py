@@ -91,27 +91,27 @@ class TestAccelerationSuite(unittest.TestCase):
         self.assertGreaterEqual(b, t)
 
     @unittest.skipUnless(sys.platform == "win32", "Windows-specific snap layout")
-    @patch("extra.core.platform.windows.focus.find_window_by_title")
-    @patch("extra.core.platform.windows.focus.snap_window")
-    def test_snap_layout_side_by_side(self, mock_snap, mock_find):
+    def test_snap_layout_side_by_side(self):
         """Verify snap_layout arranges left and right windows in a single step."""
-        mock_win_left = MagicMock()
-        mock_win_left.hwnd = 11111
-        mock_win_right = MagicMock()
-        mock_win_right.hwnd = 22222
+        with patch("extra.core.platform.windows.focus.find_window_by_title") as mock_find, \
+             patch("extra.core.platform.windows.focus.snap_window") as mock_snap:
+            mock_win_left = MagicMock()
+            mock_win_left.hwnd = 11111
+            mock_win_right = MagicMock()
+            mock_win_right.hwnd = 22222
 
-        mock_find.side_effect = lambda q, **kwargs: (
-            mock_win_left if "paint" in q.lower() else mock_win_right
-        )
-        mock_snap.return_value = True
+            mock_find.side_effect = lambda q, **kwargs: (
+                mock_win_left if "paint" in q.lower() else mock_win_right
+            )
+            mock_snap.return_value = True
 
-        res = snap_layout(layout="side_by_side", left_window="Paint", right_window="Notepad")
+            res = snap_layout(layout="side_by_side", left_window="Paint", right_window="Notepad")
 
-        self.assertTrue(res["success"])
-        self.assertEqual(res["layout"], "side_by_side")
-        self.assertIn("left", res["windows"])
-        self.assertIn("right", res["windows"])
-        self.assertEqual(mock_snap.call_count, 2)
+            self.assertTrue(res["success"])
+            self.assertEqual(res["layout"], "side_by_side")
+            self.assertIn("left", res["windows"])
+            self.assertIn("right", res["windows"])
+            self.assertEqual(mock_snap.call_count, 2)
 
     # ── 3. Batch Filesystem Tests ──────────────────────────────────────────────
 
