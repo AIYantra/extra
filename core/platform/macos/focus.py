@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import subprocess
 import time
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from extra.core.platform.base import AbstractFocusManager, WindowInfo
 
@@ -213,6 +213,26 @@ def force_activate_window(hwnd: int) -> bool:
     return success
 
 
+def get_work_area(monitor_index: int = 0) -> Tuple[int, int, int, int]:
+    """Returns approximate work area for macOS (excluding menu bar / dock)."""
+    return (0, 25, 1920, 1055)
+
+
+def snap_window(hwnd: int, position: str = "left", monitor_index: int = 0) -> bool:
+    """Stub for macOS window snapping."""
+    return False
+
+
+def snap_layout(
+    layout: str = "side_by_side",
+    left_window: Optional[Union[str, int]] = None,
+    right_window: Optional[Union[str, int]] = None,
+    monitor_index: int = 0,
+) -> Dict[str, Any]:
+    """Stub for macOS layout snapping."""
+    return {"success": False, "message": "Snap layout not supported on macOS"}
+
+
 class MacFocusManager(AbstractFocusManager):
     """macOS implementation of the AbstractFocusManager interface."""
 
@@ -237,3 +257,16 @@ class MacFocusManager(AbstractFocusManager):
 
     def force_activate_window(self, hwnd: int) -> bool:
         return force_activate_window(hwnd)
+
+    def snap_window(self, hwnd: int, position: str = "left", monitor_index: int = 0) -> bool:
+        return snap_window(hwnd, position, monitor_index)
+
+    def snap_layout(
+        self,
+        layout: str = "side_by_side",
+        left_window: Optional[Union[str, int]] = None,
+        right_window: Optional[Union[str, int]] = None,
+        monitor_index: int = 0,
+    ) -> Dict[str, Any]:
+        return snap_layout(layout=layout, left_window=left_window, right_window=right_window, monitor_index=monitor_index)
+

@@ -43,6 +43,7 @@ if sys.platform == "darwin":
         denormalize_bbox,
         denormalize_coordinates,
         ensure_dpi_aware,
+        execute_batch_actions,
         find_window_by_title,
         find_windows_by_process,
         force_activate_window,
@@ -54,6 +55,7 @@ if sys.platform == "darwin":
         get_primary_monitor,
         get_virtual_screen_bounds,
         get_window_info,
+        get_work_area,
         instant_type,
         launch_app,
         list_windows,
@@ -69,6 +71,8 @@ if sys.platform == "darwin":
         open_uri,
         resolve_executable,
         send_hotkey,
+        snap_layout,
+        snap_window,
     )
     UIAutomationPlane = AccessibilityPlane
 else:
@@ -91,6 +95,7 @@ else:
         denormalize_bbox,
         denormalize_coordinates,
         ensure_dpi_aware,
+        execute_batch_actions,
         find_window_by_title,
         find_windows_by_process,
         force_activate_window,
@@ -103,6 +108,7 @@ else:
         get_virtual_screen_bounds,
         get_window_executable_path,
         get_window_info,
+        get_work_area,
         instant_type,
         launch_app,
         list_windows,
@@ -119,6 +125,8 @@ else:
         register_app,
         resolve_executable,
         send_hotkey,
+        snap_layout,
+        snap_window,
     )
     AccessibilityPlane = UIAutomationPlane
 
@@ -178,6 +186,7 @@ __all__ = [
     "mouse_drag",
     "mouse_scroll",
     "send_hotkey",
+    "execute_batch_actions",
     "InputEngine",
     # Focus
     "get_window_info",
@@ -187,6 +196,9 @@ __all__ = [
     "find_windows_by_process",
     "force_activate_window",
     "get_window_executable_path",
+    "get_work_area",
+    "snap_window",
+    "snap_layout",
     "FocusManager",
     # Semantic UI / Accessibility
     "AccessibilityPlane",

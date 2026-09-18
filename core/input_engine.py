@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from extra.core.platform import (
     atomic_clipboard_paste,
+    execute_batch_actions,
     instant_type,
     mouse_click,
     mouse_double_click,
@@ -20,6 +21,7 @@ from extra.core.platform import (
 
 __all__ = [
     "atomic_clipboard_paste",
+    "execute_batch_actions",
     "instant_type",
     "mouse_click",
     "mouse_double_click",

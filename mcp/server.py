@@ -11,7 +11,7 @@ import logging
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Defensive sys.path guard: ensure local 'mcp' folder never shadows the PyPI 'mcp' SDK
 _shadow_paths = [
@@ -32,6 +32,8 @@ from extra.core.focus import (
     get_foreground_window,
     get_window_executable_path,
     list_windows,
+    snap_layout,
+    snap_window,
 )
 from extra.core.geometry import (
     attach_input_desktop,
@@ -44,6 +46,7 @@ from extra.core.geometry import (
 from extra.core.indicators import get_indicator_controller
 from extra.core.input_engine import (
     atomic_clipboard_paste,
+    execute_batch_actions,
     instant_type,
     mouse_click,
     mouse_double_click,
@@ -55,6 +58,7 @@ from extra.core.input_engine import (
 from extra.core.stall_breaker import EmergencyAbortError, StallBreaker, StallStatus
 from extra.core.uia_plane import SetOfMarkAnnotator, UIAutomationPlane
 from extra.fastpath.browser import execute_browser_action
+from extra.fastpath.fs import execute_fs_batch
 from extra.fastpath.shell import launch_app, open_uri, resolve_executable
 from extra.core.memory import (
     finish_memory_recording,
@@ -538,6 +542,95 @@ def extra_drag(
 
     mouse_drag(sx, sy, ex, ey, button=button, monitor_index=monitor_index)
     return {"success": True, "start": [sx, sy], "end": [ex, ey]}
+
+
+@server.tool()
+def extra_batch_actions(
+    actions: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Executes an atomic list of hardware actions sequentially with sub-millisecond dispatch.
+    Eliminates multi-turn network round-trips (reducing seconds to milliseconds) for compound workflows.
+    
+    Supported action dictionary formats:
+      - {"action": "hotkey", "keys": ["ctrl", "t"]}
+      - {"action": "type", "text": "edge://bookmarks", "press_enter": True}
+      - {"action": "click", "x": 500, "y": 300, "button": "left", "clicks": 1}
+      - {"action": "double_click", "x": 500, "y": 300}
+      - {"action": "focus", "window_title": "Edge"} or {"action": "focus", "hwnd": 12345}
+      - {"action": "sleep", "ms": 200} (also accepts "duration_ms", "seconds", or "delay")
+      - {"action": "scroll", "clicks": -5, "direction": "vertical"}
+      
+    Optional parameter per action:
+      - "settle_ms": int (milliseconds to wait after step, default 30)
+      
+    Returns summary of executed actions and total elapsed execution time in milliseconds.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    res = execute_batch_actions(actions)
+    _stall_breaker.reset()
+    record_action_step("extra_batch_actions", {"count": len(actions), "total_duration_ms": res.get("total_duration_ms")})
+    return res
+
+
+@server.tool()
+def extra_snap_layout(
+    layout: str = "side_by_side",
+    left_window: Optional[str] = None,
+    right_window: Optional[str] = None,
+    monitor_index: int = 0,
+) -> Dict[str, Any]:
+    """
+    Arranges multiple windows into a cohesive visual layout in a single programmatic step (sub-15ms).
+    Eliminates fragile multi-turn Win+Left / Win+Right hotkey snapping and avoids Windows 11 Snap Assist popups.
+    
+    Args:
+        layout: Layout preset. Currently supports 'side_by_side' (split 50/50 horizontally).
+        left_window: Window title substring (e.g. "Paint") or HWND for the left screen half.
+        right_window: Window title substring (e.g. "Notepad") or HWND for the right screen half.
+        monitor_index: 0-based monitor index (default 0).
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    res = snap_layout(layout=layout, left_window=left_window, right_window=right_window, monitor_index=monitor_index)
+    _stall_breaker.reset()
+    record_action_step("extra_snap_layout", {"layout": layout, "left": left_window, "right": right_window})
+    return res
+
+
+@server.tool()
+def extra_fs_batch(
+    operation: str,
+    base_dir: Optional[str] = None,
+    rules: Optional[Dict[str, List[str]]] = None,
+    files: Optional[List[Dict[str, Any]]] = None,
+    renames: Optional[List[Dict[str, str]]] = None,
+    deletes: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    High-speed batch filesystem operations avoiding multi-turn shell execution.
+    Complies with Windows Defender Controlled Folder Access (CFA).
+    
+    Operations:
+      - 'organize': Classifies files in base_dir into subdirectories by extension or category based on rules mapping.
+        rules example: {"Documents": [".pdf", ".docx", ".txt"], "Images": [".png", ".jpg"]}
+      - 'create_tree': Atomically creates directory structures and files.
+        files example: [{"path": "reports/summary.txt", "content": "..."}]
+      - 'batch_rename': Renames multiple files according to renames mapping.
+        renames example: [{"old": "base_dir/a.txt", "new": "base_dir/b.txt"}]
+      - 'batch_delete': Safely deletes list of file paths.
+    """
+    res = execute_fs_batch(
+        operation=operation,
+        base_dir=base_dir,
+        rules=rules,
+        files=files,
+        renames=renames,
+        deletes=deletes,
+    )
+    record_action_step("extra_fs_batch", {"operation": operation, "success": res.get("success")})
+    return res
 
 
 @server.tool()

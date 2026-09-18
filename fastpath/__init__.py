@@ -8,6 +8,7 @@ from extra.fastpath.browser import (
     execute_browser_action,
     get_browser_fastpath,
 )
+from extra.fastpath.fs import execute_fs_batch
 from extra.fastpath.shell import (
     LaunchResult,
     launch_app,
@@ -23,4 +24,5 @@ __all__ = [
     "BrowserFastPath",
     "get_browser_fastpath",
     "execute_browser_action",
+    "execute_fs_batch",
 ]

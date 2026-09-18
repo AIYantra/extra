@@ -325,6 +325,10 @@ class AbstractInputEngine(ABC):
         """Performs atomic virtual clipboard swap and paste."""
         pass
 
+    def execute_batch_actions(self, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Executes an atomic list of hardware actions sequentially."""
+        return {"success": False, "message": "Batch actions not supported on this platform"}
+
 
 class AbstractAccessibilityPlane(ABC):
     """Abstract interface for semantic accessibility hierarchy inspection and invocation."""

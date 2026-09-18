@@ -1,3 +1,29 @@
+# Extra Release Notes — v0.2.5
+
+**Release Date:** September 18, 2026  
+**Release Title:** Computer-Use Acceleration Suite (Atomic Input Batching, Settle Normalization, Browser Crash Recovery Auto-Suppression, and Anti-Blind Completion Protocol)  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Problem Resolution (v0.2.5)
+
+In live end-to-end benchmark testing across real desktop automation workflows (file management, web research, document editing, and multi-tab browser workflows), critical performance and robustness breakthroughs were achieved, reducing compound task durations from **365 seconds down to 26 seconds (93% speedup)**:
+
+### 1. Multi-Format Sleep Parameter Normalization (`extra_batch_actions`)
+- **Problem:** When language models generate compound hardware action batches, sleep steps frequently pass varied parameter names (`"duration_ms"`, `"duration"`, `"seconds"`, `"delay_ms"`). The engine previously strictly expected `"ms"` or `"delay"`, causing batch sleep actions to fall back to a default 100ms. In browser workflows, this caused hotkey and typing actions to fire before web pages or bookmark dialogs had mounted.
+- **Fix:** Both Windows and macOS input engines now seamlessly parse and normalize `ms`, `duration_ms`, `seconds` (multiplied to ms), `delay_ms`, and `duration`.
+
+### 2. Browser Crash Recovery Modal Auto-Suppression
+- **Problem:** If a previous automation task terminated a browser process forcefully (e.g. `Stop-Process msedge -Force`), Chromium-based browsers (Edge, Chrome) record an unclean shutdown and display the blocking modal prompt: *"Microsoft Edge closed unexpectedly. Restore pages?"*. This prompt hijacked keyboard focus and blocked tab-wide shortcuts like `Ctrl+Shift+D`.
+- **Fix:** The application launcher (`extra/core/platform/windows/shell.py`) now automatically injects `--hide-crash-restore-bubble` and `--no-first-run` into all Edge and Chrome launches. Browsers launch clean, isolated, and immediately receptive to keyboard input.
+
+### 3. Anti-Blind Completion & Anti-Stall Guardrails
+- **Problem:** Models frequently called `extra_screenshot` and `extra_task_complete` in the exact same tool-calling turn, declaring completion blindly without ever receiving or inspecting the verification visual state. Additionally, large accessibility dumps (`extra_inspect_ui`) triggered multiple paged `view_file` calls that burned 40+ seconds of context latency.
+- **Fix:** Enforced the **Strict Anti-Blind Completion Mandate** (Turn N captures/inspects; Turn N+1 verifies and completes). Added strict prohibitions against accessibility dump paging and PowerShell HWND hunting loops.
+
+---
+
 # Extra Release Notes — v0.2.4
 
 **Release Date:** September 17, 2026  

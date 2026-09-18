@@ -12,6 +12,10 @@ imagehash>=4.3.1                # Perceptual hash for closed-loop stall detectio
 numpy>=1.26.0                   # High-performance pixel array buffers
 psutil>=6.0.0                   # Process & window metadata discovery
 
+# ── Tier 1: Local Knowledge Graph & Memory Subsystem ───────────────────────────
+kuzu>=0.11.0                    # Embedded episodic and relational graph database
+fastembed>=0.8.0                # Sub-3ms pure ONNX vector embeddings for memory recall
+
 # ── Windows Dependencies ────────────────────────────────────────────────────────
 pywin32>=306; sys_platform == 'win32'                    # Official Windows COM & Win32 extensions
 comtypes>=1.4.0; sys_platform == 'win32'                 # Pure Python COM client for Microsoft UI Automation Core
