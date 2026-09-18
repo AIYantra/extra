@@ -9,14 +9,17 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-import kuzu
+try:
+    import kuzu
+except ImportError:
+    kuzu = None
 
 logger = logging.getLogger("Extra-Memory-DB")
 
 _DB_LOCK = threading.Lock()
-_KUZU_DB: Optional[kuzu.Database] = None
+_KUZU_DB: Optional[Any] = None
 _DB_PATH: Optional[Path] = None
 
 
@@ -110,8 +113,10 @@ def init_schema(conn: kuzu.Connection) -> None:
     logger.info("KùzuDB memory schema verified and initialized.")
 
 
-def get_memory_db(custom_path: Optional[Path] = None) -> kuzu.Database:
+def get_memory_db(custom_path: Optional[Path] = None) -> Any:
     """Returns or initializes the singleton Kùzu database instance."""
+    if kuzu is None:
+        raise RuntimeError("Kùzu is not installed. Run 'pip install kuzu' to enable Extra memory.")
     global _KUZU_DB, _DB_PATH
     with _DB_LOCK:
         target_path = custom_path or get_default_db_path()
@@ -138,8 +143,10 @@ def get_memory_db(custom_path: Optional[Path] = None) -> kuzu.Database:
         return _KUZU_DB
 
 
-def get_memory_connection(custom_path: Optional[Path] = None) -> kuzu.Connection:
+def get_memory_connection(custom_path: Optional[Path] = None) -> Any:
     """Returns a new thread-safe connection to the Kùzu database."""
+    if kuzu is None:
+        raise RuntimeError("Kùzu is not installed. Run 'pip install kuzu' to enable Extra memory.")
     db = get_memory_db(custom_path)
     return kuzu.Connection(db)
 

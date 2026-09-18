@@ -13,7 +13,10 @@ from extra.core.platform import (
     get_foreground_window,
     get_window_executable_path,
     get_window_info,
+    get_work_area,
     list_windows,
+    snap_layout,
+    snap_window,
 )
 
 __all__ = [
@@ -24,5 +27,8 @@ __all__ = [
     "get_foreground_window",
     "get_window_executable_path",
     "get_window_info",
+    "get_work_area",
     "list_windows",
+    "snap_layout",
+    "snap_window",
 ]

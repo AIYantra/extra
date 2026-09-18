@@ -526,3 +526,94 @@ class WindowsInputEngine(AbstractInputEngine):
 
     def atomic_clipboard_paste(self, text: str) -> None:
         atomic_clipboard_paste(text=text)
+
+    def execute_batch_actions(self, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return execute_batch_actions(actions=actions)
+
+
+def execute_batch_actions(actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Executes an atomic list of hardware actions sequentially with sub-millisecond dispatch.
+    Eliminates multi-turn LLM network round-trips for compound workflows.
+    """
+    t0 = time.perf_counter()
+    executed: List[Dict[str, Any]] = []
+
+    for idx, act in enumerate(actions):
+        atype = str(act.get("action", act.get("type", ""))).lower().strip()
+        if not atype:
+            continue
+
+        step_t0 = time.perf_counter()
+        if atype in ("hotkey", "shortcut"):
+            keys = act.get("keys", [])
+            if isinstance(keys, str):
+                keys = [keys]
+            send_hotkey(keys)
+            step_dur = (time.perf_counter() - step_t0) * 1000.0
+            executed.append({"index": idx, "action": "hotkey", "keys": keys, "duration_ms": round(step_dur, 2)})
+
+        elif atype in ("type", "text", "input"):
+            text = str(act.get("text", ""))
+            press_enter = bool(act.get("press_enter", False))
+            instant_type(text, press_enter=press_enter)
+            step_dur = (time.perf_counter() - step_t0) * 1000.0
+            executed.append({"index": idx, "action": "type", "length": len(text), "press_enter": press_enter, "duration_ms": round(step_dur, 2)})
+
+        elif atype in ("click", "mouse_click"):
+            x = int(act.get("x", 0))
+            y = int(act.get("y", 0))
+            btn = str(act.get("button", "left"))
+            clicks = int(act.get("clicks", 1))
+            mouse_click(x, y, button=btn, clicks=clicks)
+            step_dur = (time.perf_counter() - step_t0) * 1000.0
+            executed.append({"index": idx, "action": "click", "x": x, "y": y, "button": btn, "duration_ms": round(step_dur, 2)})
+
+        elif atype in ("double_click", "dblclick"):
+            x = int(act.get("x", 0))
+            y = int(act.get("y", 0))
+            mouse_double_click(x, y)
+            step_dur = (time.perf_counter() - step_t0) * 1000.0
+            executed.append({"index": idx, "action": "double_click", "x": x, "y": y, "duration_ms": round(step_dur, 2)})
+
+        elif atype in ("focus", "activate"):
+            title = act.get("window_title")
+            hwnd = act.get("hwnd")
+            from extra.core.focus import find_window_by_title, force_activate_window
+            success = False
+            if hwnd:
+                success = force_activate_window(int(hwnd))
+            elif title:
+                win = find_window_by_title(str(title), timeout=2.0)
+                if win:
+                    success = force_activate_window(win.hwnd)
+            step_dur = (time.perf_counter() - step_t0) * 1000.0
+            executed.append({"index": idx, "action": "focus", "target": title or hwnd, "success": success, "duration_ms": round(step_dur, 2)})
+
+        elif atype in ("sleep", "wait", "pause"):
+            if "seconds" in act:
+                ms = int(float(act["seconds"]) * 1000)
+            else:
+                ms = int(act.get("ms", act.get("duration_ms", act.get("delay", act.get("delay_ms", act.get("duration", 100))))))
+            time.sleep(ms / 1000.0)
+            executed.append({"index": idx, "action": "sleep", "ms": ms})
+
+        elif atype in ("scroll", "wheel"):
+            clicks = int(act.get("clicks", 1))
+            direction = str(act.get("direction", "vertical"))
+            mouse_scroll(delta=clicks * 120, horizontal=(direction.lower() == "horizontal"))
+            step_dur = (time.perf_counter() - step_t0) * 1000.0
+            executed.append({"index": idx, "action": "scroll", "clicks": clicks, "direction": direction, "duration_ms": round(step_dur, 2)})
+
+        # Settle delay between steps
+        delay_between = int(act.get("settle_ms", 30))
+        if delay_between > 0:
+            time.sleep(delay_between / 1000.0)
+
+    total_ms = (time.perf_counter() - t0) * 1000.0
+    return {
+        "success": True,
+        "executed_count": len(executed),
+        "total_duration_ms": round(total_ms, 2),
+        "actions": executed,
+    }

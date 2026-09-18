@@ -298,7 +298,16 @@ def launch_app(
         target = args[0]
         params = None
     else:
-        params = " ".join(args) if args else None
+        # Auto-suppress browser crash recovery bubbles that steal focus and block keystrokes
+        if clean_app in ("edge", "msedge", "chrome"):
+            clean_args = list(args) if args else []
+            suppress_flags = ["--hide-crash-restore-bubble", "--no-first-run"]
+            for flag in reversed(suppress_flags):
+                if flag not in clean_args:
+                    clean_args.insert(0, flag)
+            params = " ".join(clean_args)
+        else:
+            params = " ".join(args) if args else None
     res = shell32.ShellExecuteW(None, "open", target, params, None, SW_SHOWNORMAL)
 
     # ShellExecute returns > 32 on success

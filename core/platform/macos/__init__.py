@@ -16,7 +16,10 @@ from extra.core.platform.macos.focus import (
     force_activate_window,
     get_foreground_window,
     get_window_info,
+    get_work_area,
     list_windows,
+    snap_layout,
+    snap_window,
 )
 from extra.core.platform.macos.geometry import (
     MacGeometry,
@@ -46,6 +49,7 @@ from extra.core.platform.macos.indicators import (
 from extra.core.platform.macos.input_engine import (
     MacInputEngine,
     atomic_clipboard_paste,
+    execute_batch_actions,
     instant_type,
     mouse_click,
     mouse_double_click,
@@ -106,6 +110,7 @@ __all__ = [
     "mouse_drag",
     "mouse_scroll",
     "send_hotkey",
+    "execute_batch_actions",
     "MacInputEngine",
     # Focus
     "WindowInfo",
@@ -115,6 +120,9 @@ __all__ = [
     "find_window_by_title",
     "find_windows_by_process",
     "force_activate_window",
+    "get_work_area",
+    "snap_window",
+    "snap_layout",
     "MacFocusManager",
     # AX Plane
     "MacAccessibilityPlane",

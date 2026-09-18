@@ -17,7 +17,10 @@ from extra.core.platform.windows.focus import (
     get_foreground_window,
     get_window_executable_path,
     get_window_info,
+    get_work_area,
     list_windows,
+    snap_layout,
+    snap_window,
 )
 from extra.core.platform.windows.geometry import (
     MonitorInfo,
@@ -43,6 +46,7 @@ from extra.core.platform.windows.indicators import (
 from extra.core.platform.windows.input_engine import (
     WindowsInputEngine,
     atomic_clipboard_paste,
+    execute_batch_actions,
     instant_type,
     mouse_click,
     mouse_double_click,
@@ -105,6 +109,7 @@ __all__ = [
     "mouse_drag",
     "mouse_scroll",
     "send_hotkey",
+    "execute_batch_actions",
     "WindowsInputEngine",
     # Focus
     "WindowInfo",
@@ -115,6 +120,9 @@ __all__ = [
     "find_windows_by_process",
     "force_activate_window",
     "get_window_executable_path",
+    "get_work_area",
+    "snap_window",
+    "snap_layout",
     "WindowsFocusManager",
     # UIA Plane
     "UIAutomationPlane",

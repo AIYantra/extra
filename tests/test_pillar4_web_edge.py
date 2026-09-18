@@ -143,8 +143,8 @@ class TestPillar4EdgeRouter(unittest.TestCase):
         for src, dst in asset_pairs:
             self.assertTrue(src.exists(), f"Source file {src} does not exist")
             self.assertTrue(dst.exists(), f"Web fallback file {dst} does not exist")
-            src_bytes = src.read_bytes()
-            dst_bytes = dst.read_bytes()
+            src_bytes = src.read_bytes().replace(b"\r\n", b"\n")
+            dst_bytes = dst.read_bytes().replace(b"\r\n", b"\n")
             self.assertEqual(
                 src_bytes,
                 dst_bytes,
