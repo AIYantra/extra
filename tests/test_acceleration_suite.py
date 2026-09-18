@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,9 +40,9 @@ class TestAccelerationSuite(unittest.TestCase):
 
     # ── 1. Batch Actions Tests ─────────────────────────────────────────────────
 
-    @patch("extra.core.platform.windows.input_engine.send_hotkey")
-    @patch("extra.core.platform.windows.input_engine.instant_type")
-    @patch("extra.core.platform.windows.input_engine.mouse_click")
+    @patch(f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine.send_hotkey")
+    @patch(f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine.instant_type")
+    @patch(f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine.mouse_click")
     def test_execute_batch_actions_sequence(self, mock_click, mock_type, mock_hotkey):
         """Verify compound action sequences execute atomically in a single dispatch."""
         actions = [
@@ -89,6 +90,7 @@ class TestAccelerationSuite(unittest.TestCase):
         self.assertGreaterEqual(r, l)
         self.assertGreaterEqual(b, t)
 
+    @unittest.skipUnless(sys.platform == "win32", "Windows-specific snap layout")
     @patch("extra.core.platform.windows.focus.find_window_by_title")
     @patch("extra.core.platform.windows.focus.snap_window")
     def test_snap_layout_side_by_side(self, mock_snap, mock_find):

@@ -54,6 +54,7 @@ if sys.platform == "darwin":
         get_monitors_info,
         get_primary_monitor,
         get_virtual_screen_bounds,
+        get_window_executable_path,
         get_window_info,
         get_work_area,
         instant_type,

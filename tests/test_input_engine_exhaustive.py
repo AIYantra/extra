@@ -4,7 +4,12 @@ Contains 300 discrete test cases covering keyboard mappings, Unicode packets,
 hotkey combinations, mouse button mechanics, drag trajectories, and scroll deltas.
 """
 
+import sys
 import unittest
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-specific input engine exhaustive tests skipped on non-Windows")
+
 from extra.core.platform.windows.input_engine import (
     VK_MAP,
     MOUSEEVENTF_WHEEL,
