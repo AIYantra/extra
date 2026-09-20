@@ -23,7 +23,7 @@
 <br/>
 
 <a href="https://extra.yantraos.com">
-  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/demo.gif" alt="Extra in action — Live Windows desktop automation" width="100%" />
+  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/banner.png" alt="Extra in action — Live Windows desktop automation" width="100%" />
 </a>
 
 </div>
