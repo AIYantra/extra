@@ -121,6 +121,19 @@ Extra works out of the box with any agent supporting the **Model Context Protoco
 {
   "mcpServers": {
     "extra": {
+      "command": "npx",
+      "args": ["-y", "@yantraos/extra-desktop"]
+    }
+  }
+}
+```
+
+Or using native Python:
+
+```json
+{
+  "mcpServers": {
+    "extra": {
       "command": "python",
       "args": ["-m", "extra.mcp.server"]
     }
@@ -155,26 +168,33 @@ Extra is engineered from the ground up for speed, reliability, and token efficie
 
 ---
 
-## 🛠️ Included Tools (MCP Suite)
+## 🛠️ Included Tools (MCP Suite — 20 Native Tools)
 
-When connected to Extra, your AI assistant receives these native tools:
+When connected to Extra, your AI assistant receives full sovereign desktop control across 20 native tools:
 
 | Tool Name | What It Does |
 | :--- | :--- |
-| `extra_launch` | Opens any Windows app, utility, or URL directly (`calc`, `notepad`, `settings`, `chrome`) |
-| `extra_inspect_ui` | Scans all visible buttons, inputs, tabs, and menus on your screen |
-| `extra_click_element` | Deterministically clicks any element by its ID, name, or bounding box |
-| `extra_screenshot` | Captures high-res desktop frames with optional Set-of-Mark visual badges |
-| `extra_click` | Moves mouse, left/right clicks, and double clicks with sub-pixel DPI accuracy |
-| `extra_type` | Injects text instantly with zero lag, full emoji support, and atomic paste |
+| `extra_launch` | Opens any app, utility, or URL directly (`calc`, `notepad`, `settings`, `edge`, `chrome`) |
+| `extra_focus_window` | Brings any window to the front via native thread input attachment |
+| `extra_click` | Clicks with sub-pixel DPI accuracy, human-like Bezier curves, and semantic visual grounding (`target="..."`) |
+| `extra_stroke` | Draws fluid, continuous brush splines across waypoints with pressure and Catmull-Rom smoothing |
+| `extra_type` | Injects text instantly with zero lag, full emoji support, and Win32 Unicode packets |
 | `extra_hotkey` | Sends keyboard shortcuts (`Ctrl+C`, `Win+E`, `Alt+Tab`, `Enter`) |
+| `extra_batch_actions` | Executes atomic lists of hardware & SOUL reflex actions (`eval`, `assert`, `wait_for_state`) in sub-milliseconds |
+| `extra_snap_layout` | Programmatically docks and arranges windows in side-by-side or split layouts in < 15ms |
+| `extra_fs_batch` | High-speed batch filesystem operations compliant with Windows Defender Controlled Folder Access |
+| `extra_inspect_ui` | Scans accessible UI trees and interactive element nodes in real time |
+| `extra_click_element` | Clicks UI elements deterministically by accessible ID or semantic target |
 | `extra_scroll` | Smoothly scrolls wheels up, down, left, or right |
 | `extra_drag` | Drags and drops files, windows, or sliders between coordinates |
-| `extra_browser` | Directly extracts web page DOM content in Edge/Chrome without taking screenshots |
-| `extra_focus_window` | Brings any application window immediately to the front |
-| `extra_task_start` | Signals autonomous task execution; activates ambient screen edge pulse & cursor halo |
-| `extra_task_complete` | Signals task completion; flashes emerald green border, plays audio chime, and dissolves indicators |
+| `extra_screenshot` | Captures high-res desktop frames in < 25ms with optional Set-of-Mark visual badges |
+| `extra_browser` | Directly extracts DOM content in Edge/Chrome or triggers synthesized API fast-paths |
+| `extra_task_start` | Activates ambient screen edge pulse and cursor tracking halo |
+| `extra_task_complete` | Signals task completion: flashes emerald border, plays acoustic chime, and analyzes trajectory |
 | `extra_indicate_status` | Direct programmatic control over active, complete, and idle desktop indicators |
+| `extra_recall_memory` | Recalls past task workflows, artifacts, and known quirks via KùzuDB + FastEmbed in < 2ms |
+| `extra_scout_app` | Discovers UI frameworks (Electron/Win32/Viewport), universal hotkeys, and generates SKILL playbooks |
+| `extra_evolve_skill` | Crystallizes newly verified zero-stall fast paths into permanent skill playbooks |
 
 ---
 
@@ -183,26 +203,43 @@ When connected to Extra, your AI assistant receives these native tools:
 ```text
 extra/
 ├── assets/                 # Brand logos and banners
-├── core/                   # Core Windows Automation Engine
-│   ├── capture.py          # Sub-3ms screen capture (DXGI & MSS)
+├── bin/                    # Node.js CLI executable (npx @yantraos/extra-desktop)
+├── core/                   # Sovereign Core Automation Engine
+│   ├── platform/           # Platform Abstraction Layer (PAL facade for Win32 & macOS)
+│   │   ├── windows/        # Win32 SendInput, DXGI capture, UIA, and focus
+│   │   └── macos/          # ScreenCaptureKit, CoreGraphics, and AXUIElement
+│   ├── soul/               # System One Ultra-fast Layer (Decider, Eyes, Grammar, Schemas)
+│   ├── memory/             # KùzuDB episodic knowledge graph & FastEmbed embeddings
+│   ├── evolution/          # Autonomous skill crystallizer & API synthesizer
+│   ├── scout/              # Application discovery, CDP sniffer, and session vault
+│   ├── motion/             # Human-like Bezier cursor flight and spline dynamics
+│   ├── capture.py          # Unified high-speed desktop screen capture
 │   ├── geometry.py         # PerMonitorV2 DPI scaling & display normalization
-│   ├── indicators.py       # Ambient screen edge pulse, cursor halo, and harmonic audio chime
-│   ├── input_engine.py     # Win32 SendInput Unicode & atomic clipboard injection
-│   ├── focus.py            # AttachThreadInput window focus forcing
-│   ├── uia_plane.py        # Windows UI Automation v3 COM client
+│   ├── indicators.py       # Ambient screen pulse, cursor halo, and harmonic chime
+│   ├── input_engine.py     # PAL input facade (clicks, strokes, typing, batching)
+│   ├── focus.py            # Window activation, snapping, and layout management
+│   ├── uia_plane.py        # Accessibility tree inspection and Set-of-Mark labeling
 │   └── stall_breaker.py    # Closed-loop perceptual diffing & safety killswitch
 ├── fastpath/               # High-speed deterministic execution
-│   ├── shell.py            # Win32 ShellExecuteEx direct app launcher
-│   └── browser.py          # Playwright / Edge CDP DOM bridge
-├── mcp/                    # Anthropic Model Context Protocol
-│   └── server.py           # Standard JSON-RPC stdio/SSE server
+│   ├── shell.py            # Native app launcher with crash-recovery auto-suppression
+│   ├── browser.py          # Playwright & Chromium DevTools Protocol (CDP) bridge
+│   ├── fs.py               # CFA-compliant batch filesystem engine
+│   └── web/                # Synthesized Web-to-API fast-paths
+├── mcp/                    # Model Context Protocol
+│   └── server.py           # Standard JSON-RPC stdio/SSE server (20 native tools)
+├── tests/                  # Exhaustive 1,883-test official verification suite
 ├── cli.py                  # CLI runner (extra doctor, test, indicators, run, inspect, snap)
-├── install.ps1             # 1-line PowerShell installer
-├── pyproject.toml          # Package metadata and build configuration
+├── install.ps1             # 1-line PowerShell installer (Windows)
+├── install.sh              # 1-line bash installer (macOS)
+├── pyproject.toml          # PyPI package manifest (extra-desktop v0.3.0)
+├── package.json            # npm package manifest (@yantraos/extra-desktop v0.3.0)
+├── server.json             # Official MCP registry manifest
+├── glama.json              # Glama MCP ecosystem manifest
+├── smithery.yaml           # Smithery 1-click deployment manifest
 ├── requirements.txt        # Enterprise-audited dependency manifest
 ├── STARTER_PROMPT.md       # Master AI system prompt & setup directive
 ├── ARCHITECTURE.md         # Full System Architecture Specification
-└── test_core_engine.py     # End-to-end integration test suite
+└── RELEASE_NOTES.md        # Comprehensive version release notes
 ```
 
 ---

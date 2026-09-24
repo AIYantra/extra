@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from extra.core.memory.db import get_memory_connection
+from extra.core.memory.db import close_memory_db, get_memory_connection
 from extra.core.memory.embeddings import get_embedding
 
 logger = logging.getLogger("Extra-Memory-Ingest")
@@ -36,6 +36,7 @@ class TaskMemoryRecorder:
         self.artifacts: List[Dict[str, Any]] = []
         self.stalls: List[Dict[str, Any]] = []
         self.quirks: List[Dict[str, Any]] = []
+        self.soul_decisions: List[Dict[str, Any]] = []
         self.completed = False
         self._lock = threading.Lock()
 
@@ -92,6 +93,25 @@ class TaskMemoryRecorder:
                 "issue": issue,
                 "workaround": workaround,
                 "playbook": playbook,
+            })
+
+    def record_soul_decision(
+        self,
+        decision_type: str,
+        condition: str,
+        result: Any,
+        confidence: float = 1.0,
+        latency_ms: float = 0.0,
+        context_summary: str = "",
+    ) -> None:
+        with self._lock:
+            self.soul_decisions.append({
+                "decision_type": str(decision_type),
+                "condition": str(condition),
+                "result": str(result),
+                "confidence": float(confidence),
+                "latency_ms": float(latency_ms),
+                "context": str(context_summary)[:500],
             })
 
     def commit_to_db(self, summary: str, success: bool = True, custom_db_path: Optional[Path] = None) -> bool:
@@ -261,6 +281,42 @@ class TaskMemoryRecorder:
                     {"app_name": quirk["app_name"], "quirk_id": quirk_id},
                 )
 
+            # 7. Insert and link SoulDecisions (cap to last 50 decisions to keep graph compact)
+            for idx, dec in enumerate(self.soul_decisions[-50:]):
+                dec_id = f"{self.task_id}_dec{idx}"
+                try:
+                    conn.execute(
+                        """
+                        CREATE (d:SoulDecision {
+                            id: $id,
+                            decision_type: $decision_type,
+                            condition: $condition,
+                            result: $result,
+                            confidence: $confidence,
+                            latency_ms: $latency_ms,
+                            context: $context
+                        })
+                        """,
+                        {
+                            "id": dec_id,
+                            "decision_type": dec["decision_type"],
+                            "condition": dec["condition"],
+                            "result": str(dec["result"]),
+                            "confidence": float(dec["confidence"]),
+                            "latency_ms": float(dec["latency_ms"]),
+                            "context": dec["context"],
+                        },
+                    )
+                    conn.execute(
+                        """
+                        MATCH (t:Task {id: $task_id}), (d:SoulDecision {id: $dec_id})
+                        CREATE (t)-[:DECIDED]->(d)
+                        """,
+                        {"task_id": self.task_id, "dec_id": dec_id},
+                    )
+                except Exception as dex:
+                    logger.debug("Could not commit soul decision node %s: %s", dec_id, dex)
+
             logger.info("Successfully persisted task '%s' (%s) to KùzuDB memory.", self.task_name, self.task_id)
             return True
         except Exception as ex:
@@ -416,4 +472,29 @@ def record_action_quirk(app_name: str, issue: str, workaround: str, playbook: st
         )
     except Exception as ex:
         logger.debug("Could not persist standalone quirk to KùzuDB: %s", ex)
+
+
+def record_action_soul_decision(
+    decision_type: str,
+    condition: str,
+    result: Any,
+    confidence: float = 1.0,
+    latency_ms: float = 0.0,
+    context_summary: str = "",
+) -> None:
+    """Records a SOUL micro-decision into the active recorder, if running."""
+    rec = get_active_recorder()
+    if rec and not rec.completed:
+        try:
+            rec.record_soul_decision(
+                decision_type=decision_type,
+                condition=condition,
+                result=result,
+                confidence=confidence,
+                latency_ms=latency_ms,
+                context_summary=context_summary,
+            )
+        except Exception as ex:
+            logger.debug("Could not record soul decision: %s", ex)
+
 

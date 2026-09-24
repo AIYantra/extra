@@ -1,3 +1,61 @@
+# Extra Release Notes — v0.3.0
+
+**Release Date:** September 24, 2026  
+**Release Title:** Project SOUL, Autonomous Live Desktop Pilot, and Sovereign Reflex Engine  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.0)
+
+Version 0.3.0 is a milestone release delivering the **Cognitive Trinity** architecture for sovereign desktop computer use:
+- **Mind (System Two):** Frontier LLM for strategic planning, long-horizon tool selection, and complex reasoning.
+- **Soul (System One):** Local Reflex AI (Project SOUL) delivering **< 70 µs** reflexive micro-decisions, dynamic modal branching, and sub-15ms edge visual grounding without cloud round-trip latency.
+- **Body (Hardware Execution):** Native Platform Abstraction Layer (PAL) with zero-latency `SendInput`, ScreenCaptureKit / DXGI desktop vision, and human-like Bezier cursor flight paths.
+
+### Key Architectural Highlights:
+1. **The Live Desktop Pilot Mandate:**
+   - Strict prohibition on background Python scripting and exploratory shell scripts for desktop automation.
+   - All interactions execute live on the glass via native MCP tools (`extra_launch`, `extra_focus_window`, `extra_click`, `extra_stroke`, `extra_type`, `extra_batch_actions`).
+   - Human-observable cursor flight paths (`human_like=True` by default) with realistic Bezier trajectories and ambient indicator halos.
+   - Zero clipboard "cheats": creative and drawing tasks are rendered with genuine vector strokes and tool selections on the canvas.
+2. **Project SOUL (System One Ultra-fast Layer):**
+   - Sub-millisecond on-device reflex decider (`eval`, `assert`, `wait_for_state`) inside `extra_batch_actions`.
+   - `extra_click` upgraded with semantic target grounding (`target="..."`) via SOUL-Eyes.
+   - Dynamic batch action reflex evaluation achieved median latency of **0.062 ms (62 µs)** across benchmark tests.
+3. **Anti-Poisoning Trajectory Evaluation & Strict Golden-Path Hardening:**
+   - **Full Parameter Decoding:** Fixed telemetry blindspot where batch action arguments were stripped before trajectory analysis. The analyzer now decodes nested actions, detecting undos (`Ctrl+Z`), repeated clicking, and coordinate hunting.
+   - **Strict Golden-Path Gating:** Trajectories with undos (`undo_count > 0`), stalls (`stall_count > 0`), or friction are strictly disqualified from golden paths (`is_golden_path = False`).
+   - **Zero Hallucinated Fast-Paths:** Eliminated contradictory logic that synthesized noisy recovery steps into "fast paths". Evolution prompts now explicitly restrict noisy runs to recording anti-stall guardrails only.
+4. **Active Window Perception Telemetry & Multi-Webview Invariants:**
+   - `extra_screenshot` now returns `active_window_title` and `active_window_hwnd` alongside capture metadata, enabling agents to verify the active foreground window directly without guessing.
+   - Established the **Electron Multi-Webview Accessibility Invariant**: documented how Chromium-based apps retain background webview nodes in the OS UI Automation tree, preventing agents from falling into infinite tab-switching loops.
+   - Added drawing tool verification warnings to `extra_task_complete` to ensure low-level mouse stroke dispatch is not conflated with on-screen visual inking.
+5. **Ground-Truth Inking Verification & Anti-Hallucination Guardrails:**
+   - **Programmatic Ink Verification in `extra_stroke` & `extra_batch_actions`:** Real-time pre/post screen difference capture computing exact pixel deltas (`pixels_changed`). If hardware mouse strokes produce 0 visual change (e.g. pen tool not engaged or canvas unfocused), `extra_stroke` immediately fails with `GHOST STROKE DETECTED`, halting runaway blind actions.
+   - **Strict Inking Enforcement in `extra_task_complete`:** If stroke actions were executed during a session, `extra_task_complete` verifies cumulative `pixels_changed > 0`. If 0 visual pixels were deposited, completion is **unconditionally rejected** (`success: false, error: TASK COMPLETION REJECTED`), preventing AI agents from hallucinating or falsely asserting visual drawing completion.
+   - **StallBreaker 2-Strike Click Loop Breaker:** Updated `extra_click` to evaluate consecutive zero-change attempts against generalized action classes. When 2 consecutive clicks produce zero visible change anywhere on screen, `extra_click` immediately returns `success: false` with `STALL DETECTED`, forcing the agent to adapt rather than looping blindly.
+6. **Self-Healing Skill Library Curator & Automated Migration Engine:**
+   - **Automated Startup Migration:** Upon upgrading to v0.3.0, Extra runs a one-time migration (`ensure_startup_migration`) that purges legacy unhardened evolved lines and mock test skills across user directories.
+   - **MCP Tool `extra_curate_skills`:** Exposes on-demand skill library audits and sanitization over stdio transport.
+   - **CLI Tool `extra curate [--sanitize]`:** Provides command-line inspection and healing of discovered skill playbooks.
+   - **Universal Dynamic Path Discovery:** Replaced hardcoded host paths with dynamic cross-platform discovery (`get_default_skill_directories()`) covering project, workspace, and global user configs across macOS, Windows, and Linux.
+7. **Episodic Graph Memory (KùzuDB + FastEmbed):**
+   - On-device knowledge graph persisting past task workflows, artifacts, and known application quirks.
+   - Sub-2ms graph retrieval with in-memory caching for zero-contention reflex execution.
+8. **Scout & Web-to-API Self-Evolution:**
+   - Autonomous Chrome/Edge DevTools Protocol (CDP) network sniffer and session vaulting for automated reverse-engineering of slow web flows into permanent, instant API fast-paths.
+9. **Native Complete Uninstaller Subsystem (`extra uninstall`):**
+   - Native OS confirmation modal dialog with warning disclaimer and strict default button on **NO / Cancel** to prevent accidental uninstallation.
+   - Comprehensive clean-up: deregisters Extra from Claude Desktop, Antigravity (`agy`), Cursor, and Windsurf MCP configurations.
+   - Restores user environment: cleanly removes `~/.extra/bin` from User PATH (`HKCU\Environment\Path` on Windows / shell profiles on macOS).
+   - Detached self-purging: completely deletes the `~/.extra` directory (runtime, venv, KùzuDB memory databases, blueprints, checkpoints, and workspaces) after process termination.
+10. **100% Test Suite Pass Rate:**
+   - 1,948 tests executed with 1,941 passes, 7 platform-specific skips, 0 failures, and 0 errors.
+
+---
+
+
 # Extra Release Notes — v0.2.5
 
 **Release Date:** September 18, 2026  

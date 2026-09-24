@@ -57,10 +57,7 @@ BUILTIN_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "paint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "mspaint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "photos": {"target": "ms-photos:", "type": "uri", "proc": "Photos.exe"},
-    "blender": {"target": "blender.exe", "type": "exe", "proc": "blender.exe"},
-    "vlc": {"target": "vlc.exe", "type": "exe", "proc": "vlc.exe"},
     "store": {"target": "ms-windows-store:", "type": "uri", "proc": "WinStore.App.exe"},
-    "canva": {"target": "Canva.exe", "type": "exe", "proc": "Canva.exe"},
 }
 
 APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_APP_REGISTRY)
@@ -149,9 +146,49 @@ def get_registered_apps() -> Dict[str, Dict[str, str]]:
     return dict(APP_REGISTRY)
 
 
-# Cold-start merge of persistent user registry
+def load_seed_registry() -> Dict[str, Dict[str, str]]:
+    """Loads external application knowledge seeds into in-memory APP_REGISTRY."""
+    try:
+        paths = [
+            Path.home() / ".extra" / "knowledge_seeds.json",
+            Path(__file__).resolve().parent.parent.parent / "core" / "scout" / "knowledge_seeds.json",
+            Path(__file__).resolve().parent.parent.parent.parent / "assets" / "scout" / "knowledge_seeds.json",
+        ]
+        seeds = None
+        for p in paths:
+            if p.exists():
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        seeds = json.load(f)
+                    if seeds:
+                        break
+                except Exception:
+                    pass
+        if seeds:
+            for app_name, data in seeds.items():
+                clean = app_name.strip().lower()
+                if clean not in APP_REGISTRY:
+                    target = data.get("target", f"{clean}.exe")
+                    proc = data.get("proc", os.path.basename(target))
+                    app_type = data.get("type", "exe")
+                    APP_REGISTRY[clean] = {
+                        "target": target,
+                        "type": app_type,
+                        "proc": proc,
+                    }
+    except Exception:
+        pass
+    return APP_REGISTRY
+
+
+# Cold-start merge of persistent user registry and declarative knowledge seeds
 try:
     load_user_registry()
+except Exception:
+    pass
+
+try:
+    load_seed_registry()
 except Exception:
     pass
 
@@ -236,33 +273,87 @@ def resolve_executable(name: str, auto_register: bool = True) -> Optional[str]:
             register_app(clean_name, target=store_alias, proc=os.path.basename(store_alias), app_type="exe")
         return store_alias
 
-    # Check common 64-bit and 32-bit Program Files directories
-    program_candidates = [
+    # Universal Query 1: Windows App Paths Registry (HKLM & HKCU)
+    try:
+        import winreg
+        sub_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
+        for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(root, sub_key) as base_key:
+                    try:
+                        with winreg.OpenKey(base_key, target_exe) as app_key:
+                            val, _ = winreg.QueryValueEx(app_key, "")
+                            expanded = os.path.expandvars(val).strip('"')
+                            if os.path.exists(expanded):
+                                if auto_register and clean_name not in APP_REGISTRY:
+                                    register_app(clean_name, target=expanded, proc=os.path.basename(expanded), app_type="exe")
+                                return expanded
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Universal Query 2: Standard and vendor subdirectories via generic globs
+    import glob
+    base_dirs = [
         os.path.expandvars(rf"%ProgramFiles%\{target}\{target_exe}"),
         os.path.expandvars(rf"%ProgramFiles(x86)%\{target}\{target_exe}"),
         os.path.expandvars(rf"%LocalAppData%\Programs\{target}\{target_exe}"),
-        os.path.expandvars(r"%ProgramFiles%\VideoLAN\VLC\vlc.exe"),
-        os.path.expandvars(r"%ProgramFiles(x86)%\VideoLAN\VLC\vlc.exe"),
-        os.path.expandvars(r"%LocalAppData%\Programs\Canva\Canva.exe"),
-        os.path.expandvars(r"%ProgramFiles%\7-Zip\7zFM.exe"),
     ]
-    for cand in program_candidates:
-        if os.path.exists(cand) and (clean_name in cand.lower() or target_exe.lower() in cand.lower()):
+    for cand in base_dirs:
+        if os.path.exists(cand):
             if auto_register and clean_name not in APP_REGISTRY:
                 register_app(clean_name, target=cand, proc=os.path.basename(cand), app_type="exe")
             return cand
 
-    # Specific check for Blender Foundation installations
-    if clean_name == "blender" or target.lower() in ("blender", "blender.exe"):
-        import glob
-        blender_dirs = glob.glob(os.path.expandvars(r"%ProgramFiles%\Blender Foundation\Blender*\blender.exe"))
-        if blender_dirs:
-            resolved_blender = sorted(blender_dirs)[-1]
-            if auto_register and clean_name not in APP_REGISTRY:
-                register_app(clean_name, target=resolved_blender, proc=os.path.basename(resolved_blender), app_type="exe")
-            return resolved_blender
+    # Universal Query 3: Generic 1-level and 2-level shallow vendor globs
+    clean_target = clean_name.rstrip(".exe")
+    for parent in [r"%ProgramFiles%", r"%ProgramFiles(x86)%", r"%LocalAppData%\Programs"]:
+        b = os.path.expandvars(parent)
+        if not os.path.isdir(b):
+            continue
+        # Check standard vendor directories (e.g. Program Files/*/<target_exe>)
+        for m in glob.glob(os.path.join(b, "*", target_exe)):
+            if os.path.isfile(m):
+                if auto_register and clean_name not in APP_REGISTRY:
+                    register_app(clean_name, target=m, proc=os.path.basename(m), app_type="exe")
+                return m
+        # Check product directories (e.g. Program Files/*<target>*/*/<target_exe>)
+        for m in glob.glob(os.path.join(b, f"*{clean_target}*", "*", target_exe)):
+            if os.path.isfile(m):
+                if auto_register and clean_name not in APP_REGISTRY:
+                    register_app(clean_name, target=m, proc=os.path.basename(m), app_type="exe")
+                return m
 
     return target
+
+
+def _format_windows_cmdline_args(args: Optional[List[str]]) -> Tuple[List[str], Optional[str]]:
+    """
+    Cleans, strips accidental double-quoting, and escapes arguments
+    using Windows standard subprocess.list2cmdline() for ShellExecuteW.
+    Guarantees arguments with spaces (like '--profile-directory=Profile 3')
+    are safely quoted without splitting into invalid tokens (e.g. 0.0.0.3).
+    """
+    if not args:
+        return [], None
+
+    clean_args: List[str] = []
+    for a in args:
+        if a is None:
+            continue
+        s = str(a).strip()
+        # Handle accidental double-quoted strings like '"--profile-directory=Profile 3"'
+        if len(s) >= 2 and ((s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'"))):
+            inner = s[1:-1].strip()
+            if inner.count('"') % 2 == 0:
+                s = inner
+        clean_args.append(s)
+
+    params = subprocess.list2cmdline(clean_args) if clean_args else None
+    return clean_args, params
 
 
 def launch_app(
@@ -270,6 +361,7 @@ def launch_app(
     args: Optional[List[str]] = None,
     wait_for_window: bool = True,
     timeout: float = 3.0,
+    profile: Optional[str] = None,
 ) -> LaunchResult:
     """
     Deterministically launches an application or system tool on Windows.
@@ -297,24 +389,37 @@ def launch_app(
     if clean_app == "photos" and args and len(args) > 0:
         target = args[0]
         params = None
+        clean_args = []
     else:
-        # Auto-suppress browser crash recovery bubbles that steal focus and block keystrokes
-        if clean_app in ("edge", "msedge", "chrome"):
-            clean_args = list(args) if args else []
+        clean_args = list(args) if args else []
+        if profile:
+            profile_flag = f"--profile-directory={profile}"
+            if not any(a.startswith("--profile-directory") for a in clean_args):
+                clean_args.append(profile_flag)
+
+        # Universal Chromium browser crash recovery suppression
+        # Detects any Chromium-based browser via process type, binary name, or directory indicators
+        target_dir = os.path.dirname(target) if target else ""
+        is_chromium = (
+            (clean_app in APP_REGISTRY and APP_REGISTRY[clean_app].get("type") == "browser")
+            or any(b in target.lower() for b in ("edge", "chrome", "brave", "opera", "vivaldi", "arc"))
+            or (target_dir and os.path.exists(os.path.join(target_dir, "chrome_elf.dll")))
+        )
+        if is_chromium:
             suppress_flags = ["--hide-crash-restore-bubble", "--no-first-run"]
             for flag in reversed(suppress_flags):
                 if flag not in clean_args:
                     clean_args.insert(0, flag)
-            params = " ".join(clean_args)
-        else:
-            params = " ".join(args) if args else None
-    res = shell32.ShellExecuteW(None, "open", target, params, None, SW_SHOWNORMAL)
+
+        clean_args, params = _format_windows_cmdline_args(clean_args)
+
+    res = shell32.ShellExecuteW(None, "open", target, params, target_dir if target_dir else None, SW_SHOWNORMAL)
 
     # ShellExecute returns > 32 on success
     if res <= 32:
         # Fallback to subprocess.Popen if ShellExecute returned error code
         try:
-            cmd = [target] + (args or [])
+            cmd = [target] + clean_args
             proc = subprocess.Popen(cmd, shell=False)
             launched_pid = proc.pid
         except Exception as e:
@@ -389,12 +494,14 @@ class WindowsShellLauncher(AbstractShellLauncher):
         args: Optional[List[str]] = None,
         wait_for_window: bool = True,
         timeout: float = 5.0,
+        profile: Optional[str] = None,
     ) -> LaunchResult:
         return launch_app(
             app_name=app_name,
             args=args,
             wait_for_window=wait_for_window,
             timeout=timeout,
+            profile=profile,
         )
 
     def open_uri(self, uri: str) -> bool:

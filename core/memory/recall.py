@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from extra.core.memory.db import get_memory_connection
+from extra.core.memory.db import close_memory_db, get_memory_connection
 from extra.core.memory.embeddings import cosine_similarity, get_embedding
 
 logger = logging.getLogger("Extra-Memory-Recall")
@@ -123,6 +123,28 @@ def recall_memory(
 
             human_time = datetime.datetime.fromtimestamp(task["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
 
+            # Query Soul Decisions
+            try:
+                dec_res = conn.execute(
+                    """
+                    MATCH (t:Task {id: $id})-[:DECIDED]->(d:SoulDecision)
+                    RETURN d.decision_type, d.condition, d.result, d.confidence
+                    LIMIT 10
+                    """,
+                    {"id": t_id},
+                )
+                soul_decisions = []
+                while dec_res.has_next():
+                    dr = dec_res.get_next()
+                    soul_decisions.append({
+                        "decision_type": dr[0],
+                        "condition": dr[1],
+                        "result": dr[2],
+                        "confidence": dr[3],
+                    })
+            except Exception:
+                soul_decisions = []
+
             enriched_results.append({
                 "task_id": t_id,
                 "goal": task["goal"],
@@ -133,6 +155,7 @@ def recall_memory(
                 "apps": apps,
                 "artifacts": artifacts,
                 "key_steps": key_steps,
+                "soul_decisions": soul_decisions,
             })
 
         # 3. Query Quirks / Workarounds for relevant apps
@@ -172,3 +195,83 @@ def recall_memory(
             "memories": [],
             "error": str(ex),
         }
+
+
+_SOUL_DECISION_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+
+
+def clear_soul_decision_cache() -> None:
+    _SOUL_DECISION_CACHE.clear()
+
+
+def recall_soul_decision(
+    condition: str,
+    app_name: Optional[str] = None,
+    custom_db_path: Optional[Any] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Sub-2ms reflexive memory lookup for past SOUL decisions and app quirks.
+    Returns matching prior decision dict or None if no match found.
+    """
+    cond_clean = condition.strip().lower()
+    cache_key = f"{app_name or ''}:{cond_clean}"
+    if custom_db_path is None and cache_key in _SOUL_DECISION_CACHE:
+        return _SOUL_DECISION_CACHE[cache_key]
+
+    try:
+        conn = get_memory_connection(custom_db_path, max_retries=0)
+
+        # 1. Match against past SoulDecisions
+        res = conn.execute(
+            """
+            MATCH (d:SoulDecision)
+            WHERE lower(d.condition) = lower($cond)
+            RETURN d.decision_type, d.result, d.confidence, d.context
+            LIMIT 1
+            """,
+            {"cond": cond_clean},
+        )
+        if res.has_next():
+            row = res.get_next()
+            ret = {
+                "source": "prior_soul_decision",
+                "decision_type": row[0],
+                "result": row[1],
+                "confidence": float(row[2]),
+                "context": row[3],
+            }
+            if custom_db_path is None:
+                _SOUL_DECISION_CACHE[cache_key] = ret
+            return ret
+
+        # 2. Match against AppQuirk if app_name given
+        if app_name:
+            q_res = conn.execute(
+                """
+                MATCH (a:App)-[:EXHIBITS]->(q:AppQuirk)
+                WHERE lower(a.name) = lower($app_name) AND (lower(q.issue) CONTAINS lower($cond) OR lower(q.playbook) CONTAINS lower($cond))
+                RETURN q.issue, q.workaround, q.playbook
+                LIMIT 1
+                """,
+                {"app_name": app_name.strip(), "cond": cond_clean},
+            )
+            if q_res.has_next():
+                q_row = q_res.get_next()
+                ret = {
+                    "source": "app_quirk_memory",
+                    "decision_type": "boolean",
+                    "result": q_row[1],
+                    "confidence": 0.92,
+                    "context": f"Issue: {q_row[0]} | Workaround: {q_row[1]}",
+                }
+                if custom_db_path is None:
+                    _SOUL_DECISION_CACHE[cache_key] = ret
+                return ret
+        if custom_db_path is None:
+            _SOUL_DECISION_CACHE[cache_key] = None
+    except Exception as ex:
+        logger.debug("recall_soul_decision lookup skipped: %s", ex)
+        if custom_db_path is None:
+            _SOUL_DECISION_CACHE[cache_key] = None
+    return None
+

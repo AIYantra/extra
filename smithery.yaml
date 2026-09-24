@@ -6,7 +6,7 @@ description: Flashless macOS & Windows native computer-use engine for AI vision,
 homepage: https://extra.yantraos.com
 repository: https://github.com/AIYantra/extra
 license: MIT
-version: "0.2.5"
+version: "0.3.0"
 
 startCommand:
   type: stdio

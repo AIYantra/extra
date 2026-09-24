@@ -8,12 +8,21 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+import math
+import random
 import time
 from typing import List, Optional, Tuple, Union
 
 import win32clipboard
 import win32con
 
+from extra.core.motion import (
+    apply_jitter,
+    generate_bezier_path,
+    generate_stroke_path,
+    generate_windmouse_path,
+    FittsProfiler,
+)
 from extra.core.platform.base import AbstractInputEngine
 from extra.core.platform.windows.geometry import (
     attach_input_desktop,
@@ -348,6 +357,108 @@ def mouse_up(button: str = "left") -> None:
     _send_inputs([inp])
 
 
+def smooth_mouse_move(
+    x: int,
+    y: int,
+    speed: str = "normal",
+    style: str = "bezier",
+    monitor_index: int = 0,
+    overshoot: bool = True,
+    notify: bool = True,
+) -> None:
+    """
+    Glides the mouse cursor to physical coordinates (x, y) along a human-like biomechanical trajectory.
+    Uses Bézier arcs or WindMouse physics, Fitts's Law Minimum Jerk velocity profiling,
+    micro-jitter, and optional natural overshoot/correction.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    target_x, target_y = clamp_coordinates(x, y, monitor_index)
+
+    start_x, start_y = get_cursor_position()
+    distance = math.hypot(target_x - start_x, target_y - start_y)
+
+    if distance < 3.0:
+        mouse_move(target_x, target_y, monitor_index=monitor_index, notify=notify)
+        return
+
+    if style.lower() == "windmouse":
+        speed_factor = 1.0 if speed == "normal" else (0.55 if speed == "fast" else 1.8)
+        scheduled_steps = generate_windmouse_path(
+            (start_x, start_y),
+            (target_x, target_y),
+            gravity=9.0,
+            wind=3.0,
+            min_wait=0.002 * speed_factor,
+            max_wait=0.008 * speed_factor,
+            max_step=16.0 if speed == "fast" else (10.0 if speed == "normal" else 6.0),
+        )
+    else:  # "bezier"
+        duration = FittsProfiler.calculate_duration(distance, speed=speed)
+        ox_pt = FittsProfiler.generate_overshoot((start_x, start_y), (target_x, target_y), distance) if overshoot else None
+        if ox_pt:
+            steps1 = max(10, int(distance / 25))
+            path1 = generate_bezier_path((start_x, start_y), ox_pt, steps=steps1, deviation_factor=0.20)
+            path2 = generate_bezier_path(ox_pt, (target_x, target_y), steps=5, deviation_factor=0.10)
+            full_path = path1 + path2[1:]
+        else:
+            steps_count = max(12, min(50, int(distance / 18)))
+            full_path = generate_bezier_path((start_x, start_y), (target_x, target_y), steps=steps_count)
+
+        full_path = apply_jitter(full_path, amplitude=1.0, frequency=0.35)
+        scheduled_steps = FittsProfiler.schedule_path(full_path, total_duration=duration)
+
+    for px, py, delay in scheduled_steps:
+        cx, cy = clamp_coordinates(px, py, monitor_index)
+        user32.SetCursorPos(cx, cy)
+        time.sleep(delay)
+
+    user32.SetCursorPos(target_x, target_y)
+    if notify:
+        _notify_indicator("move", target_x, target_y, monitor_index)
+
+
+def mouse_stroke(
+    points: List[Tuple[int, int]],
+    button: str = "left",
+    duration: float = 1.0,
+    smooth: bool = True,
+    monitor_index: int = 0,
+) -> None:
+    """
+    Executes a continuous smooth brush stroke across multiple waypoints while holding button.
+    Essential for Canva drawing, MS Paint sketching, and timeline scrubbing.
+    """
+    if not points:
+        return
+
+    ensure_dpi_aware()
+    attach_input_desktop()
+
+    clamped_pts = [clamp_coordinates(p[0], p[1], monitor_index) for p in points]
+    if len(clamped_pts) == 1:
+        mouse_click(clamped_pts[0][0], clamped_pts[0][1], button=button, monitor_index=monitor_index)
+        return
+
+    start_x, start_y = clamped_pts[0]
+    mouse_move(start_x, start_y, monitor_index=monitor_index, notify=False)
+    time.sleep(0.02)
+
+    mouse_down(button)
+    time.sleep(0.02)
+
+    scheduled = generate_stroke_path(clamped_pts, duration=duration, smooth=smooth)
+    for px, py, delay in scheduled:
+        cx, cy = clamp_coordinates(px, py, monitor_index)
+        mouse_move(cx, cy, monitor_index=monitor_index, notify=False)
+        time.sleep(delay)
+
+    time.sleep(0.02)
+    mouse_up(button)
+    last_x, last_y = clamped_pts[-1]
+    _notify_indicator("drag", last_x, last_y, monitor_index)
+
+
 def mouse_click(
     x: Optional[int] = None,
     y: Optional[int] = None,
@@ -355,21 +466,31 @@ def mouse_click(
     clicks: int = 1,
     interval: float = 0.05,
     monitor_index: int = 0,
+    human_like: bool = False,
+    speed: str = "normal",
 ) -> None:
     """
     Executes a hardware-level mouse click (single, double, or triple)
     at the designated physical coordinates.
+    If human_like=True, glides to target via Bézier trajectory with natural reaction delay.
     """
     if x is not None and y is not None:
-        mouse_move(x, y, monitor_index, notify=False)
-        time.sleep(0.01)
+        if human_like:
+            smooth_mouse_move(x, y, speed=speed, monitor_index=monitor_index, notify=False)
+            time.sleep(random.uniform(0.03, 0.07))
+        else:
+            mouse_move(x, y, monitor_index, notify=False)
+            time.sleep(0.01)
 
     target_x, target_y = (x, y) if x is not None else get_cursor_position()
     _notify_indicator("click", target_x, target_y, monitor_index)
 
     for i in range(clicks):
         mouse_down(button)
-        time.sleep(0.01)
+        if human_like:
+            time.sleep(random.uniform(0.06, 0.10))
+        else:
+            time.sleep(0.01)
         mouse_up(button)
         if i < clicks - 1:
             time.sleep(interval)
@@ -389,8 +510,20 @@ def mouse_drag(
     steps: int = 15,
     duration: float = 0.2,
     monitor_index: int = 0,
+    human_like: bool = False,
+    style: str = "bezier",
 ) -> None:
     """Performs a smooth click-and-drag from start to end coordinates."""
+    if human_like:
+        mouse_stroke(
+            [(start_x, start_y), (end_x, end_y)],
+            button=button,
+            duration=duration,
+            smooth=False,
+            monitor_index=monitor_index,
+        )
+        return
+
     mouse_move(start_x, start_y, monitor_index)
     time.sleep(0.02)
     mouse_down(button)
@@ -515,6 +648,40 @@ class WindowsInputEngine(AbstractInputEngine):
             monitor_index=monitor_index,
         )
 
+    def smooth_mouse_move(
+        self,
+        x: int,
+        y: int,
+        speed: str = "normal",
+        style: str = "bezier",
+        monitor_index: int = 0,
+        overshoot: bool = True,
+    ) -> None:
+        smooth_mouse_move(
+            x=x,
+            y=y,
+            speed=speed,
+            style=style,
+            monitor_index=monitor_index,
+            overshoot=overshoot,
+        )
+
+    def mouse_stroke(
+        self,
+        points: List[Tuple[int, int]],
+        button: str = "left",
+        duration: float = 1.0,
+        smooth: bool = True,
+        monitor_index: int = 0,
+    ) -> None:
+        mouse_stroke(
+            points=points,
+            button=button,
+            duration=duration,
+            smooth=smooth,
+            monitor_index=monitor_index,
+        )
+
     def mouse_scroll(self, delta: int, horizontal: bool = False) -> None:
         mouse_scroll(delta=delta, horizontal=horizontal)
 
@@ -527,93 +694,333 @@ class WindowsInputEngine(AbstractInputEngine):
     def atomic_clipboard_paste(self, text: str) -> None:
         atomic_clipboard_paste(text=text)
 
-    def execute_batch_actions(self, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
-        return execute_batch_actions(actions=actions)
+    def execute_batch_actions(
+        self, actions: List[Dict[str, Any]], auto_settle: bool = True
+    ) -> Dict[str, Any]:
+        return execute_batch_actions(actions=actions, auto_settle=auto_settle)
 
 
-def execute_batch_actions(actions: List[Dict[str, Any]]) -> Dict[str, Any]:
+def execute_batch_actions(
+    actions: List[Dict[str, Any]], auto_settle: bool = True, max_depth: int = 5
+) -> Dict[str, Any]:
     """
     Executes an atomic list of hardware actions sequentially with sub-millisecond dispatch.
     Eliminates multi-turn LLM network round-trips for compound workflows.
+    Enhanced with SOUL (System One Ultra-fast Layer) for dynamic branching ('eval', 'assert', 'wait_for_state').
     """
     t0 = time.perf_counter()
     executed: List[Dict[str, Any]] = []
+    batch_error: Dict[str, Any] = {}
 
-    for idx, act in enumerate(actions):
-        atype = str(act.get("action", act.get("type", ""))).lower().strip()
-        if not atype:
-            continue
+    def _get_active_context(explicit_ctx: Optional[Union[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+        ctx: Dict[str, Any] = {}
+        if isinstance(explicit_ctx, dict):
+            ctx.update(explicit_ctx)
+        elif isinstance(explicit_ctx, str):
+            ctx["text"] = explicit_ctx
 
-        step_t0 = time.perf_counter()
-        if atype in ("hotkey", "shortcut"):
-            keys = act.get("keys", [])
-            if isinstance(keys, str):
-                keys = [keys]
-            send_hotkey(keys)
-            step_dur = (time.perf_counter() - step_t0) * 1000.0
-            executed.append({"index": idx, "action": "hotkey", "keys": keys, "duration_ms": round(step_dur, 2)})
+        if "window_title" not in ctx:
+            try:
+                from extra.core.focus import get_foreground_window
+                fg = get_foreground_window()
+                if fg:
+                    ctx["window_title"] = fg.title
+                    ctx["process_name"] = fg.process_name
+            except Exception:
+                pass
+        return ctx
 
-        elif atype in ("type", "text", "input"):
-            text = str(act.get("text", ""))
-            press_enter = bool(act.get("press_enter", False))
-            instant_type(text, press_enter=press_enter)
-            step_dur = (time.perf_counter() - step_t0) * 1000.0
-            executed.append({"index": idx, "action": "type", "length": len(text), "press_enter": press_enter, "duration_ms": round(step_dur, 2)})
+    def _execute_sub_list(action_list: List[Dict[str, Any]], depth: int = 0) -> bool:
+        if depth > max_depth:
+            logger.warning("Max recursion depth (%d) exceeded in batch action eval", max_depth)
+            return True
 
-        elif atype in ("click", "mouse_click"):
-            x = int(act.get("x", 0))
-            y = int(act.get("y", 0))
-            btn = str(act.get("button", "left"))
-            clicks = int(act.get("clicks", 1))
-            mouse_click(x, y, button=btn, clicks=clicks)
-            step_dur = (time.perf_counter() - step_t0) * 1000.0
-            executed.append({"index": idx, "action": "click", "x": x, "y": y, "button": btn, "duration_ms": round(step_dur, 2)})
+        for act in action_list:
+            atype = str(act.get("action", act.get("type", ""))).lower().strip()
+            if not atype:
+                continue
 
-        elif atype in ("double_click", "dblclick"):
-            x = int(act.get("x", 0))
-            y = int(act.get("y", 0))
-            mouse_double_click(x, y)
-            step_dur = (time.perf_counter() - step_t0) * 1000.0
-            executed.append({"index": idx, "action": "double_click", "x": x, "y": y, "duration_ms": round(step_dur, 2)})
+            step_t0 = time.perf_counter()
+            current_index = len(executed)
 
-        elif atype in ("focus", "activate"):
-            title = act.get("window_title")
-            hwnd = act.get("hwnd")
-            from extra.core.focus import find_window_by_title, force_activate_window
-            success = False
-            if hwnd:
-                success = force_activate_window(int(hwnd))
-            elif title:
-                win = find_window_by_title(str(title), timeout=2.0)
-                if win:
-                    success = force_activate_window(win.hwnd)
-            step_dur = (time.perf_counter() - step_t0) * 1000.0
-            executed.append({"index": idx, "action": "focus", "target": title or hwnd, "success": success, "duration_ms": round(step_dur, 2)})
+            # ── SOUL Reflexive Actions ─────────────────────────────────────
+            if atype in ("eval", "condition", "branch"):
+                condition = str(act.get("condition", act.get("query", "")))
+                if_true = act.get("if_true", act.get("then", []))
+                if_false = act.get("if_false", act.get("else", []))
+                explicit_ctx = act.get("context")
 
-        elif atype in ("sleep", "wait", "pause"):
-            if "seconds" in act:
-                ms = int(float(act["seconds"]) * 1000)
+                from extra.core.soul import get_soul_decider
+                decider = get_soul_decider()
+                ctx = _get_active_context(explicit_ctx)
+
+                eval_t0 = time.perf_counter()
+                decision = decider.decide_boolean(condition, context=ctx)
+                eval_dur = (time.perf_counter() - eval_t0) * 1000.0
+
+                branch_name = "if_true" if decision.result else "if_false"
+                branch_actions = if_true if decision.result else if_false
+
+                executed.append({
+                    "index": current_index,
+                    "action": "eval",
+                    "condition": condition,
+                    "result": decision.result,
+                    "confidence": decision.confidence,
+                    "branch": branch_name,
+                    "sub_actions_count": len(branch_actions) if isinstance(branch_actions, list) else 0,
+                    "duration_ms": round(eval_dur, 2),
+                })
+
+                if isinstance(branch_actions, list) and branch_actions:
+                    ok = _execute_sub_list(branch_actions, depth=depth + 1)
+                    if not ok:
+                        return False
+
+            elif atype in ("assert", "check"):
+                condition = str(act.get("condition", act.get("query", "")))
+                on_fail = str(act.get("on_fail", "abort")).lower()
+                max_retries = int(act.get("max_retries", 2))
+                retry_actions = act.get("retry_actions", [])
+                explicit_ctx = act.get("context")
+
+                from extra.core.soul import get_soul_decider
+                decider = get_soul_decider()
+
+                passed = False
+                for attempt in range(max_retries + 1):
+                    ctx = _get_active_context(explicit_ctx)
+                    decision = decider.decide_boolean(condition, context=ctx)
+                    if decision.result:
+                        passed = True
+                        break
+                    if attempt < max_retries and isinstance(retry_actions, list) and retry_actions:
+                        _execute_sub_list(retry_actions, depth=depth + 1)
+
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "assert",
+                    "condition": condition,
+                    "passed": passed,
+                    "on_fail": on_fail,
+                    "duration_ms": round(step_dur, 2),
+                })
+
+                if not passed:
+                    if on_fail == "abort":
+                        batch_error["error"] = f"Assertion failed on condition: '{condition}'"
+                        return False
+
+            elif atype in ("wait_for_state", "wait_until", "poll_state"):
+                condition = str(act.get("condition", act.get("query", "")))
+                timeout_ms = int(act.get("timeout_ms", 2000))
+                poll_interval_ms = int(act.get("poll_interval_ms", 50))
+                target_state = bool(act.get("target_state", True))
+                explicit_ctx = act.get("context")
+
+                from extra.core.soul import get_soul_decider
+                decider = get_soul_decider()
+
+                t_start = time.perf_counter()
+                satisfied = False
+                while (time.perf_counter() - t_start) * 1000.0 < timeout_ms:
+                    ctx = _get_active_context(explicit_ctx)
+                    decision = decider.decide_boolean(condition, context=ctx)
+                    if decision.result == target_state:
+                        satisfied = True
+                        break
+                    time.sleep(poll_interval_ms / 1000.0)
+
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "wait_for_state",
+                    "condition": condition,
+                    "satisfied": satisfied,
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            # ── Standard Hardware Actions ──────────────────────────────────
+            elif atype in ("hotkey", "shortcut"):
+                keys = act.get("keys", [])
+                if isinstance(keys, str):
+                    keys = [keys]
+                send_hotkey(keys)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({"index": current_index, "action": "hotkey", "keys": keys, "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("type", "text", "input"):
+                text = str(act.get("text", ""))
+                press_enter = bool(act.get("press_enter", False))
+                instant_type(text, press_enter=press_enter)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({"index": current_index, "action": "type", "length": len(text), "press_enter": press_enter, "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("move", "mouse_move", "hover"):
+                x = int(act.get("x", 0))
+                y = int(act.get("y", 0))
+                human = bool(act.get("human_like", False))
+                speed = str(act.get("speed", "normal"))
+                style = str(act.get("style", "bezier"))
+                if human:
+                    smooth_mouse_move(x, y, speed=speed, style=style)
+                else:
+                    mouse_move(x, y)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({"index": current_index, "action": "move", "x": x, "y": y, "human_like": human, "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("stroke", "draw", "brush", "mouse_stroke"):
+                pts = act.get("points", [])
+                pts_file = act.get("points_file")
+                if not pts and pts_file and os.path.isfile(pts_file):
+                    try:
+                        with open(pts_file, "r", encoding="utf-8") as pf:
+                            pts = json.load(pf)
+                    except Exception:
+                        pass
+                btn = str(act.get("button", "left"))
+                dur = float(act.get("duration", 1.0))
+                sm = bool(act.get("smooth", True))
+                pts_tuples = [(int(p[0]), int(p[1])) for p in pts if len(p) >= 2]
+                if pts_tuples:
+                    mouse_stroke(pts_tuples, button=btn, duration=dur, smooth=sm)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({"index": current_index, "action": "stroke", "point_count": len(pts_tuples), "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("click", "mouse_click"):
+                target = act.get("target", act.get("query"))
+                if target and ("x" not in act and "y" not in act):
+                    from extra.core.soul import visual_ground
+                    ground_res = visual_ground(query=str(target))
+                    if ground_res.matched and ground_res.screen_point:
+                        x, y = ground_res.screen_point
+                    else:
+                        x, y = int(act.get("x", 0)), int(act.get("y", 0))
+                else:
+                    x = int(act.get("x", 0))
+                    y = int(act.get("y", 0))
+
+                btn = str(act.get("button", "left"))
+                clicks = int(act.get("clicks", 1))
+                human = bool(act.get("human_like", False))
+                speed = str(act.get("speed", "normal"))
+                if human or speed != "normal":
+                    mouse_click(x, y, button=btn, clicks=clicks, human_like=human, speed=speed)
+                else:
+                    mouse_click(x, y, button=btn, clicks=clicks)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                exec_item = {"index": current_index, "action": "click", "x": x, "y": y, "button": btn, "human_like": human, "duration_ms": round(step_dur, 2)}
+                if target:
+                    exec_item["grounded_target"] = str(target)
+                executed.append(exec_item)
+
+            elif atype in ("double_click", "dblclick"):
+                x = int(act.get("x", 0))
+                y = int(act.get("y", 0))
+                mouse_double_click(x, y)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({"index": current_index, "action": "double_click", "x": x, "y": y, "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("focus", "activate"):
+                title = act.get("window_title")
+                hwnd = act.get("hwnd")
+                from extra.core.focus import find_window_by_title, force_activate_window, get_foreground_window
+                target_hwnd = int(hwnd) if hwnd else None
+                success = False
+                if not target_hwnd and title:
+                    win = find_window_by_title(str(title), timeout=2.0)
+                    if win:
+                        target_hwnd = win.hwnd
+
+                if target_hwnd:
+                    success = force_activate_window(target_hwnd)
+
+                # Tier 2 Closed-Loop Focus Verification
+                verified_focus = False
+                active_hwnd = None
+                active_title = ""
+                try:
+                    fg = get_foreground_window()
+                    if fg:
+                        active_hwnd = fg.hwnd
+                        active_title = fg.title
+                        if target_hwnd and fg.hwnd == target_hwnd:
+                            verified_focus = True
+                        elif title and str(title).lower() in fg.title.lower():
+                            verified_focus = True
+                except Exception:
+                    pass
+
+                # If focus not verified, attempt one fast fallback activation
+                if not verified_focus and target_hwnd:
+                    time.sleep(0.04)
+                    force_activate_window(target_hwnd)
+                    try:
+                        fg = get_foreground_window()
+                        if fg and (fg.hwnd == target_hwnd or (title and str(title).lower() in fg.title.lower())):
+                            verified_focus = True
+                            active_hwnd = fg.hwnd
+                            active_title = fg.title
+                    except Exception:
+                        pass
+
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "focus",
+                    "target": title or hwnd,
+                    "success": success and verified_focus,
+                    "verified_focus": verified_focus,
+                    "active_hwnd": active_hwnd,
+                    "active_title": active_title,
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("sleep", "wait", "pause"):
+                if "seconds" in act:
+                    ms = int(float(act["seconds"]) * 1000)
+                else:
+                    ms = int(act.get("ms", act.get("duration_ms", act.get("delay", act.get("delay_ms", act.get("duration", 100))))))
+                time.sleep(ms / 1000.0)
+                executed.append({"index": current_index, "action": "sleep", "ms": ms})
+
+            elif atype in ("scroll", "wheel"):
+                clicks = int(act.get("clicks", 1))
+                direction = str(act.get("direction", "vertical"))
+                mouse_scroll(delta=clicks * 120, horizontal=(direction.lower() == "horizontal"))
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({"index": current_index, "action": "scroll", "clicks": clicks, "direction": direction, "duration_ms": round(step_dur, 2)})
+
+            # Tier 1 In-Memory Visual Settle / Physical Action Delay
+            if "settle_ms" in act:
+                time.sleep(int(act["settle_ms"]) / 1000.0)
+            elif auto_settle and atype in ("click", "double_click", "focus", "activate", "hotkey", "scroll"):
+                try:
+                    from extra.core.soul.gateman import wait_until_settled
+                    # Fast perceptual settle check (< 15ms if stable, up to 400ms if transitioning)
+                    settle_res = wait_until_settled(timeout_sec=0.4, settle_frames=2, check_interval_ms=15)
+                    if executed:
+                        executed[-1]["settled"] = settle_res.get("settled", True)
+                        executed[-1]["settle_ms"] = round(settle_res.get("duration_ms", 0.0), 2)
+                except Exception:
+                    time.sleep(0.02)
             else:
-                ms = int(act.get("ms", act.get("duration_ms", act.get("delay", act.get("delay_ms", act.get("duration", 100))))))
-            time.sleep(ms / 1000.0)
-            executed.append({"index": idx, "action": "sleep", "ms": ms})
+                default_settle = 0 if atype in ("eval", "condition", "branch", "assert", "check", "wait_for_state", "wait_until", "poll_state", "sleep", "wait", "pause") else 30
+                if default_settle > 0:
+                    time.sleep(default_settle / 1000.0)
 
-        elif atype in ("scroll", "wheel"):
-            clicks = int(act.get("clicks", 1))
-            direction = str(act.get("direction", "vertical"))
-            mouse_scroll(delta=clicks * 120, horizontal=(direction.lower() == "horizontal"))
-            step_dur = (time.perf_counter() - step_t0) * 1000.0
-            executed.append({"index": idx, "action": "scroll", "clicks": clicks, "direction": direction, "duration_ms": round(step_dur, 2)})
+        return True
 
-        # Settle delay between steps
-        delay_between = int(act.get("settle_ms", 30))
-        if delay_between > 0:
-            time.sleep(delay_between / 1000.0)
+    _execute_sub_list(actions, depth=0)
 
     total_ms = (time.perf_counter() - t0) * 1000.0
-    return {
-        "success": True,
+    result_dict: Dict[str, Any] = {
+        "success": not bool(batch_error),
         "executed_count": len(executed),
         "total_duration_ms": round(total_ms, 2),
         "actions": executed,
     }
+    if batch_error:
+        result_dict.update(batch_error)
+    return result_dict

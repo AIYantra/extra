@@ -5,7 +5,7 @@
   "description": "Flashless macOS & Windows native computer-use engine for Claude, Antigravity, Cursor, and Windsurf. Sub-10ms desktop perception and interaction via ScreenCaptureKit, CoreGraphics, DXGI, and AXUIElement.",
   "homepage": "https://extra.yantraos.com",
   "repository": "https://github.com/AIYantra/extra",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "license": "MIT",
   "categories": [
     "computer-use",
@@ -27,6 +27,7 @@
     "macos": "curl -sSL https://extra.yantraos.com/install.sh | bash",
     "windows": "irm https://extra.yantraos.com/install.ps1 | iex",
     "brew": "brew install aiyantra/extra/extra",
-    "pypi": "pip install extra-desktop"
+    "pypi": "pip install extra-desktop",
+    "npm": "npx -y @yantraos/extra-desktop"
   }
 }

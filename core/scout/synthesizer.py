@@ -103,23 +103,33 @@ def scout_and_generate_skill(
 
     # Determine output directories
     target_dirs: List[Path] = []
+    user_home = Path.home()
 
     # 1. Local workspace .agents/skills/
-    workspace_skills = Path("D:/yantra_workspace/.agents/skills") / skill_dir_name
-    target_dirs.append(workspace_skills)
+    if (Path.cwd() / ".agents").exists():
+        target_dirs.append(Path.cwd() / ".agents" / "skills" / skill_dir_name)
+    elif (Path.cwd().parent / ".agents").exists():
+        target_dirs.append(Path.cwd().parent / ".agents" / "skills" / skill_dir_name)
+    else:
+        target_dirs.append(user_home / ".agents" / "skills" / skill_dir_name)
 
     # 2. Global user config .gemini/config/skills/
-    user_gemini_skills = Path(os.path.expandvars(r"%USERPROFILE%\.gemini\config\skills")) / skill_dir_name
-    target_dirs.append(user_gemini_skills)
+    target_dirs.append(user_home / ".gemini" / "config" / "skills" / skill_dir_name)
 
     # 3. Extra local skills repo
-    extra_local_skills = Path(os.path.expandvars(r"%USERPROFILE%\.extra\skills")) / skill_dir_name
-    target_dirs.append(extra_local_skills)
+    target_dirs.append(user_home / ".extra" / "skills" / skill_dir_name)
+
 
     # Check if already generated and force_refresh is False
     if not force_refresh and all((d / "SKILL.md").exists() for d in target_dirs if d.parent.exists()):
         primary_file = target_dirs[0] / "SKILL.md"
         if primary_file.exists():
+            try:
+                from extra.core.platform.windows.shell import register_app, APP_REGISTRY
+                if clean_name not in APP_REGISTRY:
+                    register_app(clean_name, target=f"{clean_name}.exe", proc=f"{clean_name}.exe", app_type="exe")
+            except Exception:
+                pass
             return {
                 "status": "cached",
                 "app_name": app_name,
@@ -163,6 +173,14 @@ def scout_and_generate_skill(
         )
     except Exception as e:
         logger.debug("Memory ingestion during scout skipped or deferred: %s", e)
+
+    # 6. Automatic Shell Registry Integration During Scout (TASK-120)
+    try:
+        from extra.core.platform.windows.shell import register_app
+        target_path = profile.executable_path or f"{clean_name}.exe"
+        register_app(clean_name, target=target_path, proc=os.path.basename(target_path), app_type="exe")
+    except Exception as e:
+        logger.debug("Shell registry auto-integration during scout skipped: %s", e)
 
     return {
         "status": "generated",

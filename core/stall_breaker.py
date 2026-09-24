@@ -13,7 +13,7 @@ import ctypes
 from dataclasses import dataclass
 from enum import Enum
 import sys
-from typing import Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import imagehash
 import numpy as np
@@ -57,6 +57,10 @@ class ActionOutcome:
     pixel_diff: float
     window_changed: bool
     message: str
+    cognitive_state: str = "NORMAL_PROGRESS"
+    recommended_action: Optional[str] = None
+    is_spinner_detected: bool = False
+    is_modal_blocked: bool = False
 
 
 class StallBreaker:
@@ -80,10 +84,82 @@ class StallBreaker:
         self._last_hash: Optional[imagehash.ImageHash] = None
         self._last_hwnd: Optional[int] = None
         self._last_action: Optional[str] = None
+        self._recent_diffs: List[int] = []
+        self._last_cognitive_state: str = "NORMAL_PROGRESS"
 
     @property
     def current_strikes(self) -> int:
         return self._current_strikes
+
+    def classify_cognitive_state(
+        self,
+        hwnd: Optional[int] = None,
+        window_title: Optional[str] = None,
+        context_text: Optional[str] = None,
+        phash_diff: int = 0,
+        pixel_diff: float = 0.0,
+    ) -> Tuple[str, Optional[str]]:
+        """
+        Queries SOUL (System One Ultra-fast Layer) to categorize the active application state:
+        - 'APP_CRASHED': Unresponsive message loop (Win32 IsHungAppWindow).
+        - 'MODAL_BLOCKED': Active modal or confirmation dialog intercepting input.
+        - 'SPINNER_BLOCKED': Ongoing loading spinner or indeterminate progress animation.
+        - 'ZERO_CHANGE': Purely static unchanged state.
+        - 'NORMAL_PROGRESS': Active and responding.
+        """
+        # 1. Hardware-level hung window check (Win32 IsHungAppWindow in 0.01ms)
+        if hwnd and user32 is not None and hasattr(user32, "IsHungAppWindow"):
+            try:
+                if bool(user32.IsHungAppWindow(hwnd)):
+                    return "APP_CRASHED", "Target application is not responding (hung message loop). Kill or restart process."
+            except Exception:
+                pass
+
+        # 2. Gather desktop context
+        title = window_title or ""
+        if not title:
+            try:
+                from extra.core.focus import get_foreground_window
+                fg = get_foreground_window()
+                if fg:
+                    title = fg.title
+            except Exception:
+                pass
+
+        ctx_dict: Dict[str, Any] = {
+            "window_title": title,
+            "phash_diff": phash_diff,
+            "pixel_diff": round(pixel_diff, 2),
+        }
+        if context_text:
+            ctx_dict["context"] = context_text
+
+        # 3. SOUL Reflexive Evaluation
+        try:
+            from extra.core.soul import get_soul_decider
+            decider = get_soul_decider()
+
+            candidates = [
+                "NORMAL_PROGRESS",
+                "SPINNER_BLOCKED",
+                "MODAL_BLOCKED",
+                "ZERO_CHANGE",
+            ]
+            query = f"Classify state of window '{title}'. Visual diff: phash={phash_diff}, pixel={pixel_diff:.2f}."
+            decision = decider.decide_choice(query, candidates, context=ctx_dict)
+            state = str(decision.result)
+
+            recommendation: Optional[str] = None
+            if state == "SPINNER_BLOCKED":
+                recommendation = "Application is in a loading/spinner state. Avoid repeating clicks; wait for completion or send Escape."
+            elif state == "MODAL_BLOCKED":
+                recommendation = f"A modal dialog ('{title}') is blocking interaction. Dismiss with Escape or target dialog controls."
+            elif state == "ZERO_CHANGE":
+                recommendation = "Action produced no visible effect. Try alternative shortcuts, scrolling, or different coordinates."
+
+            return state, recommendation
+        except Exception:
+            return "ZERO_CHANGE", "Action produced no visible change."
 
     def check_safety_abort(self) -> None:
         """
@@ -165,6 +241,8 @@ class StallBreaker:
         h_before = imagehash.phash(before_image)
         h_after = imagehash.phash(after_image)
         phash_diff = abs(h_before - h_after)
+        self._recent_diffs.append(phash_diff)
+        self._recent_diffs = self._recent_diffs[-5:]
 
         # 3. Compute structural pixel delta on ROI
         arr_before = np.asarray(before_image, dtype=np.int16)
@@ -194,6 +272,38 @@ class StallBreaker:
 
         has_state_change = has_visual_delta or window_changed
 
+        # 5. SOUL Cognitive Stall Analysis (Detects Spinner Loops, Modal Traps, & Crashes)
+        is_potential_spinner = (
+            not window_changed
+            and 0 < phash_diff <= 8
+            and pixel_diff <= 3.0
+            and len(self._recent_diffs) >= 2
+            and all(0 < d <= 8 for d in self._recent_diffs[-2:])
+        )
+
+        cognitive_state = "NORMAL_PROGRESS"
+        recommended_action: Optional[str] = None
+        is_spinner = False
+        is_modal = False
+
+        if not has_visual_delta or is_potential_spinner or self._current_strikes >= 1:
+            cog_state, cog_rec = self.classify_cognitive_state(
+                hwnd=after_hwnd or before_hwnd,
+                phash_diff=phash_diff,
+                pixel_diff=full_pixel_diff if global_changed else pixel_diff,
+            )
+            cognitive_state = cog_state
+            recommended_action = cog_rec
+            self._last_cognitive_state = cog_state
+
+            if cog_state == "SPINNER_BLOCKED":
+                is_spinner = True
+                has_state_change = False  # Override: spinner churning is NOT true progression!
+            elif cog_state == "MODAL_BLOCKED":
+                is_modal = True
+            elif cog_state == "APP_CRASHED":
+                has_state_change = False
+
         if has_state_change:
             # Action had visible effect: reset strikes
             self._current_strikes = 0
@@ -212,6 +322,10 @@ class StallBreaker:
                 pixel_diff=round(full_pixel_diff if global_changed else pixel_diff, 3),
                 window_changed=window_changed,
                 message=msg,
+                cognitive_state=cognitive_state,
+                recommended_action=recommended_action,
+                is_spinner_detected=is_spinner,
+                is_modal_blocked=is_modal,
             )
         else:
             # Action produced NO visual or window change
@@ -222,7 +336,23 @@ class StallBreaker:
                 self._current_strikes += 1
 
             self._last_action = action_name
-            if self._current_strikes >= self.max_strikes:
+
+            if cognitive_state == "APP_CRASHED":
+                status = StallStatus.STALLED
+                message = f"APPLICATION CRASH DETECTED: Window '{after_hwnd or before_hwnd}' is hung and unresponsive. {recommended_action}"
+            elif is_spinner:
+                status = StallStatus.STALLED if self._current_strikes >= self.max_strikes else StallStatus.WARNING
+                message = (
+                    f"SPINNER LOOP DETECTED (Strike {self._current_strikes}/{self.max_strikes}): Application is stuck in an active loading animation. "
+                    f"{recommended_action}"
+                )
+            elif is_modal:
+                status = StallStatus.STALLED if self._current_strikes >= self.max_strikes else StallStatus.WARNING
+                message = (
+                    f"MODAL TRAP DETECTED (Strike {self._current_strikes}/{self.max_strikes}): Action produced no effect because a dialog is intercepting input. "
+                    f"{recommended_action}"
+                )
+            elif self._current_strikes >= self.max_strikes:
                 status = StallStatus.STALLED
                 message = (
                     f"STALL DETECTED: {self._current_strikes} consecutive attempts on '{action_name}' produced zero screen or window changes. "
@@ -242,6 +372,10 @@ class StallBreaker:
                 pixel_diff=round(pixel_diff, 3),
                 window_changed=window_changed,
                 message=message,
+                cognitive_state=cognitive_state,
+                recommended_action=recommended_action,
+                is_spinner_detected=is_spinner,
+                is_modal_blocked=is_modal,
             )
 
     def reset(self) -> None:
@@ -250,3 +384,6 @@ class StallBreaker:
         self._last_hash = None
         self._last_hwnd = None
         self._last_action = None
+        self._recent_diffs.clear()
+        self._last_cognitive_state = "NORMAL_PROGRESS"
+

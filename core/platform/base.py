@@ -305,6 +305,29 @@ class AbstractInputEngine(ABC):
         """Performs smooth click-and-drag between coordinates."""
         pass
 
+    def smooth_mouse_move(
+        self,
+        x: int,
+        y: int,
+        speed: str = "normal",
+        style: str = "bezier",
+        monitor_index: int = 0,
+        overshoot: bool = True,
+    ) -> None:
+        """Glides the mouse cursor to (x, y) along a human-like biomechanical curve."""
+        self.mouse_move(x, y, monitor_index=monitor_index)
+
+    def mouse_stroke(
+        self,
+        points: List[Tuple[int, int]],
+        button: str = "left",
+        duration: float = 1.0,
+        smooth: bool = True,
+        monitor_index: int = 0,
+    ) -> None:
+        """Executes a continuous smooth brush stroke across a list of anchor points."""
+        pass
+
     @abstractmethod
     def mouse_scroll(self, delta: int, horizontal: bool = False) -> None:
         """Scrolls mouse wheel vertically or horizontally."""
@@ -325,8 +348,10 @@ class AbstractInputEngine(ABC):
         """Performs atomic virtual clipboard swap and paste."""
         pass
 
-    def execute_batch_actions(self, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Executes an atomic list of hardware actions sequentially."""
+    def execute_batch_actions(
+        self, actions: List[Dict[str, Any]], auto_settle: bool = True
+    ) -> Dict[str, Any]:
+        """Executes an atomic list of hardware actions sequentially with optional visual settle."""
         return {"success": False, "message": "Batch actions not supported on this platform"}
 
 

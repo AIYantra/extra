@@ -144,7 +144,7 @@ class TestUniversalTaskSuite(unittest.TestCase):
         """TASK-004: Notepad Multi-File Session Isolation."""
         reg = APP_REGISTRY.get("notepad")
         self.assertIsNotNone(reg)
-        self.assertEqual(reg["target"], "notepad.exe")
+        self.assertTrue(reg["target"].endswith("notepad.exe"))
 
     def test_task_005_explorer_direct_directory(self):
         """TASK-005: File Explorer Direct Directory Navigation."""

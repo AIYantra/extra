@@ -147,7 +147,13 @@ def list_windows(visible_only: bool = True) -> List[WindowInfo]:
                 continue
             title = win32gui.GetWindowText(hwnd).strip()
             if visible_only and not title:
-                continue
+                # Retain untitled windows only if they have substantial desktop geometry (frameless / custom titlebars)
+                try:
+                    rect = win32gui.GetWindowRect(hwnd)
+                    if (rect[2] - rect[0]) < 100 or (rect[3] - rect[1]) < 100:
+                        continue
+                except Exception:
+                    continue
             info = get_window_info(hwnd)
             if info:
                 results.append(info)
@@ -157,23 +163,99 @@ def list_windows(visible_only: bool = True) -> List[WindowInfo]:
     return results
 
 
+class _DynamicProcessMap(dict):
+    """Dynamic process alias resolver backed by APP_REGISTRY and system aliases."""
+    def get(self, key, default=None):
+        try:
+            from extra.core.platform.windows.shell import APP_REGISTRY
+            entry = APP_REGISTRY.get(str(key).lower())
+            if entry and "proc" in entry:
+                return entry["proc"].lower().rstrip(".exe")
+        except Exception:
+            pass
+        return default if default is not None else key
+
+    def __getitem__(self, key):
+        val = self.get(key)
+        if val is not None:
+            return val
+        raise KeyError(key)
+
+    def __contains__(self, key):
+        try:
+            from extra.core.platform.windows.shell import APP_REGISTRY
+            return str(key).lower() in APP_REGISTRY
+        except Exception:
+            return False
+
+
+ALIAS_PROCESS_MAP: Dict[str, str] = _DynamicProcessMap()
+
+
 def find_window_by_title(
     query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
 ) -> Optional[WindowInfo]:
-    """Finds the first window matching title substring or exact string, optionally polling up to timeout seconds."""
+    """
+    Finds the best matching window using a resilient multi-tier resolution strategy:
+    Tier 1: Exact title match
+    Tier 2: Direct substring match
+    Tier 3: Multi-word match (e.g. 'Meta Business Suite' in 'Meta Business Suite - Google Chrome')
+    Tier 4: Dynamic process-level and registered app fallback
+    Optionally polls up to timeout seconds.
+    """
     deadline = time.perf_counter() + max(0.0, timeout)
     q = query.strip().lower()
 
     while True:
         windows = list_windows(visible_only=visible_only)
+
+        # Tier 1: Exact match
         for win in windows:
-            w_title = win.title.lower()
-            if exact:
-                if w_title == q:
+            if win.title.lower() == q:
+                return win
+
+        if not exact:
+            # Tier 2: Direct substring match
+            for win in windows:
+                if q in win.title.lower():
                     return win
-            else:
-                if q in w_title:
-                    return win
+
+            # Tier 3: Multi-word match
+            words = [w for w in q.split() if len(w) > 2]
+            if len(words) > 1:
+                for win in windows:
+                    w_title = win.title.lower()
+                    if all(word in w_title for word in words):
+                        return win
+
+            # Tier 4: Dynamic process-level fallback via registered apps and fuzzy proc match
+            proc_target = None
+            try:
+                from extra.core.platform.windows.shell import APP_REGISTRY
+                reg_entry = APP_REGISTRY.get(q)
+                if reg_entry and "proc" in reg_entry:
+                    proc_target = reg_entry["proc"].lower().rstrip(".exe")
+            except Exception:
+                pass
+
+            if not proc_target:
+                proc_target = q.rstrip(".exe")
+
+            matching_proc_windows: List[WindowInfo] = []
+            for win in windows:
+                w_proc = win.process_name.lower().rstrip(".exe")
+                if w_proc == proc_target or proc_target in w_proc or (len(proc_target) > 3 and w_proc in proc_target):
+                    matching_proc_windows.append(win)
+
+            if matching_proc_windows:
+                # Prioritize windows that have non-empty titles and are not minimized
+                for win in matching_proc_windows:
+                    if win.title and not win.is_minimized:
+                        return win
+                for win in matching_proc_windows:
+                    if win.title:
+                        return win
+                return matching_proc_windows[0]
 
         if time.perf_counter() >= deadline:
             break

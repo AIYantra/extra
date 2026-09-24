@@ -54,8 +54,10 @@ from extra.core.platform.windows.input_engine import (
     mouse_drag,
     mouse_move,
     mouse_scroll,
+    mouse_stroke,
     mouse_up,
     send_hotkey,
+    smooth_mouse_move,
 )
 from extra.core.platform.windows.shell import (
     APP_REGISTRY,
@@ -102,6 +104,8 @@ __all__ = [
     "instant_type",
     "atomic_clipboard_paste",
     "mouse_move",
+    "smooth_mouse_move",
+    "mouse_stroke",
     "mouse_down",
     "mouse_up",
     "mouse_click",

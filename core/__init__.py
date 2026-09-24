@@ -64,6 +64,16 @@ from extra.core.uia_plane import (
     UIAutomationPlane,
     UIElement,
 )
+from extra.core.soul import (
+    DecisionType,
+    SoulDecision,
+    SoulDecider,
+    get_soul_decider,
+    get_soul_runtime,
+    SoulEyes,
+    get_soul_eyes,
+    visual_ground,
+)
 
 __all__ = [
     # Geometry
@@ -119,4 +129,13 @@ __all__ = [
     "AudioIndicator",
     "IndicatorController",
     "get_indicator_controller",
+    # Project SOUL (System One Ultra-fast Layer)
+    "SoulDecider",
+    "SoulDecision",
+    "DecisionType",
+    "get_soul_decider",
+    "get_soul_runtime",
+    "SoulEyes",
+    "get_soul_eyes",
+    "visual_ground",
 ]

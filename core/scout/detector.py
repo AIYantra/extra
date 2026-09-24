@@ -11,7 +11,8 @@ import shutil
 import logging
 import subprocess
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from pathlib import Path
+from typing import Optional, List, Dict, Any, Set
 
 from extra.core.platform import resolve_executable
 
@@ -24,7 +25,7 @@ class AppProfile:
     app_name: str
     executable_path: Optional[str] = None
     is_installed: bool = False
-    ui_framework: str = "unknown"  # 'electron' | 'directx_opengl_viewport' | 'qt' | 'wpf' | 'win32' | 'uwp' | 'unknown'
+    ui_framework: str = "unknown"  # 'electron' | 'electron_web_canvas' | 'directx_opengl_viewport' | 'qt' | 'wpf' | 'win32' | 'uwp' | 'unknown'
     cli_supported: bool = False
     cli_help_text: Optional[str] = None
     scripting_api: Optional[str] = None  # e.g. 'bpy', 'extendscript', 'com', 'cli', 'mod-script-pipe'
@@ -45,81 +46,93 @@ class AppProfile:
         }
 
 
-# Known viewport applications where canvas is drawn via OpenGL/DirectX GPU shaders
-VIEWPORT_APPS = {
-    "blender", "blender.exe",
-    "resolve", "resolve.exe", "davinci_resolve",
-    "maya", "maya.exe",
-    "3dsmax", "3dsmax.exe",
-    "unreal", "unrealengine", "ue5",
-    "unity", "unity.exe",
-    "autocad", "acad.exe",
-    "fusion360",
-}
-
-# Known web/electron canvas tools where UIAutomation cannot access individual canvas elements
-CANVAS_ELECTRON_APPS = {
-    "canva", "canva.exe",
-    "figma", "figma.exe",
-    "miro", "miro.exe",
-    "framer", "framer.exe",
-    "whimsical",
-}
-
-# Standard scripting APIs mapped by application name
-SCRIPTING_API_MAP = {
-    "blender": "bpy (Python 3.x embedded scripting engine)",
-    "photoshop": "ExtendScript / UXP / COM: Photoshop.Application",
-    "illustrator": "ExtendScript / COM: Illustrator.Application",
-    "indesign": "ExtendScript / COM: InDesign.Application",
-    "aftereffects": "ExtendScript / aerender CLI",
-    "davinci_resolve": "DaVinciResolveScript (Python 3.x / Lua API)",
-    "resolve": "DaVinciResolveScript (Python 3.x / Lua API)",
-    "excel": "COM: Excel.Application / openpyxl / pandas",
-    "word": "COM: Word.Application / python-docx",
-    "powerpoint": "COM: PowerPoint.Application / python-pptx",
-    "autocad": "AutoLISP / COM: AutoCAD.Application",
-    "gimp": "Script-Fu (Scheme) / Python-Fu (Python)",
-    "inkscape": "Inkscape CLI batch actions / Python extensions",
-    "audacity": "mod-script-pipe (named pipe IPC)",
-    "obs": "obs-websocket RPC API / CLI parameters",
-    "obs-studio": "obs-websocket RPC API / CLI parameters",
-    "code": "VS Code CLI / Extensions API",
-    "vscode": "VS Code CLI / Extensions API",
-    "canva": "Fast-Path (PIL generation + STA Clipboard paste) / REST API",
-    "figma": "Fast-Path (PIL/SVG generation + STA Clipboard paste) / Plugin API",
-    "notepad": "Direct File I/O (Path.write_text) + extra_launch",
-    "mspaint": "PIL Image generation + extra_launch",
-    "calc": "extra_type direct Win32 VK_PACKET typing",
-}
+def _get_seeds() -> Dict[str, Dict[str, Any]]:
+    """Helper to lazily load knowledge seeds without circular imports."""
+    try:
+        from extra.core.scout.scraper import get_knowledge_seeds
+        return get_knowledge_seeds()
+    except Exception:
+        return {}
 
 
-def _inspect_directory_framework(dir_path: str) -> str:
-    """Inspects binaries and libraries in an application directory to identify UI framework."""
-    if not os.path.isdir(dir_path):
-        return "unknown"
+class _DynamicSeedSet(set):
+    """Dynamic set proxy backed by external knowledge seeds for backwards compatibility."""
+    def __init__(self, filter_fn):
+        super().__init__()
+        self._filter_fn = filter_fn
+        self._loaded = False
 
-    # Check Electron indicators
-    resources_dir = os.path.join(dir_path, "resources")
-    if os.path.isdir(resources_dir):
-        if os.path.exists(os.path.join(resources_dir, "app.asar")) or os.path.exists(os.path.join(resources_dir, "app")):
-            return "electron"
-    if os.path.exists(os.path.join(dir_path, "v8_context_snapshot.bin")) and os.path.exists(os.path.join(dir_path, "ffmpeg.dll")):
-        return "electron"
+    def _ensure(self):
+        if not self._loaded:
+            self._loaded = True
+            for k, v in _get_seeds().items():
+                if self._filter_fn(k, v):
+                    super().add(k)
+                    super().add(f"{k}.exe")
 
-    # Check Qt indicators
-    if glob.glob(os.path.join(dir_path, "Qt5*.dll")) or glob.glob(os.path.join(dir_path, "Qt6*.dll")):
-        return "qt"
+    def __contains__(self, item):
+        self._ensure()
+        return super().__contains__(str(item).lower())
 
-    # Check WPF / .NET indicators
-    if os.path.exists(os.path.join(dir_path, "wpfgfx_v0400.dll")) or os.path.exists(os.path.join(dir_path, "PresentationCore.dll")):
-        return "wpf"
+    def __iter__(self):
+        self._ensure()
+        return super().__iter__()
 
-    return "win32"
+    def __len__(self):
+        self._ensure()
+        return super().__len__()
 
 
-# Known pure GUI applications that ignore CLI flags and launch GUI windows if probed
-GUI_ONLY_APPS = {
+class _DynamicScriptingMap(dict):
+    """Dynamic scripting map backed by external knowledge seeds for backwards compatibility."""
+    def __init__(self):
+        super().__init__()
+        self._loaded = False
+
+    def _ensure(self):
+        if not self._loaded:
+            self._loaded = True
+            for k, v in _get_seeds().items():
+                api = v.get("scripting_api")
+                if api:
+                    super().__setitem__(k, api)
+
+    def get(self, item, default=None):
+        self._ensure()
+        return super().get(item, default)
+
+    def __getitem__(self, item):
+        self._ensure()
+        return super().__getitem__(item)
+
+    def __contains__(self, item):
+        self._ensure()
+        return super().__contains__(item)
+
+    def items(self):
+        self._ensure()
+        return super().items()
+
+    def keys(self):
+        self._ensure()
+        return super().keys()
+
+    def values(self):
+        self._ensure()
+        return super().values()
+
+
+# Backward-compatible proxies populated dynamically from external knowledge seeds
+VIEWPORT_APPS: Set[str] = _DynamicSeedSet(
+    lambda k, v: v.get("ui_framework") == "directx_opengl_viewport"
+)
+CANVAS_ELECTRON_APPS: Set[str] = _DynamicSeedSet(
+    lambda k, v: v.get("ui_framework") == "electron_web_canvas"
+)
+SCRIPTING_API_MAP: Dict[str, str] = _DynamicScriptingMap()
+
+# Backward-compatible set for Windows GUI-only applets
+GUI_ONLY_APPS: Set[str] = {
     "calc", "calc.exe", "calculator", "calculatorapp.exe",
     "notepad", "notepad.exe",
     "mspaint", "mspaint.exe", "pbrush.exe",
@@ -130,18 +143,93 @@ GUI_ONLY_APPS = {
 }
 
 
-def _probe_cli_help(executable: str) -> Optional[str]:
+def _is_windows_system_gui(executable: str) -> bool:
+    """
+    Checks if an executable is a Windows built-in system GUI tool
+    that should not be probed with Unix-style --help flags.
+    """
+    sys_root = os.environ.get("SystemRoot", r"C:\Windows").lower()
+    exe_lower = executable.lower()
+
+    if exe_lower.startswith(sys_root):
+        basename = os.path.basename(exe_lower)
+        if basename in ("cmd.exe", "powershell.exe", "wt.exe"):
+            return False
+        if "system32" in exe_lower or "systemapps" in exe_lower or basename == "explorer.exe":
+            return True
+
+    if "windowsapps" in exe_lower:
+        return True
+
+    return False
+
+
+def _inspect_directory_framework(dir_path: str) -> str:
+    """Inspects binaries and libraries in an application directory to identify UI framework."""
+    if not os.path.isdir(dir_path):
+        return "unknown"
+
+    # 1. Check Electron indicators
+    resources_dir = os.path.join(dir_path, "resources")
+    if os.path.isdir(resources_dir):
+        if os.path.exists(os.path.join(resources_dir, "app.asar")) or os.path.exists(os.path.join(resources_dir, "app")):
+            return "electron"
+    if os.path.exists(os.path.join(dir_path, "v8_context_snapshot.bin")) and (
+        os.path.exists(os.path.join(dir_path, "ffmpeg.dll")) or os.path.exists(os.path.join(dir_path, "chrome_elf.dll"))
+    ):
+        return "electron"
+
+    # 2. Check 3D Viewport / CAD GPU shader libraries (DirectX / OpenGL / Vulkan / OpenUSD)
+    viewport_dlls = [
+        "opengl32.dll", "vulkan-1.dll", "glew32.dll", "glfw3.dll", "nvoglv64.dll",
+        "OpenColorIO*.dll", "OpenImageIO*.dll", "tbb.dll",
+    ]
+    for pattern in viewport_dlls:
+        if "*" in pattern:
+            if glob.glob(os.path.join(dir_path, pattern)) or glob.glob(os.path.join(dir_path, "bin", pattern)):
+                return "directx_opengl_viewport"
+        else:
+            if os.path.exists(os.path.join(dir_path, pattern)) or os.path.exists(os.path.join(dir_path, "bin", pattern)):
+                return "directx_opengl_viewport"
+
+    # 3. Check Qt indicators
+    if (
+        glob.glob(os.path.join(dir_path, "Qt5*.dll"))
+        or glob.glob(os.path.join(dir_path, "Qt6*.dll"))
+        or glob.glob(os.path.join(dir_path, "bin", "Qt*.dll"))
+    ):
+        return "qt"
+
+    # 4. Check WPF / .NET indicators
+    if (
+        os.path.exists(os.path.join(dir_path, "wpfgfx_v0400.dll"))
+        or os.path.exists(os.path.join(dir_path, "PresentationCore.dll"))
+    ):
+        return "wpf"
+
+    return "win32"
+
+
+def _detect_embedded_scripting_api(dir_path: str) -> Optional[str]:
+    """Detects embedded Python, Lua, or script engines inside application directory."""
+    if not os.path.isdir(dir_path):
+        return None
+    if glob.glob(os.path.join(dir_path, "python3*.dll")) or glob.glob(os.path.join(dir_path, "python", "python*.exe")):
+        return "Embedded Python 3.x Scripting Engine"
+    if glob.glob(os.path.join(dir_path, "lua*.dll")):
+        return "Embedded Lua Scripting Engine"
+    return None
+
+
+def _probe_cli_help(executable: str, custom_flags: Optional[List[str]] = None) -> Optional[str]:
     """Runs application with --help / -h with a strict timeout to avoid blocking."""
     exe_name = os.path.basename(executable).lower()
-    if exe_name in GUI_ONLY_APPS or executable.lower() in GUI_ONLY_APPS:
+    if exe_name in GUI_ONLY_APPS or _is_windows_system_gui(executable):
         return None
 
-    flags = ["--help", "-h", "/?"]
-    flags_blender = ["-b", "-h"]  # Blender needs -b to avoid launching GUI
+    flags = custom_flags if custom_flags else ["--help", "-h", "/?"]
 
-    test_flags = flags_blender if "blender" in executable.lower() else flags
-
-    for flag in test_flags:
+    for flag in flags:
         try:
             startupinfo = None
             if sys.platform == "win32":
@@ -173,45 +261,62 @@ def detect_app_profile(app_name: str) -> AppProfile:
     clean_name = app_name.strip().lower()
     profile = AppProfile(app_name=clean_name)
 
-    # 1. Resolve executable
+    # 1. Resolve executable dynamically
     resolved = resolve_executable(clean_name)
+    app_dir = None
+    seed_data = None
+
+    # Load seed intelligence if available
+    seeds = _get_seeds()
+    for k, v in seeds.items():
+        if k == clean_name or (resolved and k in resolved.lower()):
+            seed_data = v
+            break
+
+    custom_probe_flags = seed_data.get("cli_probe_flags") if seed_data else None
+
     if resolved and os.path.exists(resolved):
         profile.executable_path = resolved
         profile.is_installed = True
         app_dir = os.path.dirname(resolved)
 
-        # 2. Framework detection
-        if clean_name in VIEWPORT_APPS or any(v in resolved.lower() for v in ("blender", "resolve", "maya")):
-            profile.ui_framework = "directx_opengl_viewport"
-            profile.notes.append("Viewport application: 3D canvas does not support Win32 UIA element clicking.")
-        elif clean_name in CANVAS_ELECTRON_APPS or any(c in resolved.lower() for c in ("canva", "figma")):
-            profile.ui_framework = "electron_web_canvas"
-            profile.notes.append("Web/Electron canvas: Internal WebGL/DOM canvas cannot be clicked via UIA.")
-        elif "windowsapps" in resolved.lower():
+        # 2. Dynamic framework detection from directory / binaries
+        if "windowsapps" in resolved.lower():
             profile.ui_framework = "uwp"
         else:
             profile.ui_framework = _inspect_directory_framework(app_dir)
 
-        # 3. CLI probe
-        help_text = _probe_cli_help(resolved)
+        # Dynamic scripting API discovery
+        detected_script = _detect_embedded_scripting_api(app_dir)
+        if detected_script:
+            profile.scripting_api = detected_script
+
+        # 3. CLI probe (skips system GUI applets universally)
+        help_text = _probe_cli_help(resolved, custom_flags=custom_probe_flags)
         if help_text:
             profile.cli_supported = True
             profile.cli_help_text = help_text
             profile.notes.append("Application supports CLI automation.")
     else:
-        # Not installed locally or web application
         profile.is_installed = False
-        if clean_name in CANVAS_ELECTRON_APPS:
-            profile.ui_framework = "electron_web_canvas"
-        elif clean_name in VIEWPORT_APPS:
-            profile.ui_framework = "directx_opengl_viewport"
-        else:
-            profile.ui_framework = "unknown"
+        profile.ui_framework = "unknown"
 
-    # 4. Scripting API mapping
-    for key, api_name in SCRIPTING_API_MAP.items():
-        if key in clean_name or (resolved and key in resolved.lower()):
-            profile.scripting_api = api_name
-            break
+    # 4. Enrich profile with external declarative seeds
+    if seed_data:
+        # If framework is generic or uninstalled, adopt seed's specialized framework
+        if profile.ui_framework in ("unknown", "electron", "win32") and seed_data.get("ui_framework"):
+            profile.ui_framework = seed_data["ui_framework"]
+
+        # Note caveats
+        if profile.ui_framework == "directx_opengl_viewport":
+            profile.notes.append("Viewport application: 3D canvas does not support Win32 UIA element clicking.")
+        elif profile.ui_framework == "electron_web_canvas":
+            profile.notes.append("Web/Electron canvas: Internal WebGL/DOM canvas cannot be clicked via UIA.")
+        elif seed_data.get("ui_surface_caveat") and seed_data["ui_surface_caveat"] not in profile.notes:
+            profile.notes.append(seed_data["ui_surface_caveat"])
+
+        # Scripting API fallback
+        if not profile.scripting_api and seed_data.get("scripting_api"):
+            profile.scripting_api = seed_data["scripting_api"]
 
     return profile
