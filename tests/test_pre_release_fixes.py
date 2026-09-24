@@ -4,8 +4,12 @@ Verifies command line escaping for spaced arguments, multi-tier window focus,
 and profile parameter handling in the shell launcher.
 """
 
+import sys
 import unittest
 from unittest.mock import patch, MagicMock
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-specific pre-release fixes skipped on non-Windows")
 
 from extra.core.platform.base import WindowInfo
 from extra.core.platform.windows.shell import _format_windows_cmdline_args, launch_app

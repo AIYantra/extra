@@ -760,8 +760,10 @@ def execute_batch_actions(
                 btn = str(act.get("button", "left"))
                 clicks = int(act.get("clicks", 1))
                 human = bool(act.get("human_like", False))
-                speed = str(act.get("speed", "normal"))
-                mouse_click(int(x) if x is not None else None, int(y) if y is not None else None, button=btn, clicks=clicks, human_like=human, speed=speed)
+                if human:
+                    mouse_click(int(x) if x is not None else None, int(y) if y is not None else None, button=btn, clicks=clicks, human_like=human, speed=speed)
+                else:
+                    mouse_click(int(x) if x is not None else None, int(y) if y is not None else None, button=btn, clicks=clicks)
                 step_dur = (time.perf_counter() - step_t0) * 1000.0
                 exec_item = {"index": current_index, "action": "click", "x": x, "y": y, "button": btn, "human_like": human, "duration_ms": round(step_dur, 2)}
                 if target:

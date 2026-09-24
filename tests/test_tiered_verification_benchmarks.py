@@ -10,11 +10,12 @@ Tiered Verification Implementation Plan:
 
 from __future__ import annotations
 
+import sys
 import time
+import unittest
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
-import pytest
 from PIL import Image
 
 from extra.core.soul.gateman import SoulGateman
@@ -23,8 +24,10 @@ from extra.core.composer.blueprint import Milestone, TaskBlueprint
 from extra.core.composer.verifier import MilestoneVerifier
 from extra.core.soul.critic import CriticVerdict
 
+PLATFORM_INPUT = f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine"
 
-class TestTieredVerificationBenchmarks:
+
+class TestTieredVerificationBenchmarks(unittest.TestCase):
     """Stress benchmarks enforcing sub-15ms Tier 1 and sub-2s Tier 3 verification SLAs."""
 
     def test_benchmark_tier1_soul_gateman_settle_latency(self) -> None:
@@ -84,10 +87,10 @@ class TestTieredVerificationBenchmarks:
             "final_hash": "ffff0000",
         }
 
-        with patch("extra.core.platform.windows.input_engine.send_hotkey"), \
-             patch("extra.core.platform.windows.input_engine.mouse_click"), \
-             patch("extra.core.platform.windows.input_engine.instant_type"), \
-             patch("extra.core.platform.windows.input_engine.mouse_scroll"), \
+        with patch(f"{PLATFORM_INPUT}.send_hotkey"), \
+             patch(f"{PLATFORM_INPUT}.mouse_click"), \
+             patch(f"{PLATFORM_INPUT}.instant_type"), \
+             patch(f"{PLATFORM_INPUT}.mouse_scroll"), \
              patch("extra.core.soul.gateman.wait_until_settled", return_value=mock_settle):
 
             t0 = time.perf_counter()
@@ -142,9 +145,9 @@ class TestTieredVerificationBenchmarks:
 
         total_verification_time_ms = 0.0
 
-        with patch("extra.core.platform.windows.input_engine.send_hotkey"), \
-             patch("extra.core.platform.windows.input_engine.mouse_click"), \
-             patch("extra.core.platform.windows.input_engine.instant_type"), \
+        with patch(f"{PLATFORM_INPUT}.send_hotkey"), \
+             patch(f"{PLATFORM_INPUT}.mouse_click"), \
+             patch(f"{PLATFORM_INPUT}.instant_type"), \
              patch("extra.core.soul.gateman.wait_until_settled", return_value=mock_settle), \
              patch("extra.core.soul.critic.SoulCritic.evaluate_screen_milestone", return_value=mock_verdict):
 
