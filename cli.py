@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.2.4"
+    __version__ = "0.3.0"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
@@ -118,8 +118,8 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
     elif os_name == "Windows":
         print("\n[Windows Defender & Controlled Folder Access (CFA)]")
         try:
-            ps_cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-MpPreference).EnableControlledFolderAccess"'
-            proc = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=6, shell=True)
+            ps_cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "(Get-MpPreference).EnableControlledFolderAccess"]
+            proc = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=6)
             cfa_val = proc.stdout.strip()
 
             # Verify isolated safe scratch workspace
@@ -168,8 +168,11 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
                     "Write-Host '`n[OK] Whitelisted developer tools in Windows Defender Controlled Folder Access.' -ForegroundColor Green; "
                     "Start-Sleep -Seconds 2"
                 )
-                elevate_cmd = f'powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process powershell -Verb RunAs -ArgumentList \\"-NoProfile -ExecutionPolicy Bypass -Command {allow_script}\\""'
-                subprocess.run(elevate_cmd, shell=True)
+                elevate_cmd = [
+                    "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                    f"Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile -ExecutionPolicy Bypass -Command \"{allow_script}\"'"
+                ]
+                subprocess.run(elevate_cmd)
                 print("  [OK] Whitelist request sent to Windows Security (confirm UAC prompt if shown).")
 
         except Exception as e:
@@ -222,10 +225,24 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
     wins = list_windows(visible_only=True)
     print(f"  Total Windows: {len(wins)} visible top-level windows")
 
+    # 9. AI Skill Library & Evolution Health
+    print("\n[AI Skill Library & Evolution Playbooks]")
+    try:
+        from extra.core.evolution.curator import curate_skill_library
+        audit = curate_skill_library()
+        print(f"  Active Skills: {audit['total_unique_skills']} discovered ({audit['status']})")
+        if audit["corrupted_count"] > 0:
+            print(f"  [WARN] {audit['corrupted_count']} corrupted/invalid skill(s) detected. Run 'extra curate --sanitize' to repair.")
+        else:
+            print("  [OK] Skill playbooks validated and healthy.")
+    except Exception as e:
+        print(f"  [WARN] Skill audit notice: {e}")
+
     print("\n" + "=" * 65)
     print(" DOCTOR DIAGNOSTIC COMPLETE: SYSTEM IS READY FOR EXTRA")
     print("=" * 65)
     return 0
+
 
 
 def cmd_test() -> int:
@@ -331,7 +348,38 @@ def cmd_type(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_curate(args: argparse.Namespace) -> int:
+    """Audits, validates, and optionally sanitizes AI skill playbooks."""
+    from extra.core.evolution.curator import curate_skill_library, sanitize_skill_library
+    print("=" * 65)
+    print(" EXTRA AI SKILL LIBRARY AUDIT & CURATOR")
+    print("=" * 65)
+
+    if getattr(args, "sanitize", False):
+        print("\n[Sanitizing & Healing Skills]")
+        res = sanitize_skill_library(strip_legacy_evolved=True, remove_mock_skills=True)
+        print(f"  Inspected:     {res['files_inspected']} skill file(s)")
+        print(f"  Cleaned:       {res['files_cleaned']} file(s) healed (legacy unhardened evolutions stripped)")
+        if res["mocks_removed"]:
+            print(f"  Mock Skills:   {len(res['mocks_removed'])} test folder(s) removed")
+        for c in res["cleaned_skills"]:
+            print(f"    - Cleaned: {c}")
+
+    audit = curate_skill_library()
+    print(f"\n[Discovered Skills ({audit['total_unique_skills']} total)]")
+    for sk in audit["skills"]:
+        flag = "[OK]" if sk["is_valid"] else "[INVALID]"
+        print(f"  {flag} {sk['name']:<28} {sk['description'][:45]}... ({len(sk['locations'])} loc)")
+
+    if audit["corrupted_count"] > 0:
+        print(f"\n[WARN] {audit['corrupted_count']} corrupted skill(s) detected. Run 'extra curate --sanitize' to repair.")
+        return 1
+    print("\n[OK] All skills validated and operational.")
+    return 0
+
+
 def cmd_indicators_demo() -> int:
+
     """Demonstrates ambient edge pulse, cursor halo, and harmonic audio chime live."""
     from extra.core.indicators import get_indicator_controller
 
@@ -473,7 +521,19 @@ def sync_ai_rules_and_skills(repo_dir: Path) -> bool:
         except Exception as ex:
             print(f"  [WARN] Could not update Claude Desktop configuration: {ex}")
 
+    # 8. Sanitize and Heal Active Skill Playbooks
+    try:
+        from extra.core.evolution.curator import sanitize_skill_library
+        san_res = sanitize_skill_library(strip_legacy_evolved=True, remove_mock_skills=True)
+        if san_res.get("files_cleaned", 0) > 0 or san_res.get("mocks_removed"):
+            print(f"  [OK] Sanitized {san_res.get('files_cleaned', 0)} skill playbook(s), removed {len(san_res.get('mocks_removed', []))} mock(s).")
+        else:
+            print("  [OK] AI skill playbooks verified clean.")
+    except Exception as ex:
+        print(f"  [WARN] Skill playbook curation notice: {ex}")
+
     return True
+
 
 
 def cmd_update(args: argparse.Namespace) -> int:
@@ -696,6 +756,15 @@ def cmd_permissions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_uninstall(args: argparse.Namespace) -> int:
+    """Completely uninstalls Extra, purges files, and removes all configurations."""
+    from extra.core.uninstall import perform_uninstall
+
+    force = getattr(args, "yes", False)
+    dry_run = getattr(args, "dry_run", False)
+    return perform_uninstall(force=force, dry_run=dry_run)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="extra",
@@ -762,6 +831,22 @@ def main() -> None:
     type_parser.add_argument("text", help="Text string to type")
     type_parser.add_argument("--enter", "-e", action="store_true", help="Press Enter after typing")
 
+    # curate
+    curate_parser = subparsers.add_parser("curate", help="Audit, validate, and sanitize AI skill libraries")
+    curate_parser.add_argument("--sanitize", "-s", action="store_true", help="Sanitize legacy evolved entries and remove mock skills")
+
+    # uninstall
+    uninstall_parser = subparsers.add_parser(
+        "uninstall",
+        help="Completely uninstall Extra, purge all memory/workspaces, and remove MCP registrations",
+    )
+    uninstall_parser.add_argument(
+        "--yes", "-y", action="store_true", help="Bypass confirmation dialog and force immediate deletion"
+    )
+    uninstall_parser.add_argument(
+        "--dry-run", action="store_true", help="Simulate uninstallation without deleting any files"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -778,6 +863,10 @@ def main() -> None:
         sys.exit(cmd_indicators_demo())
     elif args.command == "update":
         sys.exit(cmd_update(args))
+    elif args.command == "curate":
+        sys.exit(cmd_curate(args))
+    elif args.command == "uninstall":
+        sys.exit(cmd_uninstall(args))
     elif args.command == "run":
         sys.exit(cmd_run(args))
     elif args.command == "inspect":
@@ -790,6 +879,7 @@ def main() -> None:
         sys.exit(cmd_launch(args))
     elif args.command == "type":
         sys.exit(cmd_type(args))
+
 
 
 if __name__ == "__main__":

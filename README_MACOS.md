@@ -176,6 +176,19 @@ Add Extra to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "extra": {
+      "command": "npx",
+      "args": ["-y", "@yantraos/extra-desktop"]
+    }
+  }
+}
+```
+
+Or using native virtualenv Python:
+
+```json
+{
+  "mcpServers": {
+    "extra": {
       "command": "/Users/YOUR_USERNAME/.extra/venv/bin/python",
       "args": ["-m", "extra.mcp.server"]
     }

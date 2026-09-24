@@ -102,6 +102,19 @@ def init_schema(conn: kuzu.Connection) -> None:
         )
     """)
 
+    conn.execute("""
+        CREATE NODE TABLE IF NOT EXISTS SoulDecision (
+            id STRING,
+            decision_type STRING,
+            condition STRING,
+            result STRING,
+            confidence DOUBLE,
+            latency_ms DOUBLE,
+            context STRING,
+            PRIMARY KEY (id)
+        )
+    """)
+
     # 2. Relationships
     conn.execute("CREATE REL TABLE IF NOT EXISTS TARGETED (FROM Task TO App)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS EXECUTED (FROM Task TO ActionStep)")
@@ -109,16 +122,20 @@ def init_schema(conn: kuzu.Connection) -> None:
     conn.execute("CREATE REL TABLE IF NOT EXISTS ENCOUNTERED (FROM Task TO StallEvent)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS EXHIBITS (FROM App TO AppQuirk)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS REFINED_BY (FROM StallEvent TO AppQuirk)")
+    conn.execute("CREATE REL TABLE IF NOT EXISTS DECIDED (FROM Task TO SoulDecision)")
 
     logger.info("KùzuDB memory schema verified and initialized.")
 
 
-def get_memory_db(custom_path: Optional[Path] = None) -> Any:
+def get_memory_db(custom_path: Optional[Path] = None, max_retries: int = 2) -> Any:
     """Returns or initializes the singleton Kùzu database instance."""
     if kuzu is None:
         raise RuntimeError("Kùzu is not installed. Run 'pip install kuzu' to enable Extra memory.")
     global _KUZU_DB, _DB_PATH
     with _DB_LOCK:
+        if custom_path is None and _KUZU_DB is not None and _DB_PATH is not None:
+            return _KUZU_DB
+
         target_path = custom_path or get_default_db_path()
         if _KUZU_DB is not None and _DB_PATH == target_path:
             return _KUZU_DB
@@ -132,22 +149,34 @@ def get_memory_db(custom_path: Optional[Path] = None) -> Any:
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
         db_str = str(target_path).replace("\\", "/")
-        _KUZU_DB = kuzu.Database(db_str)
-        _DB_PATH = target_path
-        logger.info("Opened KùzuDB memory database at %s", target_path)
+        
+        last_err: Optional[Exception] = None
+        for attempt in range(max_retries + 1):
+            try:
+                _KUZU_DB = kuzu.Database(db_str)
+                _DB_PATH = target_path
+                logger.info("Opened KùzuDB memory database at %s", target_path)
 
-        # Initialize schema with connection
-        conn = kuzu.Connection(_KUZU_DB)
-        init_schema(conn)
+                # Initialize schema with connection
+                conn = kuzu.Connection(_KUZU_DB)
+                init_schema(conn)
+                return _KUZU_DB
+            except RuntimeError as e:
+                last_err = e
+                if "Could not set lock" in str(e) and attempt < max_retries:
+                    import time
+                    time.sleep(0.05 * (attempt + 1))
+                    continue
+                raise last_err
 
         return _KUZU_DB
 
 
-def get_memory_connection(custom_path: Optional[Path] = None) -> Any:
+def get_memory_connection(custom_path: Optional[Path] = None, max_retries: int = 2) -> Any:
     """Returns a new thread-safe connection to the Kùzu database."""
     if kuzu is None:
         raise RuntimeError("Kùzu is not installed. Run 'pip install kuzu' to enable Extra memory.")
-    db = get_memory_db(custom_path)
+    db = get_memory_db(custom_path, max_retries=max_retries)
     return kuzu.Connection(db)
 
 

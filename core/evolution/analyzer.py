@@ -23,6 +23,8 @@ class TrajectoryAnalysis:
     friction_reasons: List[str] = field(default_factory=list)
     novelty_detected: bool = False
     candidate_for_evolution: bool = False
+    is_golden_path: bool = True
+    undo_count: int = 0
     suggested_playbook: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -38,6 +40,8 @@ class TrajectoryAnalysis:
             "friction_reasons": self.friction_reasons,
             "novelty_detected": self.novelty_detected,
             "candidate_for_evolution": self.candidate_for_evolution,
+            "is_golden_path": self.is_golden_path,
+            "undo_count": self.undo_count,
             "suggested_playbook": self.suggested_playbook,
         }
 
@@ -46,6 +50,7 @@ def analyze_task_trajectory(
     task_id: str,
     events: List[Dict[str, Any]],
     success: bool = True,
+    wall_clock_duration_ms: Optional[float] = None,
 ) -> TrajectoryAnalysis:
     """
     Analyzes task events to detect execution friction and opportunities for self-improvement.
@@ -54,10 +59,13 @@ def analyze_task_trajectory(
         task_id: Unique task identifier.
         events: Chronological sequence of step and stall events.
         success: Whether the overall task completed successfully.
+        wall_clock_duration_ms: Total real elapsed wall-clock time between task_start and task_complete.
     """
     analysis = TrajectoryAnalysis(task_id=task_id, total_steps=len(events))
 
     if not events:
+        if wall_clock_duration_ms is not None:
+            analysis.total_duration_ms = wall_clock_duration_ms
         return analysis
 
     screenshot_count = 0
@@ -84,6 +92,18 @@ def analyze_task_trajectory(
             trigger = ev.get("trigger_action") or ev.get("message") or "StallBreaker strike"
             analysis.friction_reasons.append(f"Stall detected: {trigger}")
 
+        # Check for undo operations
+        if "hotkey" in tool_name or ev_type == "hotkey":
+            keys = [str(k).lower() for k in ev.get("keys", [])]
+            if ("ctrl" in keys or "cmd" in keys) and "z" in keys:
+                analysis.undo_count += 1
+        elif "batch" in tool_name and "actions" in ev:
+            for act in ev.get("actions", []):
+                if isinstance(act, dict) and act.get("action") == "hotkey":
+                    keys = [str(k).lower() for k in act.get("keys", [])]
+                    if ("ctrl" in keys or "cmd" in keys) and "z" in keys:
+                        analysis.undo_count += 1
+
         # Check for repetitive coordinate clicks (sign of visual coordinate hunting)
         if "click" in tool_name and "x" in ev and "y" in ev:
             x, y = ev["x"], ev["y"]
@@ -106,6 +126,10 @@ def analyze_task_trajectory(
     if stall_count > 0:
         analysis.friction_detected = True
 
+    if analysis.undo_count > 0:
+        analysis.friction_detected = True
+        analysis.friction_reasons.append(f"Undo actions detected ({analysis.undo_count} undo operations).")
+
     if repeated_click_count >= 2:
         analysis.friction_detected = True
         analysis.friction_reasons.append(
@@ -124,16 +148,48 @@ def analyze_task_trajectory(
             f"High step count: task required {analysis.total_steps} steps."
         )
 
+    # Check for severe unrecorded execution delays (background scripts / external stalls)
+    sum_tool_duration_ms = analysis.total_duration_ms
+    if wall_clock_duration_ms is not None and wall_clock_duration_ms > sum_tool_duration_ms:
+        analysis.total_duration_ms = wall_clock_duration_ms
+        unrecorded_delay_ms = wall_clock_duration_ms - sum_tool_duration_ms
+        if unrecorded_delay_ms > 60_000 and (unrecorded_delay_ms > sum_tool_duration_ms * 3.0 or wall_clock_duration_ms > 120_000):
+            analysis.friction_detected = True
+            delay_sec = unrecorded_delay_ms / 1000.0
+            analysis.friction_reasons.append(
+                f"Severe unrecorded execution delay ({delay_sec:.1f}s gap between actions; background exploration, script execution, or external stall)."
+            )
+
+    # Golden Path Evaluation:
+    # A true golden path has zero stalls, zero undos, zero repetitive click hunting, and compact step counts
+    if (
+        stall_count > 0
+        or repeated_click_count > 0
+        or analysis.undo_count > 0
+        or analysis.screenshot_ratio > 1.5
+        or analysis.total_steps > 25
+        or analysis.friction_detected
+    ):
+        analysis.is_golden_path = False
+    else:
+        analysis.is_golden_path = True
+
     # Candidate for evolution:
-    # If the agent overcame friction and succeeded, or discovered a clean resolution
-    if success and analysis.friction_detected:
+    if success:
+        if analysis.is_golden_path and not analysis.friction_detected:
+            analysis.candidate_for_evolution = False  # standard clean run, no evolution needed
+        else:
+            # Succeeded but was NOT a clean golden path (heavy friction, undos, or high step count)
+            analysis.is_golden_path = False
+            analysis.candidate_for_evolution = True
+            analysis.suggested_playbook = (
+                "Task succeeded after overcoming execution friction (not a clean golden path). "
+                "Synthesize ONLY discovered root-cause workarounds and anti-stall guardrails; "
+                "do not record noisy intermediate recovery steps as a fast path."
+            )
+    else:
         analysis.candidate_for_evolution = True
-        analysis.suggested_playbook = (
-            "Task encountered execution friction but completed successfully. "
-            "Synthesize discovered workarounds into a permanent SKILL.md fast-path."
-        )
-    elif not success and analysis.friction_detected:
-        analysis.candidate_for_evolution = True
+        analysis.is_golden_path = False
         analysis.suggested_playbook = (
             "Task failed due to friction. Record app quirks and anti-stall guardrails to prevent recurrence."
         )

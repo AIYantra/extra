@@ -1,0 +1,51 @@
+{
+  "name": "@yantraos/extra-desktop",
+  "version": "0.3.0",
+  "description": "Flashless macOS & Windows Native Computer-Use Engine & Model Context Protocol (MCP) Server",
+  "main": "bin/cli.js",
+  "bin": {
+    "extra": "bin/cli.js",
+    "extra-desktop": "bin/cli.js"
+  },
+  "files": [
+    "bin/cli.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node bin/cli.js --version"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AIYantra/extra.git"
+  },
+  "homepage": "https://extra.yantraos.com",
+  "bugs": {
+    "url": "https://github.com/AIYantra/extra/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "computer-use",
+    "desktop-automation",
+    "anthropic",
+    "claude",
+    "cursor",
+    "windsurf",
+    "windows",
+    "macos",
+    "screencapturekit",
+    "dxgi",
+    "automation",
+    "yantraos"
+  ],
+  "author": "AIYantra Engineering Team <engineering@yantraos.com>",
+  "license": "MIT"
+}

@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import base64
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+
+from extra.core.scout.cdp_sniffer import NetworkSniffer, CapturedRequest
+from extra.core.scout.session_vault import SessionVault, ServiceSession
+from extra.core.evolution.api_synthesizer import ApiSynthesizer
 
 
 class BrowserFastPath:
@@ -26,6 +30,8 @@ class BrowserFastPath:
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
+        self._sniffer: Optional[NetworkSniffer] = None
+        self._last_captured: List[CapturedRequest] = []
 
     def _ensure_page(self) -> Page:
         """Initializes browser and returns active page."""
@@ -166,8 +172,102 @@ class BrowserFastPath:
         png_bytes = page.screenshot(type="jpeg", quality=80)
         return base64.b64encode(png_bytes).decode("utf-8")
 
+    def start_sniffing(self) -> Dict[str, Any]:
+        """Starts intercepting and recording API network traffic on the active page."""
+        page = self._ensure_page()
+        if self._sniffer is None:
+            self._sniffer = NetworkSniffer()
+        self._sniffer.attach_to_page(page)
+        return {"success": True, "status": "sniffing_active", "url": page.url}
+
+    def stop_sniffing(self) -> Dict[str, Any]:
+        """Stops network interception and returns a summary of captured mutations."""
+        if self._sniffer is None or not self._sniffer.is_active:
+            return {"success": False, "error": "Sniffer is not active."}
+        self._last_captured = self._sniffer.detach()
+        mutations = [r.to_dict() for r in self._last_captured if r.is_api and r.is_mutation]
+        return {
+            "success": True,
+            "total_captured": len(self._last_captured),
+            "mutations_count": len(mutations),
+            "mutations": mutations[:10],
+        }
+
+    def synthesize_api(
+        self, service_name: str, action_name: str = "execute_action"
+    ) -> Dict[str, Any]:
+        """Synthesizes a standalone Python fast-path client from captured API mutations."""
+        if not self._last_captured and self._sniffer and self._sniffer.is_active:
+            self.stop_sniffing()
+
+        mutations = [r for r in self._last_captured if r.is_api and r.is_mutation]
+        if not mutations:
+            return {
+                "success": False,
+                "error": "No mutating API requests found in captured trace. Interact with the website first.",
+            }
+
+        target_mutation = mutations[-1]
+        session = SessionVault.assemble_session(
+            self._context, self._last_captured, target_mutation.url
+        )
+        code = ApiSynthesizer.synthesize_fastpath_module(
+            service_name=service_name,
+            action_name=action_name,
+            captured_request=target_mutation,
+            session=session,
+        )
+        saved_path = ApiSynthesizer.save_fastpath_file(code, service_name)
+
+        return {
+            "success": True,
+            "service_name": service_name,
+            "action_name": action_name,
+            "fastpath_file": str(saved_path),
+            "endpoint": target_mutation.url,
+            "method": target_mutation.method,
+            "session_summary": session.to_redacted_dict(),
+        }
+
+    def wait_for_settle(self, timeout_ms: int = 3000, wait_for_network: bool = True) -> Dict[str, Any]:
+        """
+        Tier 2 Web Settle Hook: Waits for DOM stability and network quiescence in < 10ms-30ms.
+        """
+        t0 = time.perf_counter()
+        page = self._ensure_page()
+        try:
+            page.wait_for_load_state("domcontentloaded", timeout=timeout_ms)
+            if wait_for_network:
+                try:
+                    page.wait_for_load_state("networkidle", timeout=min(1500, timeout_ms))
+                except Exception:
+                    pass
+            dur = (time.perf_counter() - t0) * 1000.0
+            return {
+                "success": True,
+                "settled": True,
+                "duration_ms": round(dur, 2),
+                "url": page.url,
+                "title": page.title(),
+            }
+        except Exception as ex:
+            dur = (time.perf_counter() - t0) * 1000.0
+            return {
+                "success": False,
+                "settled": False,
+                "duration_ms": round(dur, 2),
+                "error": str(ex),
+            }
+
     def close(self) -> None:
         """Closes browser session and Playwright driver."""
+        if self._sniffer and self._sniffer.is_active:
+            try:
+                self._sniffer.detach()
+            except Exception:
+                pass
+            self._sniffer = None
+
         if self._browser:
             try:
                 self._browser.close()
@@ -251,5 +351,20 @@ def execute_browser_action(
         browser.close()
         return {"closed": True}
 
+    elif act in ("start_sniffing", "sniff_start", "sniff"):
+        return browser.start_sniffing()
+
+    elif act in ("stop_sniffing", "sniff_stop"):
+        return browser.stop_sniffing()
+
+    elif act in ("synthesize_api", "synthesize", "export_api"):
+        service = selector or "web_service"
+        action_name = value or "execute_action"
+        return browser.synthesize_api(service_name=service, action_name=action_name)
+
+    elif act in ("settle", "wait_for_settle", "wait_settle"):
+        timeout = int(value) if value and str(value).isdigit() else 3000
+        return browser.wait_for_settle(timeout_ms=timeout)
+
     else:
-        return {"error": f"Unknown browser action: '{action}'. Supported: navigate, content, click, fill, eval, screenshot, close."}
+        return {"error": f"Unknown browser action: '{action}'. Supported: navigate, content, click, fill, eval, screenshot, settle, start_sniffing, stop_sniffing, synthesize_api, close."}

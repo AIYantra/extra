@@ -20,7 +20,7 @@ class TestPillar5PackageEcosystem(unittest.TestCase):
 
     def setUp(self):
         self.extra_root = Path(__file__).resolve().parent.parent
-        self.expected_version = "0.2.5"
+        self.expected_version = "0.3.0"
 
     def test_homebrew_formula_specification(self):
         """Verify Formula/extra.rb meets all Homebrew packaging requirements."""

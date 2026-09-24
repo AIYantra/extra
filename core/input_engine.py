@@ -15,8 +15,10 @@ from extra.core.platform import (
     mouse_drag,
     mouse_move,
     mouse_scroll,
+    mouse_stroke,
     mouse_up,
     send_hotkey,
+    smooth_mouse_move,
 )
 
 __all__ = [
@@ -28,6 +30,8 @@ __all__ = [
     "mouse_down",
     "mouse_drag",
     "mouse_move",
+    "smooth_mouse_move",
+    "mouse_stroke",
     "mouse_scroll",
     "mouse_up",
     "send_hotkey",
