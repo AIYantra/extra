@@ -6,6 +6,7 @@ Fitts's Law velocity profiler, Catmull-Rom splines, and MCP tool dispatch.
 
 import math
 import unittest
+from unittest.mock import patch
 from typing import List, Tuple
 
 from extra.core.motion import (
@@ -171,7 +172,8 @@ class TestHumanMotionPlatformIntegration(unittest.TestCase):
         self.assertTrue(res["human_like"])
         self.assertGreater(res["duration_ms"], 0.0)
 
-    def test_mcp_extra_stroke(self):
+    @patch("extra.mcp.server.capture_screen", return_value=None)
+    def test_mcp_extra_stroke(self, mock_cap):
         """extra_stroke MCP tool must execute multi-point continuous brush motion."""
         points = [[200, 200], [250, 280], [350, 250]]
         res = extra_stroke(points=points, button="left", duration=0.05, smooth=True)

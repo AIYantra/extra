@@ -6,19 +6,22 @@ integration within compound hardware batch dispatch.
 
 from __future__ import annotations
 
+import sys
 import time
+import unittest
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
-import pytest
 from PIL import Image
 
 from extra.core.soul.gateman import SoulGateman, wait_until_settled
 from extra.core.input_engine import execute_batch_actions
 from extra.mcp.server import extra_batch_actions
 
+PLATFORM_INPUT = f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine"
 
-class TestTieredVerificationPhase1:
+
+class TestTieredVerificationPhase1(unittest.TestCase):
     """Test suite for Tier 1 zero-latency perceptual settle detection and batch dispatch."""
 
     def test_soul_gateman_settle_parameters(self) -> None:
@@ -71,8 +74,8 @@ class TestTieredVerificationPhase1:
             "final_hash": "abcd1234",
         }
 
-        with patch("extra.core.platform.windows.input_engine.send_hotkey"), \
-             patch("extra.core.platform.windows.input_engine.mouse_click"), \
+        with patch(f"{PLATFORM_INPUT}.send_hotkey"), \
+             patch(f"{PLATFORM_INPUT}.mouse_click"), \
              patch("extra.core.soul.gateman.wait_until_settled", return_value=mock_settle) as mock_wait:
 
             res = execute_batch_actions(actions, auto_settle=True)
@@ -93,8 +96,8 @@ class TestTieredVerificationPhase1:
             {"action": "click", "x": 50, "y": 50},
         ]
 
-        with patch("extra.core.platform.windows.input_engine.send_hotkey"), \
-             patch("extra.core.platform.windows.input_engine.mouse_click"), \
+        with patch(f"{PLATFORM_INPUT}.send_hotkey"), \
+             patch(f"{PLATFORM_INPUT}.mouse_click"), \
              patch("extra.core.soul.gateman.wait_until_settled") as mock_wait, \
              patch("time.sleep") as mock_sleep:
 
@@ -113,7 +116,7 @@ class TestTieredVerificationPhase1:
             {"action": "click", "x": 200, "y": 200, "settle_ms": 80},
         ]
 
-        with patch("extra.core.platform.windows.input_engine.mouse_click"), \
+        with patch(f"{PLATFORM_INPUT}.mouse_click"), \
              patch("extra.core.soul.gateman.wait_until_settled") as mock_wait, \
              patch("time.sleep") as mock_sleep:
 
@@ -138,7 +141,7 @@ class TestTieredVerificationPhase1:
             {"action": "type", "text": "245.12/383.29=", "press_enter": True},
         ]
 
-        with patch("extra.core.platform.windows.input_engine.instant_type"), \
+        with patch(f"{PLATFORM_INPUT}.instant_type"), \
              patch("extra.core.soul.gateman.wait_until_settled") as mock_wait:
 
             res = execute_batch_actions(actions, auto_settle=True)
@@ -147,7 +150,7 @@ class TestTieredVerificationPhase1:
             mock_wait.assert_not_called()
 
 
-class TestTieredVerificationPhase2:
+class TestTieredVerificationPhase2(unittest.TestCase):
     """Test suite for Tier 2 closed-loop focus verification, stroke ink telemetry, and web settle hooks."""
 
     def test_focus_closed_loop_verification_success(self) -> None:
@@ -214,8 +217,8 @@ class TestTieredVerificationPhase2:
         mock_cap.image = blank_img
 
         with patch("extra.mcp.server.capture_screen", return_value=mock_cap), \
-             patch("extra.core.platform.windows.input_engine.mouse_click"), \
-             patch("extra.core.platform.windows.input_engine.mouse_stroke"):
+             patch(f"{PLATFORM_INPUT}.mouse_click"), \
+             patch(f"{PLATFORM_INPUT}.mouse_stroke"):
 
             res = extra_batch_actions(actions=actions, auto_settle=False, strict_ink=True)
             assert res["success"] is False
@@ -243,7 +246,7 @@ class TestTieredVerificationPhase2:
             assert res["settled"] is True
 
 
-class TestTieredVerificationPhase3:
+class TestTieredVerificationPhase3(unittest.TestCase):
     """Test suite for Tier 3 milestone verification, SOUL-Critic bridge, and auto-rollback."""
 
     def test_milestone_verifier_with_soul_critic_pass(self) -> None:
