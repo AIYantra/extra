@@ -780,7 +780,7 @@ def execute_batch_actions(
             elif atype in ("focus", "activate"):
                 title = act.get("window_title")
                 hwnd = act.get("hwnd")
-                from extra.core.platform.macos.focus import find_window_by_title, force_activate_window, get_foreground_window
+                from extra.core.focus import find_window_by_title, force_activate_window, get_foreground_window
                 target_hwnd = int(hwnd) if hwnd else None
                 success = False
                 if not target_hwnd and title:
