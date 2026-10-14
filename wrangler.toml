@@ -7,7 +7,7 @@ routes = [
   { pattern = "extra.yantraos.com/*", zone_name = "yantraos.com" }
 ]
 
-# Workers KV Namespace binding for telemetry (optional)
-# kv_namespaces = [
-#   { binding = "TELEMETRY_KV", id = "<kv_namespace_id>" }
-# ]
+# Workers KV Namespace binding for telemetry
+[[kv_namespaces]]
+binding = "TELEMETRY_KV"
+id = "c00c41f4a9044d1b84283a523438cb0c"
