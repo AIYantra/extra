@@ -1,0 +1,13 @@
+name = "extra-edge-router"
+main = "worker.js"
+compatibility_date = "2026-10-14"
+
+# Route binding for extra.yantraos.com
+routes = [
+  { pattern = "extra.yantraos.com/*", zone_name = "yantraos.com" }
+]
+
+# Workers KV Namespace binding for telemetry (optional)
+# kv_namespaces = [
+#   { binding = "TELEMETRY_KV", id = "<kv_namespace_id>" }
+# ]
