@@ -57,8 +57,8 @@ class UniversalBridgeRegistry:
                 "file_extension": ".py",
             },
             "powershell": {
-                "executable": "powershell.exe" if sys.platform == "win32" else "pwsh",
-                "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{script}"],
+                "executable": shutil.which("pwsh") or shutil.which("powershell.exe") or "powershell.exe",
+                "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "& '{script}'"],
                 "file_extension": ".ps1",
             },
             "cmd": {
