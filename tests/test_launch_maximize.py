@@ -3,7 +3,13 @@ Tests for universal window maximization on launch, Windows 11 Snap Assist interc
 and CF_HTML rich clipboard formatting.
 """
 
+import sys
+import unittest
 from unittest.mock import MagicMock, patch
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-only launch maximization test suite")
+
 import pytest
 
 from extra.core.platform.base import AbstractInputEngine, AbstractShellLauncher

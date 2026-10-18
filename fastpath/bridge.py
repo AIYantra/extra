@@ -58,7 +58,7 @@ class UniversalBridgeRegistry:
             },
             "powershell": {
                 "executable": "powershell.exe" if sys.platform == "win32" else "pwsh",
-                "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", "{script}"],
+                "args": ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", "{script}"],
                 "file_extension": ".ps1",
             },
             "cmd": {

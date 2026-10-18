@@ -6,10 +6,15 @@ GDI resource leak prevention, and state transitions.
 
 from __future__ import annotations
 
+import sys
+import unittest
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-only indicators test suite")
+
 import ctypes
 import io
 import time
-import unittest
 from unittest.mock import MagicMock, patch
 import wave
 
