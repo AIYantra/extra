@@ -128,7 +128,13 @@ jobs:
           npm --version
 
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          if npm view "@yantraos/extra-desktop@${CURRENT_VERSION}" version >/dev/null 2>&1; then
+            echo "::notice::@yantraos/extra-desktop@${CURRENT_VERSION} is already published on npm. Skipping duplicate publish."
+          else
+            npm publish --access public --provenance
+          fi
 
   release-github:
     name: Create GitHub Release

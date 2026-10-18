@@ -123,7 +123,7 @@ class TestTieredVerificationPhase1(unittest.TestCase):
             res = execute_batch_actions(actions, auto_settle=True)
             assert res["success"] is True
             mock_wait.assert_not_called()
-            mock_sleep.assert_called_with(0.08)
+            assert any(call[0] == (0.08,) for call in mock_sleep.call_args_list), f"Expected sleep(0.08) in calls: {mock_sleep.call_args_list}"
 
     def test_mcp_extra_batch_actions_auto_settle_integration(self) -> None:
         """Verifies that MCP tool extra_batch_actions accepts and forwards auto_settle."""

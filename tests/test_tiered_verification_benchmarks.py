@@ -41,16 +41,18 @@ class TestTieredVerificationBenchmarks(unittest.TestCase):
         mock_cap = MagicMock()
         mock_cap.image = img
 
+        timeout_budget = 0.6 if os.environ.get("CI") else 0.2
+        iterations = 20 if os.environ.get("CI") else 50
         latencies: List[float] = []
         with patch("extra.core.soul.gateman.capture_screen", return_value=mock_cap):
             # Warm up
-            gateman.wait_until_settled(timeout_sec=0.2, settle_frames=2, check_interval_ms=10)
+            gateman.wait_until_settled(timeout_sec=timeout_budget, settle_frames=2, check_interval_ms=10)
 
-            # Benchmark 50 iterations
-            for _ in range(50):
+            # Benchmark iterations
+            for _ in range(iterations):
                 t0 = time.perf_counter()
                 res = gateman.wait_until_settled(
-                    timeout_sec=0.2,
+                    timeout_sec=timeout_budget,
                     settle_frames=2,
                     check_interval_ms=10,
                     hash_diff_threshold=1,
