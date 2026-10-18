@@ -316,6 +316,7 @@ def execute_bridge(
             cmd,
             cwd=cwd,
             env=exec_env,
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=timeout_sec,
