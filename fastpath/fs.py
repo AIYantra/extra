@@ -45,6 +45,17 @@ def _is_safe_path(target: Union[str, Path]) -> bool:
         # Check POSIX protected system roots
         if resolved == Path("/"):
             return False
+
+        # Safe user/temp locations always allowed even if symlinked under /var (e.g. macOS /var/folders)
+        import tempfile
+        safe_prefixes = [
+            Path.home().resolve(),
+            Path("/tmp").resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+        ]
+        if any(resolved == s or s in resolved.parents for s in safe_prefixes):
+            return True
+
         posix_roots = [
             Path("/bin"), Path("/sbin"), Path("/usr"),
             Path("/etc"), Path("/lib"), Path("/lib64"), Path("/var"),
