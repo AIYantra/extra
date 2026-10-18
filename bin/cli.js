@@ -158,10 +158,10 @@ function run() {
 [Notice] The underlying native Extra engine is not yet detected on this system.
 
 To install the native Extra engine:
-  * Windows (PowerShell): irm https://extra.yantraos.com/install.ps1 | iex
-  * macOS (Bash):        curl -sSL https://extra.yantraos.com/install.sh | bash
-  * Python pip:          pip install extra-desktop
-  * Astral uv:           uv tool install extra-desktop
+  * Linux / macOS (Bash): curl -sSL https://extra.yantraos.com/install.sh | bash
+  * Windows (PowerShell):  irm https://extra.yantraos.com/install.ps1 | iex
+  * Python pip:           pip install extra-desktop
+  * Astral uv:            uv tool install extra-desktop
 
 Homepage:      https://extra.yantraos.com
 Documentation: https://extra.yantraos.com/docs
