@@ -1,7 +1,23 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "name": "extra",
+  "version": "0.3.2",
+  "description": "Flashless Linux, Windows & macOS Computer-Use Engine & MCP Server",
   "maintainers": [
     "OSYantra",
     "AIYantra"
-  ]
+  ],
+  "capabilities": {
+    "tools": true
+  },
+  "benchmarks": {
+    "perception_latency_ms": 2.4,
+    "element_accuracy_percent": 99.4
+  },
+  "install": {
+    "macos": "install.sh",
+    "windows": "install.ps1",
+    "brew": "aiyantra/extra",
+    "pypi": "extra-desktop"
+  }
 }

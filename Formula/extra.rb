@@ -8,6 +8,7 @@ class Extra < Formula
   license "MIT"
 
   depends_on "python@3.12"
+  depends_on :macos => :monterey
 
   def install
     virtualenv_install_with_resources
