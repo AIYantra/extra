@@ -1,0 +1,21 @@
+{
+  "name": "extra-desktop",
+  "displayName": "Extra Desktop Automation",
+  "version": "0.3.2",
+  "description": "Sovereign desktop automation and native computer-use engine for AI agents across Linux, Windows, and macOS.",
+  "author": {
+    "name": "YantraOS",
+    "email": "support@yantraos.com",
+    "url": "https://github.com/AIYantra/extra"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "computer-use",
+    "mcp",
+    "automation",
+    "desktop",
+    "os",
+    "vision"
+  ],
+  "logo": "assets/logo.png"
+}
