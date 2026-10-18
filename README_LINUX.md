@@ -1,7 +1,7 @@
 <div align="center">
 
 <a href="https://extra.yantraos.com">
-  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/logo.png" alt="Extra — Get extra from your AI on Linux" width="420" />
+  <img src="assets/logo.png" alt="Extra — Get extra from your AI on Linux" width="420" />
 </a>
 
 # Extra for Linux
