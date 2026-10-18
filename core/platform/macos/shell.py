@@ -196,6 +196,7 @@ def launch_app(
     args: Optional[List[str]] = None,
     wait_for_window: bool = True,
     timeout: float = 3.0,
+    maximize: bool = False,
 ) -> LaunchResult:
     """
     Launches an application or URI on macOS deterministically using `/usr/bin/open`.
@@ -297,6 +298,12 @@ def launch_app(
 
             if matched_hwnd:
                 force_activate_window(matched_hwnd)
+                if maximize:
+                    try:
+                        from extra.core.platform.macos.focus import snap_window
+                        snap_window(matched_hwnd, "maximize")
+                    except Exception:
+                        pass
                 break
 
     duration_ms = (time.perf_counter() - t_start) * 1000.0
@@ -331,12 +338,14 @@ class MacShellLauncher(AbstractShellLauncher):
         args: Optional[List[str]] = None,
         wait_for_window: bool = True,
         timeout: float = 5.0,
+        maximize: bool = False,
     ) -> LaunchResult:
         return launch_app(
             app_name=app_name,
             args=args,
             wait_for_window=wait_for_window,
             timeout=timeout,
+            maximize=maximize,
         )
 
     def open_uri(self, uri: str) -> bool:

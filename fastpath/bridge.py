@@ -71,6 +71,11 @@ class UniversalBridgeRegistry:
                 "args": ["-c", "{script}"],
                 "file_extension": ".sh",
             },
+            "harness": {
+                "executable": "cli-anything",
+                "args": [],
+                "file_extension": "",
+            },
         }
         self._auto_discover_external_runtimes()
 
@@ -133,6 +138,51 @@ class UniversalBridgeRegistry:
 _registry = UniversalBridgeRegistry()
 
 
+# Forbidden screen-scraping / capture patterns in bridge execution
+# extra_execute_bridge is designated for deterministic computation, data processing, and CLI workflows,
+# NOT for real-time screen perception loops. Screen perception MUST use native extra_screenshot or extra_inspect_ui.
+FORBIDDEN_BRIDGE_PERCEPTION_PATTERNS = [
+    r"\bimport\s+mss\b",
+    r"\bfrom\s+mss\b",
+    r"\bmss\.mss\b",
+    r"\bImageGrab\b",
+    r"\bpyscreenshot\b",
+    r"\bpyautogui\.screenshot\b",
+    r"\bwin32gui\.GetDC\b",
+    r"\buser32\.GetDC\b",
+    r"\bgdi32\.BitBlt\b",
+    r"\bXGetImage\b",
+    r"\bCGWindowListCreateImage\b",
+]
+
+
+def check_bridge_payload_safety(payload: str, runtime: str) -> Optional[str]:
+    """
+    Validates that a bridge payload does not attempt to circumvent native desktop perception
+    by importing unauthorized screen capture or window scraping libraries.
+    """
+    if runtime.lower() in ("python", "blender_bpy", "node"):
+        import re
+        text_to_check = payload
+        candidate = Path(payload.strip().strip('"').strip("'"))
+        if candidate.exists() and candidate.is_file():
+            try:
+                text_to_check = candidate.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                pass
+
+        for pat in FORBIDDEN_BRIDGE_PERCEPTION_PATTERNS:
+            if re.search(pat, text_to_check, re.IGNORECASE):
+                return (
+                    f"BRIDGE ARCHITECTURE VIOLATION: Execution of screen-scraping/capture module "
+                    f"(pattern '{pat}') is strictly prohibited inside extra_execute_bridge. "
+                    f"extra_execute_bridge is designated for deterministic computation, data processing, "
+                    f"and CLI workflows, NOT for real-time screen perception loops. "
+                    f"Use native extra_screenshot(crop_box=[left, top, right, bottom]) or extra_inspect_ui instead."
+                )
+    return None
+
+
 def execute_bridge(
     runtime: str,
     payload: str,
@@ -159,6 +209,42 @@ def execute_bridge(
             stderr="",
             error=f"Unsupported runtime '{runtime}'. Available: {_registry.list_runtimes()}",
             latency_ms=(time.perf_counter() - t0) * 1000.0,
+        )
+
+    # Safety Check: Block unauthorized screen-scraping in execution bridge
+    safety_violation = check_bridge_payload_safety(payload, runtime)
+    if safety_violation:
+        return BridgeResult(
+            runtime=runtime,
+            success=False,
+            returncode=-4,
+            stdout="",
+            stderr=safety_violation,
+            error=safety_violation,
+            latency_ms=(time.perf_counter() - t0) * 1000.0,
+            metadata={"security_blocked": True},
+        )
+
+    # Special handling for agent-native CLI harnesses
+    if runtime.lower() in ("harness", "cli_harness"):
+        from extra.fastpath.cli_harness import execute_harness
+        h_res = execute_harness(
+            harness=payload,
+            args=args or [],
+            working_dir=working_dir,
+            timeout_sec=timeout_sec,
+            env=env,
+        )
+        return BridgeResult(
+            runtime="harness",
+            success=h_res.success,
+            returncode=h_res.returncode,
+            stdout=h_res.stdout,
+            stderr=h_res.stderr,
+            artifacts_created=h_res.artifacts_created,
+            latency_ms=h_res.latency_ms,
+            error=h_res.error,
+            metadata={"data": h_res.data, "resolved_cmd": h_res.resolved_cmd, **h_res.metadata},
         )
 
     exe = rt_info["executable"]
@@ -188,11 +274,33 @@ def execute_bridge(
     if args:
         cmd.extend(args)
 
-    # Setup environment
-    exec_env = os.environ.copy()
+    # Setup environment: scrub ambient sensitive tokens unless explicitly provided in env
+    BASELINE_SYSTEM_VARS = {
+        "SYSTEMROOT", "PATH", "TEMP", "TMP", "COMSPEC", "PATHEXT",
+        "WINDIR", "USERPROFILE", "HOMEPATH", "HOMEDRIVE", "ALLUSERSPROFILE",
+        "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+        "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
+        "OS", "TERM", "LANG", "LC_ALL", "SHELL", "HOME", "USER", "LOGNAME",
+    }
+    SENSITIVE_KEY_PATTERNS = (
+        "KEY", "SECRET", "TOKEN", "PASSWORD", "AUTH", "CREDENTIAL", "PRIVATE",
+        "PAT", "ACCESS_KEY", "WEBHOOK", "SIG", "API_KEY"
+    )
+
+    exec_env = {}
+    for k, v in os.environ.items():
+        k_upper = k.upper()
+        if k_upper in BASELINE_SYSTEM_VARS:
+            exec_env[k] = v
+        elif any(pattern in k_upper for pattern in SENSITIVE_KEY_PATTERNS):
+            continue
+        else:
+            exec_env[k] = v
+
     if rt_info.get("env_vars"):
         exec_env.update(rt_info["env_vars"])
     if env:
+        # Explicit caller-supplied env overrides everything
         exec_env.update(env)
 
     # Snapshot artifacts before execution to detect newly created ones

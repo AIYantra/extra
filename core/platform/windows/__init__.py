@@ -47,6 +47,7 @@ from extra.core.platform.windows.input_engine import (
     WindowsInputEngine,
     atomic_clipboard_paste,
     execute_batch_actions,
+    get_clipboard_text,
     instant_type,
     mouse_click,
     mouse_double_click,
@@ -78,6 +79,19 @@ from extra.core.platform.windows.uia_plane import (
     UIAutomationPlane,
     UIElement,
 )
+from extra.core.platform.windows.child_session import (
+    ChildSessionCapability,
+    ChildSessionManager,
+    SessionTier,
+    VirtualDesktop,
+    detect_child_session_capabilities,
+    get_child_session_manager,
+)
+from extra.core.platform.windows.pip_window import (
+    PiPPreviewWindow,
+    get_pip_window,
+)
+
 
 __all__ = [
     # Geometry
@@ -103,6 +117,7 @@ __all__ = [
     # Input
     "instant_type",
     "atomic_clipboard_paste",
+    "get_clipboard_text",
     "mouse_move",
     "smooth_mouse_move",
     "mouse_stroke",
@@ -149,4 +164,13 @@ __all__ = [
     "BROWSER_CANDIDATE_PATHS",
     "LaunchResult",
     "WindowsShellLauncher",
+    # Child Session & PiP Preview
+    "ChildSessionCapability",
+    "ChildSessionManager",
+    "SessionTier",
+    "VirtualDesktop",
+    "detect_child_session_capabilities",
+    "get_child_session_manager",
+    "PiPPreviewWindow",
+    "get_pip_window",
 ]

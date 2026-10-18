@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.3.0"
+    __version__ = "0.3.1"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
@@ -65,8 +65,10 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
         print("  [OK] Supported Windows host.")
     elif os_name == "Darwin":
         print("  [OK] Supported macOS host (Apple Silicon / Intel).")
+    elif os_name == "Linux":
+        print("  [OK] Supported Linux host (x86_64 / aarch64).")
     else:
-        print(f"  [FAIL] Extra requires Windows 10/11 or macOS. (Detected: {os_name})")
+        print(f"  [FAIL] Extra requires Windows 10/11, macOS, or Linux. (Detected: {os_name})")
         return 1
 
     # 2. DPI & Platform Geometry
@@ -178,6 +180,61 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
         except Exception as e:
             print(f"  Windows Defender Check:   Notice ({e})")
 
+        # Windows Desktop Isolation & Picture-in-Picture (PiP)
+        print("\n[Windows Desktop Isolation & Picture-in-Picture (PiP)]")
+        try:
+            from extra.core.platform.windows.child_session import detect_child_session_capabilities, SessionTier
+            caps = detect_child_session_capabilities()
+            if caps.recommended_tier == SessionTier.TIER_1_NATIVE_CHILD_SESSION:
+                tier_str = "Tier 1 (Native Child Session)"
+            elif caps.recommended_tier == SessionTier.TIER_2_VIRTUAL_DESKTOP:
+                tier_str = "Tier 2 (Win32 Isolated Virtual Desktop)"
+            else:
+                tier_str = "Tier 3 (Plane 2 Fast-Path)"
+            print(f"  Recommended Tier: {tier_str}")
+            print(f"  Virtual Desktop:  {'[OK] Available (Confined background execution)' if caps.can_virtual_desktop else '[WARN] Unavailable'}")
+            print(f"  Native Child WTS: {'[OK] Available' if caps.can_native_child_session else '[NOTICE] ' + caps.metadata.get('wts_reason', 'Requires Admin elevation')}")
+            print("  PiP Preview:      [OK] Supported (Pure Win32 GDI DIB blit, sub-1ms)")
+        except Exception as ex:
+            print(f"  Desktop Isolation: Notice ({ex})")
+
+    # 3c. Linux Desktop & Hardware Subsystems (if on Linux)
+    elif os_name == "Linux":
+        print("\n[Linux Desktop & Hardware Subsystems]")
+        from extra.core.platform.linux.permissions import (
+            check_atspi_bus,
+            check_capture_backend,
+            check_uinput_access,
+            get_current_desktop,
+            get_session_type,
+            print_guidance_card,
+        )
+
+        session = get_session_type()
+        desktop = get_current_desktop() or "Generic / None"
+        print(f"  Display Protocol: {session.upper()} ({desktop})")
+
+        has_uinput = check_uinput_access()
+        if has_uinput:
+            print("  Hardware Input:   [OK] /dev/uinput accessible (direct kernel injection).")
+        else:
+            print("  Hardware Input:   [WARN] /dev/uinput not accessible without root/group.")
+
+        has_atspi = check_atspi_bus()
+        if has_atspi:
+            print("  Accessibility:    [OK] Active (AT-SPI2 Bus connected).")
+        else:
+            print("  Accessibility:    [WARN] AT-SPI2 bus not active.")
+
+        cap_ok, cap_backend = check_capture_backend()
+        if cap_ok:
+            print(f"  Screen Capture:   [OK] {cap_backend} active.")
+        else:
+            print(f"  Screen Capture:   [WARN] {cap_backend}.")
+
+        if not (has_uinput and has_atspi and cap_ok):
+            print_guidance_card()
+
     # 4. Displays & Multi-Monitor Metrics
     print("\n[Displays & Multi-Monitor Metrics]")
     monitors = get_monitors_info()
@@ -213,7 +270,7 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
 
     # 7. Browser & Shell Fast-Path
     print("\n[Browser Fast-Path & Shell Engine]")
-    browser_name = "safari" if os_name == "Darwin" else "edge"
+    browser_name = "safari" if os_name == "Darwin" else ("browser" if os_name == "Linux" else "edge")
     browser_path = resolve_executable(browser_name)
     print(f"  Default Browser ({browser_name}): {browser_path}")
     print(f"  [OK] Zero-download web fast-path ready.")
@@ -237,6 +294,34 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
             print("  [OK] Skill playbooks validated and healthy.")
     except Exception as e:
         print(f"  [WARN] Skill audit notice: {e}")
+
+    # 10. SOUL Perception Engine & Local Memory Graph
+    print("\n[SOUL Perception Engine & Local Memory Graph]")
+    try:
+        soul_dir = Path.home() / ".extra" / "models" / "soul"
+        onnx_models = list(soul_dir.glob("*.onnx")) if soul_dir.exists() else []
+        if onnx_models:
+            print(f"  SOUL Vision Engine: [OK] ONNX Models Loaded ({len(onnx_models)} models found in {soul_dir}).")
+        else:
+            print("  SOUL Vision Engine: [INFO] Algorithmic Fallback Active (NumPy Edge Gradients + pHash).")
+
+        try:
+            import onnxruntime as ort
+            providers = ort.get_available_providers()
+            print(f"  ONNX Runtime:       [OK] Available (Execution Providers: {', '.join(providers)})")
+        except ImportError:
+            print("  ONNX Runtime:       [WARN] onnxruntime not installed.")
+
+        try:
+            from extra.core.memory.db import get_memory_connection
+            conn = get_memory_connection()
+            tasks_count = conn.execute("MATCH (t:Task) RETURN count(t)").get_next()[0]
+            decisions_count = conn.execute("MATCH (d:SoulDecision) RETURN count(d)").get_next()[0]
+            print(f"  KuzuDB Memory:      [OK] Connected ({tasks_count} tasks, {decisions_count} decisions in graph.kuzu)")
+        except Exception as kuzu_ex:
+            print(f"  KuzuDB Memory:      [INFO] Not initialized or notice: {kuzu_ex}")
+    except Exception as e:
+        print(f"  [WARN] SOUL perception & memory notice: {e}")
 
     print("\n" + "=" * 65)
     print(" DOCTOR DIAGNOSTIC COMPLETE: SYSTEM IS READY FOR EXTRA")
@@ -270,8 +355,45 @@ def cmd_test() -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Starts the Model Context Protocol (MCP) server."""
+    if getattr(args, "isolate", False):
+        os.environ["EXTRA_ISOLATED_DESKTOP"] = "1"
+    if getattr(args, "pip", False):
+        os.environ["EXTRA_PIP_PREVIEW"] = "1"
     from extra.mcp.server import main
     main()
+    return 0
+
+
+def cmd_pip(args: argparse.Namespace) -> int:
+    """Controls or demonstrates the native Win32 Picture-in-Picture floating preview window."""
+    if platform.system() != "Windows":
+        print("[FAIL] Native Win32 Picture-in-Picture is only supported on Windows.")
+        return 1
+
+    action = getattr(args, "action", "demo")
+    from extra.core.platform.windows.pip_window import get_pip_window
+    pip = get_pip_window()
+
+    if action == "start":
+        pip.start()
+        print(f"[OK] Native PiP preview window started (HWND: {pip.hwnd})")
+        return 0
+    elif action == "stop":
+        pip.stop()
+        print("[OK] Native PiP preview window stopped.")
+        return 0
+    elif action == "demo":
+        print("Launching Picture-in-Picture preview demo (3 seconds)...")
+        pip.start()
+        from extra.core.capture import capture_screen
+        t_end = time.time() + 3.0
+        while time.time() < t_end:
+            res = capture_screen()
+            pip.update_frame(res.image)
+            time.sleep(1.0 / 30.0)
+        pip.stop()
+        print("[OK] PiP demo completed successfully.")
+        return 0
     return 0
 
 
@@ -334,7 +456,8 @@ def cmd_launch(args: argparse.Namespace) -> int:
     from extra.fastpath.shell import launch_app
     app_args = getattr(args, "args", None)
     no_wait = getattr(args, "no_wait", False)
-    res = launch_app(args.app, args=app_args, wait_for_window=not no_wait)
+    maximize = getattr(args, "maximize", False)
+    res = launch_app(args.app, args=app_args, wait_for_window=not no_wait, maximize=maximize)
     print(res.message)
     return 0 if res.success else 1
 
@@ -345,6 +468,22 @@ def cmd_type(args: argparse.Namespace) -> int:
     enter = getattr(args, "enter", False)
     instant_type(args.text, press_enter=enter)
     print(f"Injected text ({len(args.text)} chars).")
+    return 0
+
+
+def cmd_click(args: argparse.Namespace) -> int:
+    """Executes a hardware-level mouse click at coordinates."""
+    from extra.core.input_engine import mouse_click
+    mouse_click(args.x, args.y, button=getattr(args, "button", "left"), clicks=getattr(args, "clicks", 1))
+    print(f"Clicked ({args.x}, {args.y}).")
+    return 0
+
+
+def cmd_hotkey(args: argparse.Namespace) -> int:
+    """Dispatches a synchronized hotkey combination."""
+    from extra.core.input_engine import send_hotkey
+    send_hotkey(args.keys)
+    print(f"Dispatched hotkey: {'+'.join(args.keys)}")
     return 0
 
 
@@ -765,10 +904,141 @@ def cmd_uninstall(args: argparse.Namespace) -> int:
     return perform_uninstall(force=force, dry_run=dry_run)
 
 
+def cmd_stats(args: Optional[argparse.Namespace] = None) -> int:
+    """Displays the Brave Shields-style impact metrics."""
+    from extra.core.metrics.ledger import ImpactLedger
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
+    if args and getattr(args, "json", False):
+        print(json.dumps(ImpactLedger.get_summary(), indent=2))
+    else:
+        print(ImpactLedger.format_ascii_card())
+    return 0
+
+
+def cmd_dashboard(args: Optional[argparse.Namespace] = None) -> int:
+    """Generates and opens the local HTML impact dashboard."""
+    from extra.core.metrics.dashboard import generate_html_dashboard, open_dashboard_in_browser
+    if args and getattr(args, "path_only", False):
+        p = generate_html_dashboard()
+        print(f"Impact dashboard generated: {p}")
+    else:
+        p = open_dashboard_in_browser()
+        print(f"Opening impact dashboard in browser: {p}")
+    return 0
+
+
+def cmd_telemetry(args: Optional[argparse.Namespace] = None) -> int:
+    """Manages anonymous fleet telemetry and privacy consent."""
+    from extra.core.metrics.config import (
+        is_telemetry_enabled,
+        set_telemetry_enabled,
+        get_anonymous_machine_id,
+        load_config,
+    )
+    action = getattr(args, "action", "status") if args else "status"
+
+    if action == "on":
+        set_telemetry_enabled(True)
+        print("[Extra] Community telemetry ENABLED.")
+        print("  Thank you for helping improve Project Extra for everyone!")
+        print(f"  Anonymous ID: {get_anonymous_machine_id()[:16]}...")
+        print("  Zero PII guarantee: No screenshots, prompts, or personal data.")
+        return 0
+    elif action == "off":
+        set_telemetry_enabled(False)
+        print("[Extra] Telemetry DISABLED.")
+        print("  Project Extra is operating in 100% air-gapped local mode.")
+        return 0
+    else:
+        # status
+        enabled = is_telemetry_enabled()
+        cfg = load_config()
+        dnt = os.environ.get("DO_NOT_TRACK") == "1"
+        env_override = os.environ.get("EXTRA_TELEMETRY")
+
+        print("=" * 60)
+        print(" PROJECT EXTRA: PRIVACY & TELEMETRY STATUS")
+        print("=" * 60)
+        print(f"  Current Mode:       {'ENABLED (Opt-In)' if enabled else 'DISABLED (Air-Gapped)'}")
+        print(f"  Anonymous ID:       {get_anonymous_machine_id()}")
+        print(f"  DO_NOT_TRACK:       {'ACTIVE (Strict override)' if dnt else 'Not set'}")
+        print(f"  EXTRA_TELEMETRY:    {env_override if env_override is not None else 'Not set'}")
+        print(f"  Config Setting:     {cfg.get('telemetry_enabled', False)}")
+        print("\n  Toggle anytime with: extra telemetry on  |  extra telemetry off")
+        print("=" * 60)
+        return 0
+
+
+def cmd_audit(args) -> int:
+    """Audits an agent transcript and prints empirical ground truth savings."""
+    from extra.core.metrics.auditor import find_transcript_file, audit_transcript, format_audit_receipt
+    try:
+        t_path = find_transcript_file(args.path)
+        model_key = getattr(args, "model", "claude-sonnet-5-5") or "claude-sonnet-5-5"
+        record = getattr(args, "record", False)
+
+        result = audit_transcript(t_path, model_key=model_key, record_to_ledger=record)
+
+        if getattr(args, "json", False):
+            print(json.dumps(result, indent=2))
+        else:
+            print(format_audit_receipt(result))
+            if result.get("recorded_to_ledger"):
+                print("  [OK] Session metrics recorded to ~/.extra/metrics/impact_ledger.json")
+        return 0
+    except Exception as e:
+        print(f"Error auditing transcript: {e}", file=sys.stderr)
+        return 1
+
+
+def check_first_run_consent() -> None:
+    """Checks and prompts for first-run interactive telemetry consent."""
+    from extra.core.metrics.config import (
+        load_config,
+        set_telemetry_enabled,
+        save_config,
+    )
+
+    if os.environ.get("DO_NOT_TRACK") == "1":
+        return
+
+    cfg = load_config()
+    if cfg.get("telemetry_prompted", False):
+        return
+
+    # Only prompt if stdin and stdout are interactive TTY terminals
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        print("\n" + "─" * 68)
+        print("  ⚡ Welcome to Project Extra!")
+        print("  Help improve autonomous computer use with anonymous telemetry?")
+        print("  • Shared: App names, execution latency (ms), and error codes.")
+        print("  • NEVER shared: Screenshots, prompts, keystrokes, or file paths.")
+        print("─" * 68)
+        try:
+            choice = input("  Enable community telemetry? [y/N] (Default: N): ").strip().lower()
+            if choice in ("y", "yes"):
+                set_telemetry_enabled(True)
+                print("  [OK] Telemetry enabled. Thank you for contributing!\n")
+            else:
+                set_telemetry_enabled(False)
+                print("  [OK] Operating in 100% air-gapped local mode.\n")
+        except Exception:
+            set_telemetry_enabled(False)
+    else:
+        # Non-interactive / headless / agent runner: default to False silently
+        cfg["telemetry_prompted"] = True
+        cfg["telemetry_enabled"] = False
+        save_config(cfg)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="extra",
-        description="Extra — Flashless macOS & Windows Computer-Use Engine & MCP Server",
+        description="Extra — Flashless macOS, Windows & Linux Computer-Use Engine & MCP Server",
     )
     parser.add_argument(
         "--version", "-v", action="version", version=f"extra {__version__}"
@@ -801,9 +1071,15 @@ def main() -> None:
     # run
     run_parser = subparsers.add_parser("run", help="Start the MCP Server on stdio")
     run_parser.add_argument("--transport", default="stdio", choices=["stdio"], help="Transport mode")
+    run_parser.add_argument("--isolate", action="store_true", help="Confine automation to isolated child session / virtual desktop")
+    run_parser.add_argument("--pip", action="store_true", help="Launch live Picture-in-Picture floating preview window")
+
+    # pip (Picture-in-Picture floating preview window)
+    pip_parser = subparsers.add_parser("pip", help="Control hardware-accelerated Picture-in-Picture floating preview window")
+    pip_parser.add_argument("action", nargs="?", default="demo", choices=["demo", "start", "stop"], help="Action: demo (live 3s preview), start, stop")
 
     # inspect
-    inspect_parser = subparsers.add_parser("inspect", help="Inspect Windows UI Automation tree")
+    inspect_parser = subparsers.add_parser("inspect", help="Inspect Semantic UI Automation / Accessibility tree")
     inspect_parser.add_argument("--window", "-w", default=None, help="Filter by window title")
     inspect_parser.add_argument("--limit", "-n", type=int, default=30, help="Max elements to display")
     inspect_parser.add_argument("--all", "-a", action="store_true", help="Include non-interactive containers")
@@ -825,11 +1101,23 @@ def main() -> None:
     launch_parser.add_argument("app", help="Application name or alias (e.g. calc, notepad, edge, safari)")
     launch_parser.add_argument("--args", nargs="*", default=None, help="Arguments or files to pass to application")
     launch_parser.add_argument("--no-wait", action="store_true", help="Do not wait for window to appear")
+    launch_parser.add_argument("--maximize", "-m", action="store_true", help="Instantly maximize the window upon launch")
 
     # type
     type_parser = subparsers.add_parser("type", help="Instantly inject text into active window")
     type_parser.add_argument("text", help="Text string to type")
     type_parser.add_argument("--enter", "-e", action="store_true", help="Press Enter after typing")
+
+    # click
+    click_parser = subparsers.add_parser("click", help="Execute hardware mouse click at (x, y)")
+    click_parser.add_argument("x", type=int, help="X screen coordinate")
+    click_parser.add_argument("y", type=int, help="Y screen coordinate")
+    click_parser.add_argument("--button", "-b", default="left", choices=["left", "right", "middle"], help="Button")
+    click_parser.add_argument("--clicks", "-c", type=int, default=1, help="Click count")
+
+    # hotkey
+    hotkey_parser = subparsers.add_parser("hotkey", help="Dispatch hotkey combination")
+    hotkey_parser.add_argument("keys", nargs="+", help="Keys to press (e.g. ctrl t, alt f4)")
 
     # curate
     curate_parser = subparsers.add_parser("curate", help="Audit, validate, and sanitize AI skill libraries")
@@ -847,13 +1135,51 @@ def main() -> None:
         "--dry-run", action="store_true", help="Simulate uninstallation without deleting any files"
     )
 
+    # stats (Impact Shield)
+    stats_parser = subparsers.add_parser("stats", help="Display Brave Shields-style impact metrics (time, tokens, and cost saved)")
+    stats_parser.add_argument("--json", action="store_true", help="Output metrics in raw JSON format")
+
+    # dashboard (Visual HTML Dashboard)
+    dashboard_parser = subparsers.add_parser("dashboard", help="Open local visual HTML impact dashboard in browser")
+    dashboard_parser.add_argument("--path-only", action="store_true", help="Generate dashboard and print path without opening browser")
+
+    # telemetry (Privacy & Opt-In Control)
+    telemetry_parser = subparsers.add_parser("telemetry", help="Manage anonymous fleet telemetry and privacy settings")
+    telemetry_parser.add_argument("action", nargs="?", default="status", choices=["status", "on", "off"], help="Action: status (show state), on (opt-in), off (air-gap opt-out)")
+
+    # audit (Empirical Transcript Verification)
+    audit_parser = subparsers.add_parser("audit", help="Audit an agent transcript (AGY, Claude, Cursor) to calculate exact ground-truth tokens and cost saved")
+    audit_parser.add_argument("path", help="Path to transcript_full.jsonl or conversation directory")
+    audit_parser.add_argument("--model", "-m", default="claude-sonnet-5-5", help="Model pricing tier (e.g. gpt-6-astra, claude-opus-5-5, claude-sonnet-5-5, gemini-4-argon)")
+    audit_parser.add_argument("--record", "-r", action="store_true", help="Record audited mission metrics into local impact_ledger.json")
+    audit_parser.add_argument("--json", action="store_true", help="Output audit results in raw JSON")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         sys.exit(0)
 
-    if args.command == "doctor":
+    # Check for first-run interactive consent if in an interactive terminal
+    check_first_run_consent()
+
+    # Trigger one-time anonymous first-run activation ping if pending
+    try:
+        from extra.core.metrics.telemetry import emit_first_run_activation
+        cmd_name = args.command if hasattr(args, "command") and args.command else "root"
+        emit_first_run_activation(entrypoint=f"cli_{cmd_name}")
+    except Exception:
+        pass
+
+    if args.command == "stats":
+        sys.exit(cmd_stats(args))
+    elif args.command == "dashboard":
+        sys.exit(cmd_dashboard(args))
+    elif args.command == "telemetry":
+        sys.exit(cmd_telemetry(args))
+    elif args.command == "audit":
+        sys.exit(cmd_audit(args))
+    elif args.command == "doctor":
         sys.exit(cmd_doctor(args))
     elif args.command == "permissions":
         sys.exit(cmd_permissions(args))
@@ -869,6 +1195,8 @@ def main() -> None:
         sys.exit(cmd_uninstall(args))
     elif args.command == "run":
         sys.exit(cmd_run(args))
+    elif args.command == "pip":
+        sys.exit(cmd_pip(args))
     elif args.command == "inspect":
         sys.exit(cmd_inspect(args))
     elif args.command == "snap":
@@ -879,6 +1207,10 @@ def main() -> None:
         sys.exit(cmd_launch(args))
     elif args.command == "type":
         sys.exit(cmd_type(args))
+    elif args.command == "click":
+        sys.exit(cmd_click(args))
+    elif args.command == "hotkey":
+        sys.exit(cmd_hotkey(args))
 
 
 

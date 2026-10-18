@@ -46,15 +46,39 @@ class MilestoneVerifier:
         criteria = milestone.acceptance_criteria or {}
 
         # 1. Artifact Existence & Minimum Size Checks
+        workspace_dir = Path(os.environ.get("EXTRA_WORKSPACE", Path.home() / ".extra" / "workspace"))
         for art_path_str in milestone.expected_artifacts:
             art_path = Path(os.path.expandvars(art_path_str))
-            if not art_path.exists():
+            # Resilient path resolution: If relative, first check CWD, then canonical workspace
+            if not art_path.is_absolute():
+                if not art_path.exists():
+                    ws_candidate = workspace_dir / art_path
+                    if ws_candidate.exists():
+                        art_path = ws_candidate
+                    else:
+                        defects.append(
+                            f"Expected artifact not found: {art_path_str} "
+                            f"(checked '{art_path.resolve()}' and '{ws_candidate}')"
+                        )
+                        continue
+            elif not art_path.exists():
                 defects.append(f"Expected artifact not found: {art_path}")
-            elif art_path.is_file():
+                continue
+
+            if art_path.is_file():
                 size = art_path.stat().st_size
                 min_bytes = criteria.get("min_file_size_bytes", 10)
                 if size < min_bytes:
                     defects.append(f"Artifact {art_path.name} is undersized ({size} bytes < {min_bytes} bytes)")
+
+                # 1b. Provenance & Lineage Verification (Anti-Shortcut Invariant)
+                if "expected_origin" in criteria or "forbidden_origins" in criteria:
+                    from extra.core.composer.lineage import verify_artifact_lineage
+                    exp_orig = criteria.get("expected_origin", "official_web_export")
+                    forb_origs = criteria.get("forbidden_origins")
+                    lin_verdict = verify_artifact_lineage(art_path, expected_origin=exp_orig, forbidden_origins=forb_origs)
+                    if not lin_verdict.valid:
+                        defects.extend(lin_verdict.defects)
 
         # 2. Returncode Check (if bridge/process result present)
         if execution_result:

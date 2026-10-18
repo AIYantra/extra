@@ -197,6 +197,22 @@ class TestDynamicBatchActions(unittest.TestCase):
         print(f"\n[BENCHMARK] SOUL Dynamic Batch Action Median Latency: {median_lat:.3f} ms")
         self.assertLess(median_lat, 5.0, "Dynamic batch action evaluation should be < 5ms")
 
+    def test_batch_drag_and_canvas_relative(self):
+        """Validates that drag actions execute cleanly in batch without being silently dropped."""
+        from unittest.mock import patch
+        with patch("extra.core.platform.windows.input_engine.mouse_drag") as mock_drag:
+            batch = [
+                {"action": "drag", "start_x": 100, "start_y": 200, "end_x": 300, "end_y": 400, "duration": 0.05},
+            ]
+            res = execute_batch_actions(batch, auto_settle=False, auto_distill=False)
+            self.assertTrue(res["success"])
+            self.assertEqual(len(res["actions"]), 1)
+            self.assertEqual(res["actions"][0]["action"], "drag")
+            self.assertEqual(res["actions"][0]["start"], [100, 200])
+            self.assertEqual(res["actions"][0]["end"], [300, 400])
+            mock_drag.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
+

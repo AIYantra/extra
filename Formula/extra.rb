@@ -1,9 +1,9 @@
 class Extra < Formula
   include Language::Python::Virtualenv
 
-  desc "Flashless macOS & Windows Computer-Use Engine & MCP Server"
+  desc "Flashless Linux, Windows & macOS Computer-Use Engine & MCP Server"
   homepage "https://extra.yantraos.com"
-  url "https://github.com/AIYantra/extra/archive/refs/tags/v0.3.0.tar.gz"
+  url "https://github.com/AIYantra/extra/archive/refs/tags/v0.3.2.tar.gz"
   sha256 "REPLACE_WITH_ACTUAL_SHA256"
   license "MIT"
 
@@ -20,6 +20,6 @@ class Extra < Formula
   end
 
   test do
-    assert_match "extra 0.3.0", shell_output("#{bin}/extra --version")
+    assert_match "extra 0.3.2", shell_output("#{bin}/extra --version")
   end
 end

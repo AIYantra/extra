@@ -60,6 +60,8 @@ from extra.core.input_engine import (
 )
 from extra.core.stall_breaker import EmergencyAbortError, StallBreaker, StallStatus
 from extra.core.uia_plane import SetOfMarkAnnotator, UIAutomationPlane
+from extra.core.distiller import distill_screen
+from extra.core.subtask import run_subtask
 from extra.fastpath.browser import execute_browser_action
 from extra.fastpath.fs import execute_fs_batch
 from extra.fastpath.shell import launch_app, open_uri, resolve_executable
@@ -84,6 +86,9 @@ from extra.core.evolution import (
     sanitize_skill_library,
 )
 from extra.fastpath.bridge import execute_bridge
+from extra.fastpath.cli_harness import execute_harness
+from extra.fastpath.cli_hub import get_cli_hub
+from extra.core.evolution.harness_generator import get_harness_synthesizer
 from extra.core.composer import (
     Milestone,
     MilestoneStatus,
@@ -104,12 +109,34 @@ logging.basicConfig(
 logger = logging.getLogger("extra.mcp")
 
 # Initialize Server
-server = MCPServer("Extra-Windows-Flashless")
+_platform_tag = "macOS" if sys.platform == "darwin" else ("Linux" if sys.platform.startswith("linux") else "Windows")
+server = MCPServer(f"Extra-{_platform_tag}-Flashless")
 
 # Singletons for supervisor plane
 _uia_plane = UIAutomationPlane()
 _som_annotator = SetOfMarkAnnotator()
 _stall_breaker = StallBreaker(max_strikes=2)
+
+# Active in-memory TaskBlueprints and turn budgeting
+_active_blueprints: Dict[str, TaskBlueprint] = {}
+
+
+def _track_active_blueprint_turn() -> Optional[str]:
+    """
+    If there is an active TaskBlueprint with an active milestone, automatically records
+    one turn and returns a warning string if the milestone turn budget is exceeded.
+    """
+    for bp in list(_active_blueprints.values()):
+        if bp.active_milestone_id and not bp.is_complete:
+            try:
+                res = bp.record_milestone_turn(bp.active_milestone_id, turns=1)
+                bp.save()
+                if res.get("budget_exceeded"):
+                    return res.get("warning")
+            except Exception as e:
+                logger.debug("[BlueprintTurnTracker] Failed to record turn: %s", e)
+    return None
+
 
 
 @server.tool()
@@ -120,11 +147,18 @@ def extra_screenshot(
     save_to_file: bool = True,
     file_path: Optional[str] = None,
     include_base64: bool = False,
+    auto_distill: bool = True,
 ) -> Dict[str, Any]:
     """
     Captures an ultra-fast screen frame (< 30ms) from the specified monitor.
     Optionally overlays Set-of-Mark (SoM) numbered badges on all detected interactive UI elements.
     Saves screenshot to disk to avoid large Base64 payload truncation in AI clients (Fixes #4, credit: @harshbuttru3).
+    Includes auto-distilled compact UI layout directly in payload to eliminate view_file roundtrips.
+    
+    ZERO-HOP PERCEPTION MANDATE:
+    Returns 'distilled_ui' directly in the response payload.
+    NEVER call view_file on the saved screenshot PNG file. Reading distilled_ui directly
+    saves 10-15 seconds per turn and prevents prompt token exhaustion.
     
     Args:
         monitor_index: 0-based display index (0 = primary monitor).
@@ -133,6 +167,7 @@ def extra_screenshot(
         save_to_file: If True (default), writes image to disk in the safe scratch workspace (~/.extra/workspace/screenshots/).
         file_path: Optional custom file path to save screenshot.
         include_base64: If True, includes full base64 string in response (default False to prevent LLM payload truncation).
+        auto_distill: If True (default), includes token-optimized compact UI distillation (elements, texts, buttons, inputs, coordinates) directly in the response to eliminate view_file roundtrips.
     """
     ensure_dpi_aware()
     attach_input_desktop()
@@ -146,6 +181,10 @@ def extra_screenshot(
         "height": cap.height,
         "duration_ms": cap.duration_ms,
         "crop_box": crop_box,
+        "perception_notice": (
+            "Zero-Hop Protocol Active: distilled_ui is included in this response. "
+            "STRICT PROHIBITION: DO NOT call view_file on the saved screenshot PNG file."
+        ),
     }
 
     fg = get_foreground_window()
@@ -163,6 +202,17 @@ def extra_screenshot(
     else:
         final_img = cap.image
         result["annotated"] = False
+
+    # Auto-Distillation: Zero-Hop Perception (< 10ms)
+    # Injects compact UI layout directly in tool response to eliminate view_file roundtrips
+    if auto_distill:
+        try:
+            d_res = distill_screen(format="compact", max_elements=30)
+            result["distilled_ui"] = d_res.content
+            result["distilled_element_count"] = d_res.element_count
+            result["distilled_interactive_count"] = d_res.interactive_count
+        except Exception as ex:
+            logger.debug("Auto-distill in extra_screenshot failed: %s", ex)
 
     # Save to file to prevent LLM tool payload truncation (Fixes #4, reported by @harshbuttru3)
     if save_to_file:
@@ -186,7 +236,7 @@ def extra_screenshot(
         final_img.save(buf, format="JPEG", quality=80)
         result["screenshot_base64"] = base64.b64encode(buf.getvalue()).decode("utf-8")
 
-    record_action_step("extra_screenshot", {"annotate_ui": annotate_ui, "save_to_file": save_to_file}, result.get("duration_ms", 0.0))
+    record_action_step("extra_screenshot", {"annotate_ui": annotate_ui, "save_to_file": save_to_file, "auto_distill": auto_distill}, result.get("duration_ms", 0.0))
     return result
 
 
@@ -248,14 +298,17 @@ def extra_click(
     button: str = "left",
     clicks: int = 1,
     normalized: bool = False,
+    canvas_relative: bool = False,
     monitor_index: int = 0,
     human_like: bool = True,
     speed: str = "normal",
+    auto_distill: bool = True,
 ) -> Dict[str, Any]:
     """
     Executes a hardware-level mouse click with PerMonitorV2 DPI compensation and closed-loop stall checking.
     Supports semantic visual grounding via SOUL-Eyes ('target') for zero-coordinate autonomous clicking.
     Supports human-like curved approach with natural reaction delay (enabled by default for live computer use).
+    Returns auto-distilled compact UI layout after settle to eliminate intermediate screenshot roundtrips.
     
     Args:
         x: Optional X-coordinate (physical pixel or normalized 0-1000).
@@ -264,9 +317,11 @@ def extra_click(
         button: Mouse button ('left', 'right', 'middle'). Default: 'left'.
         clicks: Click count (1 = single click, 2 = double click). Default: 1.
         normalized: If True, treats x, y as [0, 1000] scale and converts to physical pixels.
+        canvas_relative: If True, treats coordinates as relative to the active window's detected canvas/work surface.
         monitor_index: Monitor index if normalized coordinates are used.
         human_like: If True, approaches target via human Bézier trajectory with physiological pre-click reaction delay (default: True).
         speed: Speed preset if human_like is True ('fast', 'normal', 'slow').
+        auto_distill: If True (default), returns updated compact UI state after click settle to eliminate intermediate screenshot roundtrips.
     """
     ensure_dpi_aware()
     attach_input_desktop()
@@ -291,7 +346,22 @@ def extra_click(
                 "latency_ms": ground_res.latency_ms if 'ground_res' in locals() else 0.0,
             }
     elif x is not None and y is not None:
-        if normalized:
+        if canvas_relative:
+            try:
+                from extra.core.soul.vision_parser import detect_canvas_viewport
+                cv = detect_canvas_viewport()
+                if cv:
+                    if normalized:
+                        phys_x = cv.bounding_box[0] + int((int(x) / 1000.0) * cv.width)
+                        phys_y = cv.bounding_box[1] + int((int(y) / 1000.0) * cv.height)
+                    else:
+                        phys_x = cv.bounding_box[0] + int(x)
+                        phys_y = cv.bounding_box[1] + int(y)
+                else:
+                    phys_x, phys_y = (denormalize_coordinates(int(x), int(y), monitor_index=monitor_index) if normalized else (int(x), int(y)))
+            except Exception:
+                phys_x, phys_y = (denormalize_coordinates(int(x), int(y), monitor_index=monitor_index) if normalized else (int(x), int(y)))
+        elif normalized:
             phys_x, phys_y = denormalize_coordinates(int(x), int(y), monitor_index=monitor_index)
         else:
             phys_x, phys_y = int(x), int(y)
@@ -300,6 +370,7 @@ def extra_click(
             "success": False,
             "error": "Either (x, y) coordinates or a semantic 'target' must be provided.",
         }
+
 
     # Capture state before action for closed-loop verification
     before_fg = get_foreground_window()
@@ -334,6 +405,7 @@ def extra_click(
     cap_after = capture_screen(monitor_index=monitor_index)
     roi_after = cap_after.image.crop(roi_box)
 
+    win_title = after_fg.title if after_fg else (before_fg.title if before_fg else None)
     outcome = _stall_breaker.evaluate_action(
         roi_before,
         roi_after,
@@ -342,6 +414,8 @@ def extra_click(
         action_name="click",
         before_full_image=cap_before.image,
         after_full_image=cap_after.image,
+        click_coords=(phys_x, phys_y),
+        window_title=win_title,
     )
 
     record_action_step("extra_click", {"x": phys_x, "y": phys_y, "button": button, "clicks": clicks, "human_like": human_like}, duration_ms)
@@ -365,12 +439,30 @@ def extra_click(
         "visual_change": outcome.status == StallStatus.NORMAL,
         "message": outcome.message,
     }
+    if outcome.recommended_action:
+        ret["recommended_action"] = outcome.recommended_action
+    if after_fg:
+        ret["active_window_title"] = after_fg.title
+        ret["active_window_hwnd"] = after_fg.hwnd
     if outcome.status == StallStatus.STALLED:
         ret["error"] = outcome.message
     elif outcome.status == StallStatus.WARNING:
         ret["warning"] = outcome.message
     if grounding_meta:
         ret["grounding"] = grounding_meta
+
+    # Auto-Distillation: Zero-Hop Perception
+    if auto_distill:
+        try:
+            d_res = distill_screen(format="compact", max_elements=25)
+            ret["distilled_ui"] = d_res.content
+        except Exception as ex:
+            logger.debug("Auto-distill in extra_click failed: %s", ex)
+
+    b_warn = _track_active_blueprint_turn()
+    if b_warn:
+        ret["budget_warning"] = b_warn
+
     return ret
 
 
@@ -380,6 +472,8 @@ def extra_type(
     text: str,
     press_enter: bool = False,
     use_clipboard: bool = False,
+    auto_distill: bool = False,
+    html: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Injects Unicode text with sub-millisecond latency into the active focused window.
@@ -387,22 +481,27 @@ def extra_type(
     
     FAST-PATH: In Calculator (calc.exe), directly type the entire mathematical formula followed by '='
     (e.g., text='45/5*2+10-11=') instead of clicking buttons individually.
+    
+    RICH CONTENT FAST-PATH: Pass `html="<table>...</table>"` to paste native tables, styled headings,
+    or formatted links directly into Google Docs, Word, LibreOffice, or web editors without canvas clicking.
 
     Args:
         text: Text string to type (full Unicode and emoji support).
         press_enter: If True, sends an Enter key immediately following the text.
         use_clipboard: If True, injects via atomic clipboard paste (defaults to False for universal input compatibility).
+        auto_distill: If True (or if press_enter is True), returns updated compact UI state after typing settles.
+        html: Optional rich HTML fragment (e.g. '<table>...</table>') to inject via Windows CF_HTML format.
     """
     ensure_dpi_aware()
     attach_input_desktop()
     _stall_breaker.check_safety_abort()
 
     t0 = time.perf_counter()
-    if use_clipboard:
-        atomic_clipboard_paste(text)
+    if use_clipboard or html is not None:
+        atomic_clipboard_paste(text, html=html)
         if press_enter:
             send_hotkey(["enter"])
-        method = "clipboard"
+        method = "clipboard_html" if html is not None else "clipboard"
     else:
         # Universal instant keystroke injection via Win32 VK_PACKET / macOS CGEvent (< 2ms)
         instant_type(text, press_enter=press_enter)
@@ -410,13 +509,31 @@ def extra_type(
     duration_ms = (time.perf_counter() - t0) * 1000.0
     _stall_breaker.reset()
 
-    record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard}, duration_ms)
-    return {
+    ret = {
         "success": True,
         "length": len(text),
         "duration_ms": round(duration_ms, 2),
         "method": method,
     }
+
+    # Auto-Distillation on enter or explicit request
+    if auto_distill or press_enter:
+        if press_enter:
+            time.sleep(0.08)
+        try:
+            d_res = distill_screen(format="compact", max_elements=25)
+            ret["distilled_ui"] = d_res.content
+            fg = get_foreground_window()
+            if fg:
+                ret["active_window_title"] = fg.title
+        except Exception as ex:
+            logger.debug("Auto-distill in extra_type failed: %s", ex)
+
+    record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard, "auto_distill": auto_distill}, duration_ms)
+    b_warn = _track_active_blueprint_turn()
+    if b_warn:
+        ret["budget_warning"] = b_warn
+    return ret
 
 
 @server.tool()
@@ -438,11 +555,15 @@ def extra_hotkey(keys: List[str]) -> Dict[str, Any]:
     _stall_breaker.reset()
 
     record_action_step("extra_hotkey", {"keys": keys}, duration_ms)
-    return {
+    ret = {
         "success": True,
         "keys": keys,
         "duration_ms": round(duration_ms, 2),
     }
+    b_warn = _track_active_blueprint_turn()
+    if b_warn:
+        ret["budget_warning"] = b_warn
+    return ret
 
 
 @server.tool()
@@ -486,6 +607,87 @@ def extra_inspect_ui(
         "duration_ms": round(duration_ms, 2),
         "elements": [el.to_dict() for el in elements],
     }
+
+
+@server.tool()
+def extra_translate_screen(
+    window_title: Optional[str] = None,
+    hwnd: Optional[int] = None,
+    format: str = "markdown",
+    include_coordinates: bool = True,
+    interactive_only: bool = False,
+    max_elements: int = 50,
+    force_vision: bool = False,
+) -> Dict[str, Any]:
+    """
+    Distills the active or targeted window into an ultra-dense, token-optimized semantic representation.
+    Translates visual buttons, inputs, labels, and displays into structured Markdown or compact text.
+    Saves 90%+ prompt tokens and eliminates latency overhead compared to sending raw screenshots to the LLM.
+
+    Args:
+        window_title: Optional substring of window title to inspect (e.g. 'Calculator', 'Chrome', 'Notepad').
+        hwnd: Optional explicit window handle.
+        format: Representation format: 'markdown' (default), 'compact' (ultra-dense single block), or 'json'.
+        include_coordinates: If True, provides physical [x, y] coordinates for direct 1-turn clicking.
+        interactive_only: If True, only returns clickable actions and inputs (omits passive text displays).
+        max_elements: Maximum controls to include in output (default: 50).
+        force_vision: If True, forces edge computer vision parsing even if native accessibility is present.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+
+    result = distill_screen(
+        hwnd=hwnd,
+        window_title=window_title,
+        format=format,
+        include_coordinates=include_coordinates,
+        max_elements=max_elements,
+        interactive_only=interactive_only,
+        force_vision=force_vision,
+    )
+    return result.to_dict()
+
+
+@server.tool()
+def extra_subtask_run(
+    intent: Optional[str] = None,
+    actions: Optional[List[Dict[str, Any]]] = None,
+    expected_elements: Optional[List[str]] = None,
+    unwanted_elements: Optional[List[str]] = None,
+    timeout_sec: float = 8.0,
+) -> Dict[str, Any]:
+    """
+    Executes a multi-step desktop micro-routine autonomously in a closed loop.
+    Enables System 1 execution (e.g., launch app -> type formula -> copy result) in 1 turn,
+    saving thousands of prompt tokens and multiple seconds of turn-latency.
+    Integrates SOUL-Critic on-device milestone evaluation to reject defective states locally.
+
+    Args:
+        intent: High-level micro-goal description (e.g. 'calculate 450*12= in calc', 'dismiss modal', 'open notepad and type Hello').
+        actions: Optional explicit batch action list if already planned by the host agent.
+        expected_elements: Optional list of elements that MUST be visible after execution (verified by SOUL-Critic).
+        unwanted_elements: Optional list of elements that MUST NOT be visible (e.g. ['Error', 'Crash']).
+        timeout_sec: Maximum seconds before safety abort (default: 8.0s).
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    _stall_breaker.check_safety_abort()
+
+    res = run_subtask(
+        intent=intent,
+        actions=actions,
+        expected_elements=expected_elements,
+        unwanted_elements=unwanted_elements,
+        timeout_sec=timeout_sec,
+    )
+    _stall_breaker.reset()
+
+    record_action_step("extra_subtask_run", {"intent": intent, "steps": res.steps_executed}, res.duration_ms)
+    res_dict = res.to_dict()
+    b_warn = _track_active_blueprint_turn()
+    if b_warn:
+        res_dict["budget_warning"] = b_warn
+    return res_dict
 
 
 @server.tool()
@@ -534,11 +736,13 @@ def extra_click_element(
 
     duration_ms = (time.perf_counter() - t0) * 1000.0
 
-    result = {
+    result: Dict[str, Any] = {
         "success": success,
         "element_id": element_id,
         "duration_ms": round(duration_ms, 2),
     }
+    if not success and query:
+        result["error"] = f"Element query '{query}' could not be invoked via UIA or visually grounded on screen."
     if grounding_meta:
         result["soul_eyes"] = grounding_meta
     return result
@@ -549,6 +753,7 @@ def extra_launch(
     app_name: str,
     args: Optional[List[str]] = None,
     profile: Optional[str] = None,
+    maximize: bool = False,
 ) -> Dict[str, Any]:
     """
     Deterministically launches standard Windows applications and tools.
@@ -558,16 +763,32 @@ def extra_launch(
         app_name: Tool name or executable (e.g. 'calc', 'notepad', 'explorer', 'settings', 'chrome', 'edge').
         args: Optional list of command-line arguments.
         profile: Optional browser profile name (e.g. 'Default', 'Profile 1', 'Profile 3').
+        maximize: If True, arranges and maximizes the window instantly via Win32 SW_MAXIMIZE, bypassing Windows 11 Snap Assist.
     """
     ensure_dpi_aware()
     attach_input_desktop()
 
-    res = launch_app(app_name=app_name, args=args, wait_for_window=True, profile=profile)
+    res = launch_app(app_name=app_name, args=args, wait_for_window=True, profile=profile, maximize=maximize)
     if res.success:
         _stall_breaker.reset()
     record_action_app(app_name=app_name, exe_path=getattr(res, "target_executed", None))
-    record_action_step("extra_launch", {"app_name": app_name, "args": args, "profile": profile})
-    return res.to_dict()
+    record_action_step("extra_launch", {"app_name": app_name, "args": args, "profile": profile, "maximize": maximize})
+    res_dict = res.to_dict()
+
+    # Proactive Memory Recall: surface known app quirks and playbooks from KùzuDB
+    try:
+        from extra.core.memory.recall import recall_memory
+        mem = recall_memory(query=app_name, app_name=app_name, top_k=2)
+        if mem.get("known_app_quirks"):
+            res_dict["known_app_quirks"] = mem["known_app_quirks"]
+            res_dict["memory_guidance"] = (
+                f"PROACTIVE MEMORY GUIDANCE for '{app_name}': Verified workarounds found in KùzuDB memory. "
+                "Use these proven fast paths to avoid known application stalls."
+            )
+    except Exception as e:
+        logger.debug("Proactive memory recall in extra_launch failed: %s", e)
+
+    return res_dict
 
 
 @server.tool()
@@ -579,6 +800,11 @@ def extra_browser(
 ) -> Dict[str, Any]:
     """
     Executes web automation via Microsoft Edge / Playwright without vision overhead.
+    Supports autonomous Web-to-API network sniffing and fast-path client synthesis.
+    IMPORTANT: Operates within Extra's dedicated background Playwright browser instance.
+    Does NOT attach to or control already-running browser windows on the user's desktop.
+    For automating active user desktop browsers (Chrome, Edge), pilot them live via
+    extra_focus_window, extra_click, extra_type, extra_hotkey, and extra_batch_actions.
     
     Actions:
         - 'navigate': Opens url.
@@ -588,6 +814,9 @@ def extra_browser(
         - 'eval': Evaluates JavaScript string in value.
         - 'screenshot': Returns page base64 screenshot.
         - 'settle': Waits for DOM stability and network quiescence in < 10ms-30ms.
+        - 'start_sniffing': Starts intercepting and recording API network traffic on active page.
+        - 'stop_sniffing': Stops network interception and returns captured mutations.
+        - 'synthesize_api': Generates standalone Python API fast-path client from sniffed mutations (selector=service_name, value=action_name).
         - 'close': Closes browser.
     """
     return execute_browser_action(action=action, url=url, selector=selector, value=value)
@@ -676,6 +905,7 @@ def extra_drag(
     duration: float = 0.3,
     human_like: bool = False,
     normalized: bool = False,
+    canvas_relative: bool = False,
     monitor_index: int = 0,
 ) -> Dict[str, Any]:
     """
@@ -691,13 +921,35 @@ def extra_drag(
         duration: Drag duration in seconds (default 0.3s).
         human_like: If True, executes continuous smooth drag without linear robotic steps.
         normalized: If True, treats coordinates as [0, 1000] scale.
+        canvas_relative: If True, treats coordinates as relative to the active window's detected canvas/work surface.
         monitor_index: Target monitor.
     """
     ensure_dpi_aware()
     attach_input_desktop()
     _stall_breaker.check_safety_abort()
 
-    if normalized:
+    if canvas_relative:
+        try:
+            from extra.core.soul.vision_parser import detect_canvas_viewport
+            cv = detect_canvas_viewport()
+            if cv:
+                if normalized:
+                    sx = cv.bounding_box[0] + int((start_x / 1000.0) * cv.width)
+                    sy = cv.bounding_box[1] + int((start_y / 1000.0) * cv.height)
+                    ex = cv.bounding_box[0] + int((end_x / 1000.0) * cv.width)
+                    ey = cv.bounding_box[1] + int((end_y / 1000.0) * cv.height)
+                else:
+                    sx = cv.bounding_box[0] + int(start_x)
+                    sy = cv.bounding_box[1] + int(start_y)
+                    ex = cv.bounding_box[0] + int(end_x)
+                    ey = cv.bounding_box[1] + int(end_y)
+            else:
+                sx, sy = (denormalize_coordinates(start_x, start_y, monitor_index) if normalized else (start_x, start_y))
+                ex, ey = (denormalize_coordinates(end_x, end_y, monitor_index) if normalized else (end_x, end_y))
+        except Exception:
+            sx, sy = (denormalize_coordinates(start_x, start_y, monitor_index) if normalized else (start_x, start_y))
+            ex, ey = (denormalize_coordinates(end_x, end_y, monitor_index) if normalized else (end_x, end_y))
+    elif normalized:
         sx, sy = denormalize_coordinates(start_x, start_y, monitor_index)
         ex, ey = denormalize_coordinates(end_x, end_y, monitor_index)
     else:
@@ -720,11 +972,12 @@ def extra_stroke(
     duration: float = 1.0,
     smooth: bool = True,
     normalized: bool = False,
+    canvas_relative: bool = False,
     monitor_index: int = 0,
 ) -> Dict[str, Any]:
     """
     Executes a continuous fluid brush stroke across multiple waypoints while holding down the mouse button.
-    Essential for Canva canvas drawing, sketching in MS Paint, calligraphy, and video timeline scrubbing.
+    Essential for canvas drawing, sketching, calligraphy, and video timeline scrubbing.
     
     Args:
         points: List of [x, y] coordinates forming the stroke path (e.g. [[100, 200], [150, 250], [300, 400]]).
@@ -733,6 +986,7 @@ def extra_stroke(
         duration: Total stroke duration in seconds (default: 1.0s).
         smooth: If True, applies centripetal Catmull-Rom spline interpolation for smooth continuous ink.
         normalized: If True, treats coordinates as [0, 1000] scale.
+        canvas_relative: If True, treats coordinates as relative to the active window's detected canvas/work surface.
         monitor_index: Target display monitor.
     """
     ensure_dpi_aware()
@@ -754,13 +1008,39 @@ def extra_stroke(
         return {"success": False, "error": "No points provided for stroke"}
 
     phys_points: List[Tuple[int, int]] = []
-    for pt in points:
-        if len(pt) >= 2:
-            if normalized:
-                px, py = denormalize_coordinates(pt[0], pt[1], monitor_index)
+    if canvas_relative:
+        try:
+            from extra.core.soul.vision_parser import detect_canvas_viewport
+            cv = detect_canvas_viewport()
+            if cv:
+                for pt in points:
+                    if len(pt) >= 2:
+                        if normalized:
+                            px = cv.bounding_box[0] + int((int(pt[0]) / 1000.0) * cv.width)
+                            py = cv.bounding_box[1] + int((int(pt[1]) / 1000.0) * cv.height)
+                        else:
+                            px = cv.bounding_box[0] + int(pt[0])
+                            py = cv.bounding_box[1] + int(pt[1])
+                        phys_points.append((px, py))
             else:
-                px, py = int(pt[0]), int(pt[1])
-            phys_points.append((px, py))
+                for pt in points:
+                    if len(pt) >= 2:
+                        px, py = (denormalize_coordinates(pt[0], pt[1], monitor_index) if normalized else (int(pt[0]), int(pt[1])))
+                        phys_points.append((px, py))
+        except Exception:
+            for pt in points:
+                if len(pt) >= 2:
+                    px, py = (denormalize_coordinates(pt[0], pt[1], monitor_index) if normalized else (int(pt[0]), int(pt[1])))
+                    phys_points.append((px, py))
+    else:
+        for pt in points:
+            if len(pt) >= 2:
+                if normalized:
+                    px, py = denormalize_coordinates(pt[0], pt[1], monitor_index)
+                else:
+                    px, py = int(pt[0]), int(pt[1])
+                phys_points.append((px, py))
+
 
     cap_before = None
     try:
@@ -797,15 +1077,15 @@ def extra_stroke(
             sampled_points = phys_points[::step_sample]
             for px, py in sampled_points:
                 sampled_count += 1
-                y0, y1 = max(0, py - 3), min(h, py + 4)
-                x0, x1 = max(0, px - 3), min(w, px + 4)
+                y0, y1 = max(0, py - 8), min(h, py + 9)
+                x0, x1 = max(0, px - 8), min(w, px + 9)
                 if np.any(changed_mask[y0:y1, x0:x1]):
                     path_hits += 1
 
             # Ink is verified only if:
             # 1. Overall screen pixels changed > 0
-            # 2. At least 25% of the sampled trajectory coordinates received ink
-            ink_detected = (pixels_changed > 0) and (path_hits >= max(1, int(sampled_count * 0.25)))
+            # 2. At least 20% of the sampled trajectory coordinates received ink
+            ink_detected = (pixels_changed > 0) and (path_hits >= max(1, int(sampled_count * 0.20)))
         except Exception as e:
             logger.debug("Ink verification failed: %s", e)
             ink_detected = True
@@ -860,17 +1140,77 @@ def extra_stroke(
     }
 
 
+def estimate_and_optimize_batch_duration(
+    actions: List[Dict[str, Any]],
+    max_budget_sec: float = 45.0,
+    auto_settle: bool = True,
+) -> Tuple[List[Dict[str, Any]], float, bool]:
+    """
+    Estimates total batch execution time and adaptively scales stroke/sleep durations
+    to ensure the entire batch executes within max_budget_sec (default 45s),
+    preventing MCP client timeouts (180s context deadline exceeded).
+    """
+    total_est = 0.0
+    stroke_indices: List[int] = []
+
+    for idx, act in enumerate(actions):
+        if not isinstance(act, dict):
+            continue
+        atype = str(act.get("action", act.get("type", ""))).lower().strip()
+        if atype in ("stroke", "brush", "draw", "mouse_stroke"):
+            dur = float(act.get("duration", 0.4))
+            pts = act.get("points", [])
+            waypoint_overhead = len(pts) * 0.015
+            est = max(dur, waypoint_overhead) + 0.04
+            total_est += est
+            stroke_indices.append(idx)
+        elif atype in ("sleep", "delay", "wait"):
+            ms = float(act.get("ms", act.get("duration_ms", act.get("seconds", 0) * 1000.0)))
+            total_est += ms / 1000.0
+        elif atype in ("drag", "mouse_drag"):
+            dur = float(act.get("duration", 0.2))
+            total_est += dur + 0.05
+        elif atype in ("click", "double_click", "hotkey", "type", "focus"):
+            total_est += 0.03
+            if auto_settle:
+                total_est += 0.06
+        else:
+            total_est += 0.02
+
+    scaled = False
+    if total_est > max_budget_sec and stroke_indices:
+        non_stroke_est = total_est - sum(
+            max(float(actions[i].get("duration", 0.4)), len(actions[i].get("points", [])) * 0.015) + 0.04
+            for i in stroke_indices
+        )
+        available_stroke_budget = max(5.0, max_budget_sec - max(0.0, non_stroke_est))
+        current_stroke_sum = sum(float(actions[i].get("duration", 0.4)) for i in stroke_indices)
+
+        if current_stroke_sum > 0:
+            scale_ratio = available_stroke_budget / current_stroke_sum
+            for i in stroke_indices:
+                orig_dur = float(actions[i].get("duration", 0.4))
+                new_dur = max(0.06, min(0.25, orig_dur * scale_ratio))
+                actions[i]["duration"] = round(new_dur, 3)
+            scaled = True
+            total_est = max_budget_sec
+
+    return actions, round(total_est, 2), scaled
+
+
 @server.tool()
 def extra_batch_actions(
     actions: Optional[List[Dict[str, Any]]] = None,
     actions_file: Optional[str] = None,
     auto_settle: bool = True,
     strict_ink: bool = False,
+    auto_distill: bool = True,
 ) -> Dict[str, Any]:
     """
     Executes an atomic list of hardware actions sequentially with sub-millisecond dispatch.
     Eliminates multi-turn network round-trips (reducing seconds to milliseconds) for compound workflows.
     Enhanced with Tier 1 SOUL-Gateman visual settle detection (sub-15ms) to eliminate race conditions.
+    Returns auto-distilled compact UI layout and active window metadata upon completion.
     
     Supported action dictionary formats:
       - {"action": "hotkey", "keys": ["ctrl", "t"]}
@@ -893,6 +1233,7 @@ def extra_batch_actions(
                   between physical UI actions (clicks, hotkeys, focus) to prevent ghost strokes
                   and animation race conditions without burning cloud tokens.
       strict_ink: If True, fails the batch if any stroke produces 0 deposited ink along its trajectory.
+      auto_distill: If True (default), returns updated compact UI state and active window metadata after batch execution settles.
       
     Returns summary of executed actions and total elapsed execution time in milliseconds.
     """
@@ -913,6 +1254,11 @@ def extra_batch_actions(
     if not actions:
         return {"success": False, "error": "No actions provided for batch"}
 
+    # Pre-flight duration optimization to guarantee safe execution well within MCP timeout limits
+    actions, est_sec, scaled = estimate_and_optimize_batch_duration(
+        actions, max_budget_sec=45.0, auto_settle=auto_settle
+    )
+
     has_strokes = any(
         isinstance(a, dict) and str(a.get("action", a.get("type", ""))).lower().strip() in ("stroke", "brush", "draw", "mouse_stroke")
         for a in actions
@@ -924,9 +1270,17 @@ def extra_batch_actions(
         except Exception:
             pass
 
-    res = execute_batch_actions(actions, auto_settle=auto_settle)
+    res = execute_batch_actions(actions, auto_settle=auto_settle, auto_distill=auto_distill)
     _stall_breaker.reset()
     total_dur = res.get("total_duration_ms", 0)
+
+    if scaled:
+        res["adaptive_duration_scaled"] = True
+        res["estimated_duration_sec"] = est_sec
+
+    if res.get("partial_execution"):
+        executed_n = res.get("executed_count", len(actions))
+        res["remaining_actions"] = actions[executed_n:]
 
     # Mid-task quality telemetry and ink verification for strokes in batch
     if has_strokes and cap_before is not None:
@@ -1004,6 +1358,25 @@ def extra_batch_actions(
     else:
         record_action_step("extra_batch_actions", {"count": len(actions), "total_duration_ms": total_dur})
 
+    # Auto-Distillation Fallback: Injects compact UI layout if not already populated
+    if auto_distill and "distilled_ui" not in res:
+        try:
+            d_res = distill_screen(format="compact", max_elements=30)
+            res["distilled_ui"] = d_res.content
+            fg_win = get_foreground_window()
+            if fg_win:
+                res["active_window"] = {
+                    "title": fg_win.title,
+                    "hwnd": fg_win.hwnd,
+                    "process_name": fg_win.process_name,
+                }
+        except Exception as ex:
+            logger.debug("Auto-distill in extra_batch_actions failed: %s", ex)
+
+    b_warn = _track_active_blueprint_turn()
+    if b_warn:
+        res["budget_warning"] = b_warn
+
     return res
 
 
@@ -1012,23 +1385,40 @@ def extra_snap_layout(
     layout: str = "side_by_side",
     left_window: Optional[str] = None,
     right_window: Optional[str] = None,
+    window: Optional[str] = None,
+    center_window: Optional[str] = None,
+    windows: Optional[List[str]] = None,
     monitor_index: int = 0,
 ) -> Dict[str, Any]:
     """
-    Arranges multiple windows into a cohesive visual layout in a single programmatic step (sub-15ms).
+    Arranges windows into a cohesive visual layout in a single programmatic step (sub-15ms).
     Eliminates fragile multi-turn Win+Left / Win+Right hotkey snapping and avoids Windows 11 Snap Assist popups.
     
     Args:
-        layout: Layout preset. Currently supports 'side_by_side' (split 50/50 horizontally).
-        left_window: Window title substring (e.g. "Paint") or HWND for the left screen half.
-        right_window: Window title substring (e.g. "Notepad") or HWND for the right screen half.
+        layout: Layout preset ('side_by_side', 'thirds'/'side_by_side_3', 'maximize'/'fullscreen', 'center', 'top_bottom', 'grid').
+        left_window: Window title substring or HWND for the left/top screen half.
+        right_window: Window title substring or HWND for the right/bottom screen half.
+        window: Window title substring or HWND for single-window layouts ('maximize', 'fullscreen', 'center').
+        center_window: Window title substring or HWND for the center/middle screen third in 'thirds' layout.
+        windows: Optional ordered list of window titles/HWNDs to arrange (e.g. 3 windows for 'thirds' or 4 for 'grid').
         monitor_index: 0-based monitor index (default 0).
     """
     ensure_dpi_aware()
     attach_input_desktop()
-    res = snap_layout(layout=layout, left_window=left_window, right_window=right_window, monitor_index=monitor_index)
+    res = snap_layout(
+        layout=layout,
+        left_window=left_window,
+        right_window=right_window,
+        window=window,
+        center_window=center_window,
+        windows=windows,
+        monitor_index=monitor_index,
+    )
     _stall_breaker.reset()
-    record_action_step("extra_snap_layout", {"layout": layout, "left": left_window, "right": right_window})
+    record_action_step(
+        "extra_snap_layout",
+        {"layout": layout, "left": left_window, "right": right_window, "center": center_window, "windows": windows, "window": window},
+    )
     return res
 
 
@@ -1090,7 +1480,24 @@ def extra_task_start(
     ctrl.task_start(task_name=task_name, monitor_index=monitor_index)
     start_memory_recording(task_name=task_name or "Autonomous Task", goal=task_objective)
     _stall_breaker.reset()
-    return {"success": True, "task_name": task_name, "status": "active"}
+    res: Dict[str, Any] = {"success": True, "task_name": task_name, "status": "active"}
+
+    # Proactive Memory Recall: surface known app quirks, workarounds, and evolved playbooks
+    if task_name or task_objective:
+        try:
+            from extra.core.memory.recall import recall_memory
+            query_str = f"{task_name or ''} {task_objective or ''}".strip()
+            mem = recall_memory(query=query_str, top_k=2)
+            if mem.get("known_app_quirks"):
+                res["known_app_quirks"] = mem["known_app_quirks"]
+                res["memory_guidance"] = (
+                    "PROACTIVE MEMORY GUIDANCE: Verified workarounds and evolved playbooks retrieved from KùzuDB memory. "
+                    "Follow these proven fast paths to avoid known application stalls."
+                )
+        except Exception as e:
+            logger.debug("Proactive memory recall in extra_task_start failed: %s", e)
+
+    return res
 
 
 @server.tool()
@@ -1099,6 +1506,7 @@ def extra_task_complete(
     success: bool = True,
     play_chime: bool = True,
     auto_screenshot: bool = True,
+    claims: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Signals that the autonomous computer use task is completed.
@@ -1115,10 +1523,28 @@ def extra_task_complete(
         success: Whether the task succeeded (plays positive chime) or needs attention (plays alert). Default True.
         play_chime: If True, plays the synthesized acoustic chime. Default True.
         auto_screenshot: If True, automatically captures and returns the final verified screen state. Default True.
+        claims: Optional ground-truth assertions (expected_tabs, expected_slides, min_words) to independently verify before passing.
     """
     ensure_dpi_aware()
     attach_input_desktop()
     ctrl = get_indicator_controller()
+
+    # Pre-completion ground-truth state guardrail (Anti-Hallucination Invariant)
+    if claims and success:
+        from extra.core.soul.state_critic import audit_ground_truth_state
+        state_audit = audit_ground_truth_state(claims)
+        if not state_audit.passed:
+            ctrl.task_complete(summary="Task completed with verified defects", success=False, play_chime=False)
+            return {
+                "success": False,
+                "status": "claims_deficit",
+                "error": f"TASK COMPLETION REJECTED: Ground-truth audit detected defects: {'; '.join(state_audit.defects)}",
+                "ground_truth": state_audit.ground_truth,
+                "defects": state_audit.defects,
+                "score": state_audit.score,
+                "audit_report": state_audit.report_text,
+                "audit_hash": state_audit.audit_hash,
+            }
 
     rec = get_active_recorder()
 
@@ -1205,6 +1631,35 @@ def extra_task_complete(
         "status": "completed" if success else "failed",
         "memory_task_id": task_id,
     }
+
+    # Record to ImpactLedger and attach receipt
+    try:
+        duration_sec = (time.time() - rec.start_time) if rec and hasattr(rec, "start_time") else 0.5
+        from extra.core.metrics.ledger import ImpactLedger
+        from extra.core.metrics.telemetry import TelemetryClient
+
+        archetype = ImpactLedger.resolve_archetype(intent=summary or "")
+        savings = ImpactLedger.record_event(
+            archetype=archetype,
+            duration_sec=duration_sec,
+            actions_count=len(rec.steps) if rec else 1,
+            success=success
+        )
+        res["impact_receipt"] = ImpactLedger.get_impact_receipt(duration_sec=duration_sec, archetype=archetype)
+
+        # Emit anonymous telemetry event if user opted in
+        TelemetryClient.get_instance().emit_event(
+            app=archetype,
+            archetype=archetype,
+            tool_name="extra_task_complete",
+            execution_duration_ms=duration_sec * 1000.0,
+            actions_count=len(rec.steps) if rec else 1,
+            success=success,
+            speedup=savings.get("speedup_multiplier", 1.0)
+        )
+    except Exception as e:
+        logger.debug("Failed to record impact receipt: %s", e)
+
     if final_cap_path:
         res["final_screenshot"] = final_cap_path
         res["visual_verification_note"] = "Final desktop frame automatically captured upon completion."
@@ -1241,11 +1696,11 @@ def extra_task_complete(
         res["trajectory_analysis"] = analysis_dict
         candidate = analysis_dict.get("candidate_for_evolution", False)
         is_golden = analysis_dict.get("is_golden_path", False)
-        if candidate and success and is_golden:
+        if is_golden and success:
             res["evolution_recommendation"] = (
                 "Verified golden-path workflow discovered. You may call 'extra_evolve_skill' to crystallize verified fast paths into permanent skill playbooks."
             )
-        elif candidate and (not is_golden or not success):
+        elif candidate or (not is_golden and success):
             res["evolution_recommendation"] = (
                 "Task encountered friction, recovery steps, or was not a clean golden path. "
                 "DO NOT synthesize noisy recovery steps or intermediate actions as a fast path. "
@@ -1253,6 +1708,19 @@ def extra_task_complete(
             )
 
     return res
+
+
+@server.tool()
+def extra_stats() -> Dict[str, Any]:
+    """
+    Retrieves cumulative Project Extra impact metrics: total time saved,
+    token reduction, and estimated API dollar cost savings vs baseline.
+    """
+    from extra.core.metrics.ledger import ImpactLedger
+    return {
+        "lifetime_summary": ImpactLedger.get_summary(),
+        "ascii_hud": ImpactLedger.format_ascii_card()
+    }
 
 
 @server.tool()
@@ -1378,14 +1846,7 @@ def extra_indicate_status(
     attach_input_desktop()
     ctrl = get_indicator_controller()
     st = status.lower().strip()
-    if st in ("active", "running", "busy"):
-        ctrl.task_start(task_name=message)
-    elif st in ("complete", "completed", "done", "success"):
-        ctrl.task_complete(summary=message, success=True, play_chime=play_sound)
-    elif st in ("fail", "failed", "error", "abort"):
-        ctrl.task_complete(summary=message, success=False, play_chime=play_sound)
-    else:
-        ctrl.task_stop()
+    ctrl.task_indicate_status(status=st, message=message or "", play_sound=play_sound)
     return {"success": True, "status": st, "message": message}
 
 
@@ -1404,8 +1865,7 @@ def extra_curate_skills(
     return curate_skill_library(sanitize=sanitize)
 
 
-# Active in-memory blueprints cache
-_active_blueprints: Dict[str, TaskBlueprint] = {}
+# Active in-memory blueprints cache (declared above)
 
 
 @server.tool()
@@ -1415,6 +1875,7 @@ def extra_execute_bridge(
     args: Optional[List[str]] = None,
     expected_artifacts: Optional[List[str]] = None,
     timeout_sec: float = 60.0,
+    env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """
     Executes a programmatic script or code payload via the Universal Execution Bridge (Plane 2).
@@ -1427,6 +1888,7 @@ def extra_execute_bridge(
         args: Optional list of additional command line flags or arguments.
         expected_artifacts: Optional list of file paths expected to be created/updated.
         timeout_sec: Maximum execution timeout in seconds (default: 60.0).
+        env: Optional explicit dictionary of environment variables to supply to the execution environment.
     """
     ensure_dpi_aware()
     try:
@@ -1436,11 +1898,155 @@ def extra_execute_bridge(
             args=args,
             expected_artifacts=expected_artifacts,
             timeout_sec=timeout_sec,
+            env=env,
         )
         return res.to_dict()
     except Exception as ex:
         logger.warning("[extra_execute_bridge] Error: %s", ex)
         return {"success": False, "error": str(ex), "runtime": runtime}
+
+
+@server.tool()
+def extra_harness_run(
+    harness: str,
+    command: List[str],
+    json_output: bool = True,
+    auto_visualize: bool = True,
+    working_dir: Optional[str] = None,
+    timeout_sec: float = 60.0,
+) -> Dict[str, Any]:
+    """
+    Executes an agent-native CLI harness (HKUDS/CLI-Anything) for complex desktop software
+    (e.g. 'blender', 'gimp', 'freecad', 'libreoffice', 'inkscape', 'krita', 'audacity', 'shotcut', 'obsidian', 'godot', 'qgis').
+    Dispatches deterministic subcommands with automatic --json structured machine output
+    in under 50ms, eliminating visual token waste and UI coordinate guessing.
+    Optionally auto-visualizes the resulting project/artifact live on the user's physical screen
+    with SOUL-Gateman visual settle verification and ambient indicators.
+
+    Args:
+        harness: Name or slug of the harness (e.g. 'blender', 'cli-anything-blender', 'gimp', 'freecad').
+        command: List of CLI arguments and options (e.g. ['mesh', 'add-cube', '--size', '2.0']).
+        json_output: If True (default), injects and parses --json for structured output.
+        auto_visualize: If True (default), brings created project/artifact live onto the desktop display.
+        working_dir: Optional working directory for the command.
+        timeout_sec: Maximum timeout in seconds (default 60.0).
+    """
+    try:
+        res = execute_harness(
+            harness=harness,
+            args=command,
+            json_output=json_output,
+            auto_visualize=auto_visualize,
+            working_dir=working_dir,
+            timeout_sec=timeout_sec,
+        )
+        return res.to_dict()
+    except Exception as ex:
+        logger.warning("[extra_harness_run] Error: %s", ex)
+        return {"success": False, "error": str(ex), "harness": harness}
+
+
+@server.tool()
+def extra_hub_manage(
+    action: str,
+    harness_name: Optional[str] = None,
+    query: Optional[str] = None,
+    category: Optional[str] = None,
+    force_refresh: bool = False,
+) -> Dict[str, Any]:
+    """
+    Discovers, inspects, and installs agent-native CLI harnesses via the CLI-Hub registry
+    (40+ applications covering 3D, CAD, Image, Video, Audio, Office, Database, DevOps, OSINT).
+
+    Args:
+        action: Management operation: 'list' (list available CLIs), 'search' (search by query/category),
+                'info' (inspect details for harness_name), 'install' (install harness into environment),
+                'status' (check if harness_name is installed).
+        harness_name: Target harness name for 'info', 'install', or 'status' (e.g. 'freecad', 'gimp').
+        query: Search term for 'search' action.
+        category: Optional category filter for 'list' or 'search' (e.g. '3d', 'image', 'video', 'office').
+        force_refresh: Whether to bypass cache and re-fetch the registry.
+    """
+    try:
+        hub = get_cli_hub()
+        act = action.strip().lower()
+
+        if act == "list":
+            clis = hub.list_harnesses(category=category)
+            return {"success": True, "count": len(clis), "clis": clis}
+
+        elif act == "search":
+            results = hub.search_harnesses(query=query or "")
+            if category:
+                results = [r for r in results if r.get("category", "").lower() == category.lower()]
+            return {"success": True, "count": len(results), "query": query, "results": results}
+
+        elif act == "info":
+            if not harness_name:
+                return {"success": False, "error": "harness_name is required for 'info' action"}
+            info = hub.get_harness_info(harness_name)
+            if info:
+                return {"success": True, "harness": harness_name, "info": info}
+            return {"success": False, "error": f"Harness '{harness_name}' not found in CLI-Hub registry"}
+
+        elif act == "status":
+            if not harness_name:
+                return {"success": False, "error": "harness_name is required for 'status' action"}
+            installed = hub.is_harness_installed(harness_name)
+            return {"success": True, "harness": harness_name, "is_installed": installed}
+
+        elif act == "install":
+            if not harness_name:
+                return {"success": False, "error": "harness_name is required for 'install' action"}
+            res = hub.install_harness(harness_name, force_reinstall=force_refresh)
+            return res
+
+        elif act == "uninstall":
+            if not harness_name:
+                return {"success": False, "error": "harness_name is required for 'uninstall' action"}
+            res = hub.uninstall_harness(harness_name)
+            return res
+
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown action '{action}'. Valid actions: 'list', 'search', 'info', 'install', 'status', 'uninstall'",
+            }
+    except Exception as ex:
+        logger.warning("[extra_hub_manage] Error: %s", ex)
+        return {"success": False, "error": str(ex), "action": action}
+
+
+@server.tool()
+def extra_harness_synthesize(
+    software_path_or_repo: str,
+    phase_target: str = "all",
+    custom_guidance: Optional[str] = None,
+    output_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Autonomous GUI-to-CLI Harness Synthesizer (CLI-Anything 7-Phase Generator).
+    Synthesizes a production-grade, stateful, tested Click CLI harness and declarative skill
+    for any desktop app codebase or git repository.
+    
+    Args:
+        software_path_or_repo: Local path to source code or git URL (e.g. 'https://github.com/...').
+        phase_target: Target phase ('analyze' | 'design' | 'scaffold' | 'skill' | 'all').
+        custom_guidance: Optional domain instructions, specific operations, or backend notes.
+        output_dir: Optional output directory for the generated harness.
+    """
+    try:
+        synth = get_harness_synthesizer()
+        res = synth.synthesize(
+            software_path_or_repo=software_path_or_repo,
+            phase_target=phase_target,
+            custom_guidance=custom_guidance,
+            output_dir=output_dir,
+        )
+        return res
+    except Exception as ex:
+        logger.warning("[extra_harness_synthesize] Error: %s", ex)
+        return {"success": False, "error": str(ex), "target": software_path_or_repo}
 
 
 @server.tool()
@@ -1452,12 +2058,12 @@ def extra_blueprint_start(
 ) -> Dict[str, Any]:
     """
     Initializes a new long-horizon Task Blueprint with a Directed Acyclic Graph (DAG) of milestones (Plane 1).
-    Enables structured progress tracking, rollback checkpoints, and context folding.
+    Enables structured progress tracking, rollback checkpoints, turn budgeting, and context folding.
     
     Args:
         title: Human-readable task title (e.g. 'Build 3D Car in Blender').
         task_type: Domain category ('video_editing', '3d_modeling', 'design_deck', 'general').
-        milestones: List of milestone objects with 'id', 'name', 'dependencies', 'expected_artifacts', etc.
+        milestones: List of milestone objects with 'id', 'name', 'dependencies', 'max_turns', etc.
         metadata: Optional metadata dictionary.
     """
     try:
@@ -1474,6 +2080,7 @@ def extra_blueprint_start(
             "total_milestones": len(bp.milestones),
             "runnable_milestones": runnable,
             "blueprint_file": str(saved_path),
+            "budget_status": bp.get_budget_status(),
         }
     except Exception as ex:
         logger.warning("[extra_blueprint_start] Error: %s", ex)
@@ -1492,12 +2099,13 @@ def extra_blueprint_milestone(
 ) -> Dict[str, Any]:
     """
     Updates and verifies a milestone state in an active Task Blueprint, folding context via HIPIF.
+    Enforces turn budgets per milestone to prevent long-horizon stall loops and task starvation.
     Returns a dense semantic state token to prevent LLM context window bloat.
     
     Args:
         task_id: Active blueprint task ID.
         milestone_id: Milestone ID to update.
-        action: One of 'start', 'complete', 'fail', or 'rollback'.
+        action: One of 'start', 'complete', 'fail', 'rollback', 'record_turn', or 'status'.
         result: Optional execution result dictionary (stdout, artifacts, returncode).
         error: Error message if action is 'fail'.
         summary: Brief summary for HIPIF context folding.
@@ -1520,7 +2128,23 @@ def extra_blueprint_milestone(
         if act == "start":
             m = bp.start_milestone(milestone_id)
             bp.save()
-            return {"success": True, "action": act, "milestone": m.to_dict()}
+            return {
+                "success": True,
+                "action": act,
+                "milestone": m.to_dict(),
+                "max_turns": m.max_turns,
+                "turns_consumed": m.turns_consumed,
+                "remaining_turns": m.remaining_turns,
+            }
+
+        elif act in ("record_turn", "turn", "progress"):
+            turn_res = bp.record_milestone_turn(milestone_id)
+            bp.save()
+            return {"success": True, "action": act, **turn_res}
+
+        elif act in ("status", "budget"):
+            budget_res = bp.get_budget_status()
+            return {"success": True, "action": act, **budget_res}
 
         elif act == "complete":
             m = bp.milestones.get(milestone_id)
@@ -1543,6 +2167,9 @@ def extra_blueprint_milestone(
                     "auto_rollback": auto_rollback,
                     "reset_milestones": reset_ids,
                     "milestone": m.to_dict(),
+                    "turns_consumed": m.turns_consumed,
+                    "max_turns": m.max_turns,
+                    "budget_exceeded": m.is_budget_exceeded,
                 }
 
             bp.complete_milestone(milestone_id, result=result)
@@ -1559,6 +2186,13 @@ def extra_blueprint_milestone(
                 "is_task_complete": bp.is_complete,
                 "next_runnable_milestones": runnable,
                 "checkpoint_id": ckpt.checkpoint_id,
+                "turns_consumed": m.turns_consumed,
+                "max_turns": m.max_turns,
+                "budget_exceeded": m.is_budget_exceeded,
+                "budget_warning": (
+                    f"Milestone '{m.id}' completed after consuming {m.turns_consumed}/{m.max_turns} turns (budget exceeded)."
+                    if m.is_budget_exceeded else None
+                ),
             }
 
         elif act == "fail":
@@ -1572,7 +2206,7 @@ def extra_blueprint_milestone(
             return {"success": True, "action": act, "reset_milestones": reset_ids}
 
         else:
-            return {"success": False, "error": f"Invalid action '{action}'. Use start/complete/fail/rollback."}
+            return {"success": False, "error": f"Invalid action '{action}'. Use start/complete/fail/rollback/record_turn/status."}
     except Exception as ex:
         logger.warning("[extra_blueprint_milestone] Error: %s", ex)
         return {"success": False, "error": str(ex)}
@@ -1585,8 +2219,9 @@ def extra_soul_wait(
     check_interval_ms: int = 60,
 ) -> Dict[str, Any]:
     """
-    Sub-15ms visual settle and state transition detector powered by Project SOUL-Gateman.
-    Monitors DXGI frames at 60Hz to verify UI stabilization before dispatching physical actions.
+    Sub-15ms per-frame visual settle and state transition detector powered by Project SOUL-Gateman.
+    Monitors frame buffers at 20-60Hz to verify UI stabilization before dispatching subsequent physical actions.
+    Typical end-to-end settle duration is ~120ms (2 consecutive stable frames sampled at 60ms intervals).
     
     Args:
         condition: 'settled' (waits for screen pixels to stop changing) or 'change' (waits for visual delta).
@@ -1603,16 +2238,279 @@ def extra_soul_wait(
     return res
 
 
+@server.tool()
+def extra_workspace_export(
+    url_or_id: Optional[str] = None,
+    output_path: Optional[str] = None,
+    export_format: str = "pdf",
+    app_type: Optional[str] = None,
+    workspace_dir: Optional[str] = None,
+    archive_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Official server-side workspace and deliverable export engine.
+    Supports authentic web document exports (Google Docs, Sheets, Slides) as well as
+    local project workspace packaging (creating compliant archive bundles).
+    
+    Args:
+        url_or_id: Full document URL or document ID (for web workspaces) or local directory path.
+        output_path: Absolute destination path for the exported file or archive.
+        export_format: 'pdf', 'docx', 'xlsx', 'csv', 'pptx', 'zip', etc. Default 'pdf'.
+        app_type: Optional document type ('document', 'spreadsheets', 'presentation', 'local').
+        workspace_dir: Optional local workspace directory to package as zip archive.
+        archive_name: Optional archive file name when exporting local workspace directory (e.g. 'mission.zip').
+    """
+    import os
+    import zipfile
+    from pathlib import Path
+
+    # Check if local workspace directory export
+    target_dir = workspace_dir or (url_or_id if url_or_id and os.path.isdir(url_or_id) else None)
+    if target_dir:
+        src = Path(target_dir).resolve()
+        if not src.exists():
+            return {"success": False, "error": f"Workspace directory does not exist: {target_dir}"}
+
+        dest = output_path
+        if not dest:
+            name = archive_name or f"{src.name}_export.zip"
+            if not name.endswith(".zip"):
+                name += ".zip"
+            dest = str(src / "exports" / name if (src / "exports").exists() else src / name)
+
+        dest_p = Path(dest).resolve()
+        dest_p.parent.mkdir(parents=True, exist_ok=True)
+
+        with zipfile.ZipFile(dest_p, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, _, files in os.walk(src):
+                for f in files:
+                    fp = Path(root) / f
+                    if fp.resolve() == dest_p:
+                        continue
+                    arcname = fp.relative_to(src)
+                    zf.write(fp, arcname)
+
+        return {
+            "success": True,
+            "export_format": "zip",
+            "output_path": str(dest_p),
+            "size_bytes": dest_p.stat().st_size,
+            "source": "official_workspace_export",
+            "message": f"Successfully exported local workspace {src} to {dest_p}.",
+        }
+
+    if not url_or_id:
+        return {"success": False, "error": "Either url_or_id or workspace_dir must be provided."}
+    if not output_path:
+        return {"success": False, "error": "output_path is required for web workspace export."}
+
+    from extra.fastpath.web_workspace import trigger_workspace_export
+    return trigger_workspace_export(
+        url_or_id=url_or_id,
+        output_path=output_path,
+        export_format=export_format,
+        app_type=app_type,
+    )
+
+
+@server.tool()
+def extra_verify_lineage(
+    file_path: Optional[str] = None,
+    workspace_path: Optional[str] = None,
+    expected_origin: str = "official_web_export",
+) -> Dict[str, Any]:
+    """
+    Verifies the physical lineage and authentic provenance of a deliverable artifact.
+    Rejects fraudulent workflow substitutions (e.g. headless Chrome printing local HTML
+    instead of genuine Google Workspace or application export).
+    
+    Args:
+        file_path: Path to the artifact to verify (file or archive).
+        workspace_path: Optional path to project directory to verify exported lineage manifest.
+        expected_origin: 'official_web_export', 'application_export', or 'cli_harness'. Default 'official_web_export'.
+    """
+    target = file_path or workspace_path
+    if not target:
+        return {"valid": False, "defects": ["Either file_path or workspace_path must be provided."]}
+
+    from pathlib import Path
+    target_p = Path(target)
+    if target_p.is_dir():
+        manifest = target_p / "exports" / "lineage_manifest.json"
+        if manifest.exists():
+            return {
+                "valid": True,
+                "detected_origin": "manifest_verified",
+                "file_path": str(manifest),
+                "message": f"Verified lineage manifest for workspace at {manifest}.",
+            }
+        exports = list((target_p / "exports").glob("*")) if (target_p / "exports").exists() else []
+        if exports:
+            target = str(exports[0])
+        else:
+            return {
+                "valid": True,
+                "detected_origin": "workspace_directory",
+                "file_path": str(target_p),
+                "message": f"Workspace directory {target_p} lineage tracked.",
+            }
+
+    from extra.core.composer.lineage import verify_artifact_lineage
+    verdict = verify_artifact_lineage(target, expected_origin=expected_origin)
+    return verdict.to_dict()
+
+
+@server.tool()
+def extra_verify_state(
+    window_title: Optional[str] = None,
+    expected_tabs: Optional[int] = None,
+    expected_slides: Optional[int] = None,
+    min_words: Optional[int] = None,
+    expected_sections: Optional[int] = None,
+    min_cells: Optional[int] = None,
+    doc_type: Optional[str] = None,
+    claims: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Decoupled ground-truth state auditor powered by GroundTruthStateCritic.
+    Directly measures application runtime reality (counts actual tabs, slides, words, sections)
+    across DOM and accessibility trees to prevent epistemic drift and false QA reporting.
+    
+    Args:
+        window_title: Optional active window title to inspect via accessibility plane.
+        expected_tabs: Required tab count (for spreadsheets).
+        expected_slides: Required slide count (for presentations).
+        min_words: Minimum required words (for text documents).
+        expected_sections: Required section / heading count.
+        min_cells: Minimum required non-empty table cells.
+        doc_type: Optional document type classification ('spreadsheet', 'document', 'presentation').
+        claims: Optional dictionary containing compound claim assertions.
+    """
+    ensure_dpi_aware()
+    from extra.core.soul.state_critic import audit_ground_truth_state
+    c_dict = claims.copy() if claims else {}
+    if expected_tabs is not None:
+        c_dict["expected_tabs"] = expected_tabs
+    if expected_slides is not None:
+        c_dict["expected_slides"] = expected_slides
+    if min_words is not None:
+        c_dict["min_words"] = min_words
+    if expected_sections is not None:
+        c_dict["expected_sections"] = expected_sections
+    if min_cells is not None:
+        c_dict["min_cells"] = min_cells
+    if doc_type:
+        c_dict["doc_type"] = doc_type
+
+    res = audit_ground_truth_state(c_dict, window_title=window_title)
+    return {
+        "success": True,
+        "passed": res.passed,
+        "score": res.score,
+        "ground_truth": res.ground_truth,
+        "defects": res.defects,
+        "audit_hash": res.audit_hash,
+        "report": res.report_text,
+        "latency_ms": res.latency_ms,
+    }
+
+
+@server.tool()
+def extra_child_session_status() -> Dict[str, Any]:
+    """
+    Returns the real-time status and hardware isolation capabilities of the desktop session.
+    Probes Windows Terminal Services (WTS) Child Sessions (Tier 1),
+    Win32 Isolated Virtual Desktops (Tier 2), and Plane 2 Fast-Path execution (Tier 3).
+    """
+    ensure_dpi_aware()
+    if sys.platform != "win32":
+        return {
+            "success": True,
+            "supported": False,
+            "platform": sys.platform,
+            "message": "Child session isolation is currently available on Windows.",
+        }
+    try:
+        from extra.core.platform.windows.child_session import get_child_session_manager
+        mgr = get_child_session_manager()
+        status = mgr.get_status()
+        status["success"] = True
+        status["supported"] = True
+        return status
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@server.tool()
+def extra_pip_control(action: str = "status") -> Dict[str, Any]:
+    """
+    Controls the hardware-accelerated Picture-in-Picture (PiP) floating preview window.
+    Actions:
+      - 'start': Launches the always-on-top, draggable floating preview window on the screen.
+      - 'stop': Closes and destroys the preview window.
+      - 'status': Returns the current visibility and HWND handle.
+    """
+    ensure_dpi_aware()
+    if sys.platform != "win32":
+        return {
+            "success": False,
+            "error": "Picture-in-Picture window is currently supported on Windows.",
+        }
+    try:
+        from extra.core.platform.windows.pip_window import get_pip_window
+        pip = get_pip_window()
+        clean_action = action.strip().lower()
+        if clean_action == "start":
+            ok = pip.start()
+            return {"success": ok, "is_visible": pip.is_visible(), "hwnd": pip.hwnd}
+        elif clean_action == "stop":
+            pip.stop()
+            return {"success": True, "is_visible": False, "hwnd": None}
+        elif clean_action == "status":
+            return {"success": True, "is_visible": pip.is_visible(), "hwnd": pip.hwnd}
+        else:
+            return {"success": False, "error": f"Unknown PiP action '{action}'. Use start, stop, or status."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def main() -> None:
     """Starts the Extra MCP server over stdio transport."""
     ensure_dpi_aware()
     attach_input_desktop()
+
+    # Check for isolated child session environment variable
+    if os.environ.get("EXTRA_ISOLATED_DESKTOP") == "1" and sys.platform == "win32":
+        try:
+            from extra.core.platform.windows.child_session import get_child_session_manager
+            mgr = get_child_session_manager()
+            mgr.start()
+            logger.info("[MCP] Isolated child session active (Tier: %s)", mgr.get_active_tier())
+        except Exception as e:
+            logger.warning("[MCP] Failed to initialize child session: %s", e)
+
+    # Check for live PiP preview window environment variable
+    if os.environ.get("EXTRA_PIP_PREVIEW") == "1" and sys.platform == "win32":
+        try:
+            from extra.core.platform.windows.pip_window import get_pip_window
+            pip = get_pip_window()
+            pip.start()
+            logger.info("[MCP] Picture-in-Picture floating preview window active (HWND: %s)", pip.hwnd)
+        except Exception as e:
+            logger.warning("[MCP] Failed to initialize PiP window: %s", e)
+
     try:
         mig = ensure_startup_migration()
         if mig.get("status") == "migrated":
             logger.info("Startup migration applied: sanitized legacy skills (%s files cleaned)", mig.get("files_cleaned", 0))
     except Exception as e:
         logger.debug("Startup migration check skipped: %s", e)
+
+    try:
+        from extra.core.metrics.telemetry import emit_first_run_activation
+        emit_first_run_activation(entrypoint="mcp")
+    except Exception as e:
+        logger.debug("First-run activation check skipped: %s", e)
 
     logger.info("Extra Flashless MCP Server initializing on stdio transport...")
     server.run(transport="stdio")

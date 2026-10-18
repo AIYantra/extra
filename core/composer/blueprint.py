@@ -51,10 +51,22 @@ class Milestone:
     error: Optional[str] = None
     started_at: Optional[float] = None
     completed_at: Optional[float] = None
+    max_turns: int = 30
+    turns_consumed: int = 0
+
+    @property
+    def remaining_turns(self) -> int:
+        return max(0, self.max_turns - self.turns_consumed)
+
+    @property
+    def is_budget_exceeded(self) -> bool:
+        return self.turns_consumed >= self.max_turns
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["status"] = self.status.value
+        d["remaining_turns"] = self.remaining_turns
+        d["is_budget_exceeded"] = self.is_budget_exceeded
         return d
 
     @classmethod
@@ -76,6 +88,10 @@ class Milestone:
             filtered["id"] = f"m_{uuid.uuid4().hex[:8]}"
         if "name" not in filtered or not filtered["name"]:
             filtered["name"] = filtered.get("id", "milestone")
+        if "max_turns" in filtered and (filtered["max_turns"] is None or filtered["max_turns"] <= 0):
+            filtered["max_turns"] = 30
+        if "turns_consumed" in filtered and (filtered["turns_consumed"] is None or filtered["turns_consumed"] < 0):
+            filtered["turns_consumed"] = 0
         return cls(**filtered)
 
 
@@ -264,6 +280,84 @@ class TaskBlueprint:
         logger.info("[Blueprint:%s] Rolled back %d milestones starting from '%s'", self.task_id, len(to_reset), milestone_id)
         return list(to_reset)
 
+    def record_milestone_turn(
+        self,
+        milestone_id: Optional[str] = None,
+        turns: int = 1,
+    ) -> Dict[str, Any]:
+        """
+        Records turns consumed by a milestone, tracking against its turn budget.
+        Raises an alert/warning if the turn budget is exceeded to prevent long-horizon starvation.
+        """
+        target_id = milestone_id or self.active_milestone_id
+        if not target_id or target_id not in self.milestones:
+            raise KeyError(f"Milestone '{target_id}' not found in blueprint or no active milestone set")
+
+        m = self.milestones[target_id]
+        m.turns_consumed += turns
+        self.updated_at = time.time()
+
+        exceeded = m.is_budget_exceeded
+        warning = None
+        if exceeded:
+            warning = (
+                f"BUDGET_OVERFLOW: Milestone '{m.id}' ({m.name}) has consumed {m.turns_consumed}/{m.max_turns} turns. "
+                f"Downstream milestones risk starvation. Immediate wrap-up or pivot is strongly advised."
+            )
+            logger.warning("[Blueprint:%s] %s", self.task_id, warning)
+
+        self.history.append({
+            "event": "turn_recorded",
+            "milestone_id": m.id,
+            "turns": turns,
+            "turns_consumed": m.turns_consumed,
+            "max_turns": m.max_turns,
+            "remaining_turns": m.remaining_turns,
+            "budget_exceeded": exceeded,
+            "timestamp": time.time(),
+        })
+
+        return {
+            "task_id": self.task_id,
+            "milestone_id": m.id,
+            "milestone_name": m.name,
+            "turns_consumed": m.turns_consumed,
+            "max_turns": m.max_turns,
+            "remaining_turns": m.remaining_turns,
+            "budget_exceeded": exceeded,
+            "warning": warning,
+        }
+
+    def get_budget_status(self) -> Dict[str, Any]:
+        """
+        Returns full turn budget diagnostics across all milestones in the blueprint.
+        """
+        total_max = sum(m.max_turns for m in self.milestones.values())
+        total_consumed = sum(m.turns_consumed for m in self.milestones.values())
+        over_budget_milestones = [m.id for m in self.milestones.values() if m.is_budget_exceeded]
+
+        milestone_stats = {}
+        for m_id, m in self.milestones.items():
+            milestone_stats[m_id] = {
+                "name": m.name,
+                "status": m.status.value,
+                "turns_consumed": m.turns_consumed,
+                "max_turns": m.max_turns,
+                "remaining_turns": m.remaining_turns,
+                "budget_exceeded": m.is_budget_exceeded,
+            }
+
+        return {
+            "task_id": self.task_id,
+            "total_milestones": len(self.milestones),
+            "total_max_turns": total_max,
+            "total_turns_consumed": total_consumed,
+            "active_milestone_id": self.active_milestone_id,
+            "over_budget_count": len(over_budget_milestones),
+            "over_budget_milestones": over_budget_milestones,
+            "milestones": milestone_stats,
+        }
+
     @property
     def is_complete(self) -> bool:
         """Returns True if every milestone is COMPLETED or SKIPPED."""
@@ -283,6 +377,7 @@ class TaskBlueprint:
             "active_milestone_id": self.active_milestone_id,
             "is_complete": self.is_complete,
             "has_failed": self.has_failed,
+            "budget_status": self.get_budget_status(),
             "history": self.history,
             "metadata": self.metadata,
             "created_at": self.created_at,

@@ -88,3 +88,31 @@ class GroundingResult:
     @property
     def confidence(self) -> float:
         return self.bounding_box.confidence if self.bounding_box is not None else (1.0 if self.matched else 0.0)
+
+
+@dataclass
+class WorkSurfaceViewport:
+    """
+    Represents a detected high-contrast rectangular work surface / canvas within a window.
+    Completely agnostic to the running application (drawing canvas, document page, or artboard).
+    """
+    bounding_box: Tuple[int, int, int, int]  # (left, top, right, bottom) in screen coordinates
+    width: int
+    height: int
+    center: Tuple[int, int]
+    aspect_ratio: float = 1.0
+    confidence: float = 0.90
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "left": int(self.bounding_box[0]),
+            "top": int(self.bounding_box[1]),
+            "right": int(self.bounding_box[2]),
+            "bottom": int(self.bounding_box[3]),
+            "width": int(self.width),
+            "height": int(self.height),
+            "center": [int(self.center[0]), int(self.center[1])],
+            "aspect_ratio": round(float(self.aspect_ratio), 2),
+            "confidence": round(float(self.confidence), 2),
+        }
+

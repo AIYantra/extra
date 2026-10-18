@@ -15,6 +15,7 @@ psutil>=6.0.0                   # Process & window metadata discovery
 # ── Tier 1: Local Knowledge Graph & Memory Subsystem ───────────────────────────
 kuzu>=0.11.0                    # Embedded episodic and relational graph database
 fastembed>=0.8.0                # Sub-3ms pure ONNX vector embeddings for memory recall
+onnxruntime>=1.19.0              # Direct ONNX execution engine for SOUL perception and embeddings
 
 # ── Windows Dependencies ────────────────────────────────────────────────────────
 pywin32>=306; sys_platform == 'win32'                    # Official Windows COM & Win32 extensions
@@ -27,3 +28,9 @@ pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
 pyobjc-framework-ApplicationServices>=10.0; sys_platform == 'darwin'
 pyobjc-framework-ScreenCaptureKit>=10.0; sys_platform == 'darwin'
+
+# ── Linux Native Bridges ─────────────────────────────────────────────────────
+evdev>=1.7.0; sys_platform == 'linux'                        # Kernel uinput zero-latency hardware event injection
+mss>=9.0.1; sys_platform == 'linux'                          # X11 XShm screen capture fallback
+jeepney>=0.8.0; sys_platform == 'linux'                      # Pure-Python Session & System D-Bus protocol parser (AT-SPI2)
+

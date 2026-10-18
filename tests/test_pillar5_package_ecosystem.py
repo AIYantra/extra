@@ -20,7 +20,8 @@ class TestPillar5PackageEcosystem(unittest.TestCase):
 
     def setUp(self):
         self.extra_root = Path(__file__).resolve().parent.parent
-        self.expected_version = "0.3.0"
+        import extra
+        self.expected_version = getattr(extra, "__version__", "0.3.2")
 
     def test_homebrew_formula_specification(self):
         """Verify Formula/extra.rb meets all Homebrew packaging requirements."""
@@ -202,6 +203,11 @@ class TestPillar5PackageEcosystem(unittest.TestCase):
         server = json.loads((self.extra_root / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server["version"], self.expected_version)
         self.assertEqual(server["packages"][0]["version"], self.expected_version)
+        self.assertEqual(server["packages"][1]["version"], self.expected_version)
+
+        # package.json
+        package_json = json.loads((self.extra_root / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(package_json["version"], self.expected_version)
 
         # smithery.yaml
         smithery = (self.extra_root / "smithery.yaml").read_text(encoding="utf-8")

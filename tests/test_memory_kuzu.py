@@ -128,6 +128,81 @@ class TestExtraMemory(unittest.TestCase):
         self.assertTrue(len(quirks) >= 1)
         self.assertIn("PowerShell SetImage", quirks[0]["workaround"])
 
+    def test_app_session_recording_and_instant_recall(self):
+        """Verify record_app_session persists environmental profile and recall_app_session retrieves it."""
+        from extra.core.memory.ingest import record_app_session
+        from extra.core.memory.recall import recall_app_session, recall_memory, clear_app_session_cache
+
+        clear_app_session_cache()
+
+        # Ingest an environmental profile
+        ok = record_app_session(
+            service_name="meta_business_suite",
+            browser="chrome",
+            profile_name="Profile 3",
+            profile_path="C:\\Users\\Test\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 3",
+            custom_db_path=self.db_path,
+        )
+        self.assertTrue(ok)
+
+        # Recall directly via recall_app_session
+        t0 = time.perf_counter()
+        session = recall_app_session("meta_business_suite", custom_db_path=self.db_path)
+        lookup_ms = (time.perf_counter() - t0) * 1000.0
+
+        self.assertIsNotNone(session)
+        self.assertEqual(session["browser"], "chrome")
+        self.assertEqual(session["profile_name"], "Profile 3")
+        self.assertIn("User Data", session["profile_path"])
+
+        # Recall via recall_memory with app_name filter
+        rec = recall_memory(
+            query="post scheduled update to meta",
+            app_name="meta_business_suite",
+            custom_db_path=self.db_path,
+        )
+        self.assertIn("active_session", rec)
+        self.assertEqual(rec["active_session"]["profile_name"], "Profile 3")
+
+        # Update session (testing ON MATCH SET)
+        ok_update = record_app_session(
+            service_name="meta_business_suite",
+            browser="chrome",
+            profile_name="Profile 5",
+            profile_path="C:\\Users\\Test\\AppData\\Local\\Google\\Chrome\\User Data\\Profile 5",
+            custom_db_path=self.db_path,
+        )
+        self.assertTrue(ok_update)
+
+        session_updated = recall_app_session("meta_business_suite", custom_db_path=self.db_path)
+        self.assertEqual(session_updated["profile_name"], "Profile 5")
+
+    def test_recall_soul_decision_app_scoping_and_length_validation(self):
+        """Verify recall_soul_decision isolates by app and rejects short/empty conditions."""
+        from extra.core.memory.recall import recall_soul_decision, clear_soul_decision_cache
+
+        clear_soul_decision_cache()
+
+        # Reject short conditions
+        self.assertIsNone(recall_soul_decision("", custom_db_path=self.db_path))
+        self.assertIsNone(recall_soul_decision("ab", custom_db_path=self.db_path))
+
+        # Insert test quirk for App A directly into test DB
+        conn = get_memory_connection(self.db_path)
+        conn.execute("MERGE (a:App {name: 'canva'}) ON CREATE SET a.exe_path = '', a.ui_type = 'electron'")
+        conn.execute("CREATE (q:AppQuirk {id: 'q_test_1', issue: 'template popup blocked', workaround: 'press esc', playbook: 'press esc'})")
+        conn.execute("MATCH (a:App {name: 'canva'}), (q:AppQuirk {id: 'q_test_1'}) CREATE (a)-[:EXHIBITS]->(q)")
+
+        # Query with matching app
+        res_matching = recall_soul_decision("template popup blocked", app_name="canva", custom_db_path=self.db_path)
+        self.assertIsNotNone(res_matching)
+        self.assertEqual(res_matching["result"], "press esc")
+
+        # Query with different app - should NOT return canva quirk
+        clear_soul_decision_cache()
+        res_different = recall_soul_decision("template popup blocked", app_name="blender", custom_db_path=self.db_path)
+        self.assertIsNone(res_different)
+
 
 if __name__ == "__main__":
     unittest.main()

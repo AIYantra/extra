@@ -73,6 +73,14 @@ export default {
 
     // Route 2: Anonymous Installation Success Beacon
     if (url.pathname === "/api/install-success" && request.method === "POST") {
+      const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+      if (contentLength > 16384) {
+        return new Response(JSON.stringify({ error: "Payload too large. Max 16KB allowed." }), {
+          status: 413,
+          headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+        });
+      }
+
       let body = {};
       try {
         body = await request.json();
@@ -101,24 +109,21 @@ export default {
         timestamp: Date.now(),
       };
 
-      // Optional async persistence if KV or webhook is configured
-      if (ctx && ctx.waitUntil) {
-        ctx.waitUntil((async () => {
-          try {
-            if (env && env.TELEMETRY_KV) {
-              const dateStr = new Date().toISOString().slice(0, 10);
-              const key = `install:${dateStr}:${body.os || "unknown"}:${Date.now()}`;
-              await env.TELEMETRY_KV.put(key, JSON.stringify(eventRecord), { expirationTtl: 86400 * 90 });
-            }
-            if (env && env.WEBHOOK_URL) {
-              await fetch(env.WEBHOOK_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(eventRecord),
-              });
-            }
-          } catch (_) {}
-        })());
+      // Persist in Cloudflare KV if configured
+      if (env && env.TELEMETRY_KV) {
+        try {
+          const dateStr = new Date().toISOString().slice(0, 10);
+          const key = `install:${dateStr}:${body.os || "unknown"}:${Date.now()}`;
+          await env.TELEMETRY_KV.put(key, JSON.stringify(eventRecord), { expirationTtl: 86400 * 90 });
+        } catch (_) {}
+      }
+
+      if (ctx && ctx.waitUntil && env && env.WEBHOOK_URL) {
+        ctx.waitUntil(fetch(env.WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(eventRecord),
+        }).catch(() => {}));
       }
 
       return new Response(JSON.stringify({ status: "ok", tracked: true }), {
@@ -129,6 +134,14 @@ export default {
 
     // Route 3: Fleet Telemetry & First-Run Activation Ingestion
     if (url.pathname === "/api/telemetry" && request.method === "POST") {
+      const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+      if (contentLength > 16384) {
+        return new Response(JSON.stringify({ error: "Payload too large. Max 16KB allowed." }), {
+          status: 413,
+          headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+        });
+      }
+
       let payload = {};
       try {
         payload = await request.json();
@@ -144,19 +157,25 @@ export default {
         colo: request.cf.colo || "Unknown",
       } : {};
 
-      const events = Array.isArray(payload.events) ? payload.events : [payload];
+      const rawEvents = Array.isArray(payload.events) ? payload.events : [payload];
+      // Bound array processing to max 25 events per request to prevent KV write exhaustion
+      const events = rawEvents.slice(0, 25);
 
-      // Async dispatch to storage/forwarding
-      if (ctx && ctx.waitUntil) {
+      // Persist in Cloudflare KV if configured
+      if (env && env.TELEMETRY_KV) {
+        try {
+          const dateStr = new Date().toISOString().slice(0, 10);
+          for (const ev of events) {
+            const key = `telemetry:${dateStr}:${ev.event || "event"}:${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            await env.TELEMETRY_KV.put(key, JSON.stringify({ ...ev, geo }), { expirationTtl: 86400 * 90 });
+          }
+        } catch (_) {}
+      }
+
+      // Async dispatch to external PostHog if configured
+      if (ctx && ctx.waitUntil && env && env.POSTHOG_HOST && env.POSTHOG_API_KEY) {
         ctx.waitUntil((async () => {
           try {
-            if (env && env.TELEMETRY_KV) {
-              const dateStr = new Date().toISOString().slice(0, 10);
-              for (const ev of events) {
-                const key = `telemetry:${dateStr}:${ev.event || "event"}:${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-                await env.TELEMETRY_KV.put(key, JSON.stringify({ ...ev, geo }), { expirationTtl: 86400 * 90 });
-              }
-            }
             if (env && env.POSTHOG_HOST && env.POSTHOG_API_KEY) {
               const posthogEvents = events.map(ev => ({
                 event: ev.event || "extra_event",
@@ -203,6 +222,8 @@ export default {
       headers.set("Content-Type", "text/plain; charset=utf-8");
       headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
       headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+      headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
       return new Response(upstreamRes.body, {
         status: upstreamRes.status,
         headers,
@@ -217,6 +238,8 @@ export default {
       headers.set("Content-Type", "text/plain; charset=utf-8");
       headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
       headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+      headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
       return new Response(upstreamRes.body, {
         status: upstreamRes.status,
         headers,
@@ -256,6 +279,8 @@ export default {
     resHeaders.set("X-Content-Type-Options", "nosniff");
     resHeaders.set("X-Frame-Options", "DENY");
     resHeaders.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    resHeaders.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), browsing-topics=()");
+    resHeaders.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
     resHeaders.set("X-Served-By", "extra-edge-router");
     resHeaders.set(
       "Content-Security-Policy",

@@ -38,7 +38,8 @@ def format_skill_markdown(app_name: str, profile: AppProfile, intel: Dict[str, A
         "",
         f"> **Application Profile:** UI Framework: `{profile.ui_framework}` | "
         f"Installed: `{'Yes' if profile.is_installed else 'Web / External'}` | "
-        f"Scripting API: `{profile.scripting_api or 'Native Input'}`",
+        f"Scripting API: `{profile.scripting_api or 'Native Input'}`"
+        + (f" | Agent-Native CLI: `{profile.cli_harness_name}`" if profile.cli_harness_available else ""),
         "",
         f"### Overview",
         intel.get("summary", f"Specialized automation guide for {title}."),
@@ -48,6 +49,15 @@ def format_skill_markdown(app_name: str, profile: AppProfile, intel: Dict[str, A
         "",
         "## 2. Zero-Stall Fast Paths",
     ]
+
+    if profile.cli_harness_available:
+        lines.append(f"### Dual-Plane Fast Path ({profile.cli_harness_name})")
+        lines.append(f"- **Deterministic Execution (Plane 2):** Dispatch complex creative and editing operations deterministically:")
+        lines.append(f"  `extra_harness_run(harness='{slug}', command=['<subcommand>', ...], auto_visualize=True)`")
+        lines.append(f"- **Live Glass Co-Pilot (Plane 1):** With `auto_visualize=True`, Extra automatically brings {title} and the generated artifact onto the user's active display with SOUL-Gateman visual settle confirmation.")
+        if not profile.cli_harness_installed:
+            lines.append(f"- **On-Demand Package Install:** Install the agent-native CLI on demand via `extra_hub_manage(action='install', harness_name='{slug}')`.")
+        lines.append("")
 
     for fp in intel.get("fast_paths", []):
         lines.append(f"- {fp}")

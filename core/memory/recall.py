@@ -33,12 +33,13 @@ def recall_memory(
 
         # 1. Retrieve candidate tasks (optionally filtered by app)
         if app_name:
+            clean_app = app_name.strip().lower()
             cypher = """
                 MATCH (t:Task)-[:TARGETED]->(a:App)
-                WHERE lower(a.name) = lower($app_name)
+                WHERE lower(a.name) = $app_name OR contains(lower(a.name), $app_name) OR contains($app_name, lower(a.name))
                 RETURN t.id, t.goal, t.summary, t.timestamp, t.duration_ms, t.total_steps, t.success, t.embedding
             """
-            params = {"app_name": app_name.strip()}
+            params = {"app_name": clean_app}
         else:
             cypher = """
                 MATCH (t:Task)
@@ -163,29 +164,38 @@ def recall_memory(
         for app in set(queried_apps):
             if not app:
                 continue
+            clean_target = app.strip().lower()
             q_res = conn.execute(
                 """
                 MATCH (a:App)-[:EXHIBITS]->(q:AppQuirk)
-                WHERE lower(a.name) = lower($app)
-                RETURN q.issue, q.workaround, q.playbook
+                WHERE lower(a.name) = $app OR contains(lower(a.name), $app) OR contains($app, lower(a.name))
+                RETURN a.name, q.issue, q.workaround, q.playbook
                 """,
-                {"app": app.strip()},
+                {"app": clean_target},
             )
             while q_res.has_next():
                 r = q_res.get_next()
                 app_quirks.append({
-                    "app": app,
-                    "issue": r[0],
-                    "workaround": r[1],
-                    "playbook": r[2],
+                    "app": r[0],
+                    "issue": r[1],
+                    "workaround": r[2],
+                    "playbook": r[3],
                 })
 
-        return {
+        # 4. Check for active environmental session / browser profile
+        session_info = None
+        if app_name:
+            session_info = recall_app_session(app_name, custom_db_path=custom_db_path)
+
+        res_dict = {
             "query": query,
             "total_matches": len(enriched_results),
             "memories": enriched_results,
             "known_app_quirks": app_quirks,
         }
+        if session_info:
+            res_dict["active_session"] = session_info
+        return res_dict
 
     except Exception as ex:
         logger.error("Memory recall error: %s", ex, exc_info=True)
@@ -214,6 +224,9 @@ def recall_soul_decision(
     Returns matching prior decision dict or None if no match found.
     """
     cond_clean = condition.strip().lower()
+    if len(cond_clean) < 3:
+        return None
+
     cache_key = f"{app_name or ''}:{cond_clean}"
     if custom_db_path is None and cache_key in _SOUL_DECISION_CACHE:
         return _SOUL_DECISION_CACHE[cache_key]
@@ -221,24 +234,61 @@ def recall_soul_decision(
     try:
         conn = get_memory_connection(custom_db_path, max_retries=0)
 
-        # 1. Match against past SoulDecisions
-        res = conn.execute(
-            """
-            MATCH (d:SoulDecision)
-            WHERE lower(d.condition) = lower($cond)
-            RETURN d.decision_type, d.result, d.confidence, d.context
-            LIMIT 1
-            """,
-            {"cond": cond_clean},
-        )
-        if res.has_next():
-            row = res.get_next()
+        # 1. Match against past SoulDecisions (app-scoped if app_name provided)
+        matched_row = None
+        if app_name:
+            clean_app = app_name.strip().lower()
+            res = conn.execute(
+                """
+                MATCH (t:Task)-[:TARGETED]->(a:App), (t:Task)-[:DECIDED]->(d:SoulDecision)
+                WHERE (lower(a.name) = $app OR contains(lower(a.name), $app) OR contains($app, lower(a.name)))
+                  AND lower(d.condition) = lower($cond)
+                  AND d.condition <> ''
+                RETURN d.decision_type, d.result, d.confidence, d.context
+                LIMIT 1
+                """,
+                {"app": clean_app, "cond": cond_clean},
+            )
+            if res.has_next():
+                matched_row = res.get_next()
+
+        # If no app specified, match against any valid SoulDecision with that condition
+        if matched_row is None and not app_name:
+            res = conn.execute(
+                """
+                MATCH (d:SoulDecision)
+                WHERE lower(d.condition) = lower($cond)
+                  AND d.condition <> ''
+                RETURN d.decision_type, d.result, d.confidence, d.context
+                LIMIT 1
+                """,
+                {"cond": cond_clean},
+            )
+            if res.has_next():
+                matched_row = res.get_next()
+        elif matched_row is None and app_name:
+            # If app_name given but no app-specific decision exists, allow explicitly global/generic decisions
+            res = conn.execute(
+                """
+                MATCH (d:SoulDecision)
+                WHERE lower(d.condition) = lower($cond)
+                  AND d.condition <> ''
+                  AND (lower(d.context) CONTAINS 'global' OR lower(d.context) CONTAINS 'generic')
+                RETURN d.decision_type, d.result, d.confidence, d.context
+                LIMIT 1
+                """,
+                {"cond": cond_clean},
+            )
+            if res.has_next():
+                matched_row = res.get_next()
+
+        if matched_row is not None:
             ret = {
                 "source": "prior_soul_decision",
-                "decision_type": row[0],
-                "result": row[1],
-                "confidence": float(row[2]),
-                "context": row[3],
+                "decision_type": matched_row[0],
+                "result": matched_row[1],
+                "confidence": float(matched_row[2]),
+                "context": matched_row[3],
             }
             if custom_db_path is None:
                 _SOUL_DECISION_CACHE[cache_key] = ret
@@ -246,14 +296,17 @@ def recall_soul_decision(
 
         # 2. Match against AppQuirk if app_name given
         if app_name:
+            clean_app = app_name.strip().lower()
             q_res = conn.execute(
                 """
                 MATCH (a:App)-[:EXHIBITS]->(q:AppQuirk)
-                WHERE lower(a.name) = lower($app_name) AND (lower(q.issue) CONTAINS lower($cond) OR lower(q.playbook) CONTAINS lower($cond))
+                WHERE (lower(a.name) = $app_name OR contains(lower(a.name), $app_name) OR contains($app_name, lower(a.name)))
+                  AND (lower(q.issue) CONTAINS lower($cond) OR lower(q.playbook) CONTAINS lower($cond))
+                  AND q.issue <> ''
                 RETURN q.issue, q.workaround, q.playbook
                 LIMIT 1
                 """,
-                {"app_name": app_name.strip(), "cond": cond_clean},
+                {"app_name": clean_app, "cond": cond_clean},
             )
             if q_res.has_next():
                 q_row = q_res.get_next()
@@ -274,4 +327,55 @@ def recall_soul_decision(
         if custom_db_path is None:
             _SOUL_DECISION_CACHE[cache_key] = None
     return None
+
+
+_APP_SESSION_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+
+
+def clear_app_session_cache() -> None:
+    _APP_SESSION_CACHE.clear()
+
+
+def recall_app_session(
+    service_name: str,
+    custom_db_path: Optional[Any] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Sub-2ms instant recall for active browser profiles and authentication sessions.
+    Returns matching session dict or None if not found.
+    """
+    clean_service = service_name.strip().lower()
+    if custom_db_path is None and clean_service in _APP_SESSION_CACHE:
+        return _APP_SESSION_CACHE[clean_service]
+
+    try:
+        conn = get_memory_connection(custom_db_path, max_retries=0)
+        res = conn.execute(
+            """
+            MATCH (s:AppSession)
+            WHERE lower(s.service_name) = lower($svc)
+            RETURN s.service_name, s.browser, s.profile_name, s.profile_path, s.last_verified
+            LIMIT 1
+            """,
+            {"svc": clean_service},
+        )
+        if res.has_next():
+            row = res.get_next()
+            ret = {
+                "service_name": row[0],
+                "browser": row[1],
+                "profile_name": row[2],
+                "profile_path": row[3],
+                "last_verified": int(row[4]),
+            }
+            if custom_db_path is None:
+                _APP_SESSION_CACHE[clean_service] = ret
+            return ret
+    except Exception as ex:
+        logger.debug("Could not recall app session: %s", ex)
+
+    if custom_db_path is None:
+        _APP_SESSION_CACHE[clean_service] = None
+    return None
+
 

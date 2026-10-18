@@ -14,6 +14,12 @@ from extra.core.evolution.curator import (
     sanitize_skill_library,
 )
 from extra.core.evolution.api_synthesizer import ApiSynthesizer
+from extra.core.evolution.harness_generator import (
+    HarnessSynthesizer,
+    get_harness_synthesizer,
+    CodebaseAnalysis,
+    ArchitectureDesign,
+)
 
 __all__ = [
     "analyze_task_trajectory",
@@ -26,5 +32,9 @@ __all__ = [
     "ensure_startup_migration",
     "get_default_skill_directories",
     "ApiSynthesizer",
+    "HarnessSynthesizer",
+    "get_harness_synthesizer",
+    "CodebaseAnalysis",
+    "ArchitectureDesign",
 ]
 

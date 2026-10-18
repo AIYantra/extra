@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
         python-version: ["3.11", "3.12", "3.13"]
 
     runs-on: ${{ matrix.os }}
@@ -26,6 +26,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
+
+      - name: Install Linux System Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb at-spi2-core libx11-dev libxtst-dev
 
       - name: Install Dependencies
         shell: bash
@@ -42,4 +48,8 @@ jobs:
       - name: Run Full Unit & Integration Test Suite
         shell: bash
         run: |
-          python -m unittest discover tests
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            xvfb-run python -m unittest discover tests
+          else
+            python -m unittest discover tests
+          fi

@@ -344,12 +344,16 @@ class AbstractInputEngine(ABC):
         pass
 
     @abstractmethod
-    def atomic_clipboard_paste(self, text: str) -> None:
-        """Performs atomic virtual clipboard swap and paste."""
+    def atomic_clipboard_paste(self, text: str, html: Optional[str] = None) -> None:
+        """Performs atomic virtual clipboard swap and paste with optional rich HTML formatting."""
         pass
 
     def execute_batch_actions(
-        self, actions: List[Dict[str, Any]], auto_settle: bool = True
+        self,
+        actions: List[Dict[str, Any]],
+        auto_settle: bool = True,
+        auto_distill: bool = True,
+        max_duration_sec: float = 50.0,
     ) -> Dict[str, Any]:
         """Executes an atomic list of hardware actions sequentially with optional visual settle."""
         return {"success": False, "message": "Batch actions not supported on this platform"}
@@ -368,6 +372,19 @@ class AbstractAccessibilityPlane(ABC):
     def inspect_active_window(self, max_elements: int = 50) -> List[UIElement]:
         """Inspects the currently active foreground window."""
         return self.inspect_window(hwnd=None, interactive_only=True, max_elements=max_elements)
+
+    def inspect_tree(
+        self,
+        window_title: Optional[str] = None,
+        hwnd: Optional[int] = None,
+        interactive_only: bool = False,
+        max_elements: int = 500,
+    ) -> List[UIElement]:
+        """
+        Inspects full accessibility hierarchy for a target window or title.
+        Default implementation routes to inspect_window.
+        """
+        return self.inspect_window(hwnd=hwnd, interactive_only=interactive_only, max_elements=max_elements)
 
     @abstractmethod
     def find_element(
@@ -430,8 +447,9 @@ class AbstractShellLauncher(ABC):
         args: Optional[List[str]] = None,
         wait_for_window: bool = True,
         timeout: float = 5.0,
+        maximize: bool = False,
     ) -> LaunchResult:
-        """Deterministically launches application by alias or path."""
+        """Deterministically launches application by alias or path with optional window maximization."""
         pass
 
     @abstractmethod

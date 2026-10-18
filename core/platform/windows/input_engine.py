@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ctypes
 from ctypes import wintypes
+import logging
 import math
 import random
 import time
@@ -15,6 +16,8 @@ from typing import List, Optional, Tuple, Union
 
 import win32clipboard
 import win32con
+
+logger = logging.getLogger("extra.core.input_engine")
 
 from extra.core.motion import (
     apply_jitter,
@@ -257,11 +260,40 @@ def instant_type(text: str, press_enter: bool = False) -> None:
     _notify_indicator("type")
 
 
-def atomic_clipboard_paste(text: str, restore_delay: float = 0.02) -> None:
+def format_windows_cf_html(html_fragment: str) -> bytes:
     """
-    Safely injects massive text blocks or multi-line code snippets via clipboard:
+    Encapsulates an HTML fragment into standard Windows CF_HTML clipboard format.
+    Allows rich tables, styled text, and hyperlinks to be natively parsed by
+    Google Docs, Word, LibreOffice, and web rich-text editors.
+    """
+    header_template = (
+        "Version:0.9\r\n"
+        "StartHTML:{start_html:010d}\r\n"
+        "EndHTML:{end_html:010d}\r\n"
+        "StartFragment:{start_frag:010d}\r\n"
+        "EndFragment:{end_frag:010d}\r\n"
+    )
+    pre = "<html><body><!--StartFragment-->"
+    post = "<!--EndFragment--></body></html>"
+    dummy_header = header_template.format(start_html=0, end_html=0, start_frag=0, end_frag=0)
+    start_html = len(dummy_header.encode("utf-8"))
+    start_frag = start_html + len(pre.encode("utf-8"))
+    end_frag = start_frag + len(html_fragment.encode("utf-8"))
+    end_html = end_frag + len(post.encode("utf-8"))
+    final_header = header_template.format(
+        start_html=start_html,
+        end_html=end_html,
+        start_frag=start_frag,
+        end_frag=end_frag,
+    )
+    return (final_header + pre + html_fragment + post).encode("utf-8")
+
+
+def atomic_clipboard_paste(text: str, html: Optional[str] = None, restore_delay: float = 0.05) -> None:
+    """
+    Safely injects text blocks, rich tables, or multi-line code snippets via clipboard:
     1. Saves current user clipboard content.
-    2. Writes target text to clipboard.
+    2. Writes target text (and optional CF_HTML format) to clipboard.
     3. Triggers hardware Ctrl+V.
     4. Restores original clipboard content after restore_delay.
     """
@@ -271,6 +303,12 @@ def atomic_clipboard_paste(text: str, restore_delay: float = 0.02) -> None:
         if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
             old_clipboard = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
         win32clipboard.EmptyClipboard()
+        if html:
+            try:
+                cf_html_id = win32clipboard.RegisterClipboardFormat("HTML Format")
+                win32clipboard.SetClipboardData(cf_html_id, format_windows_cf_html(html))
+            except Exception:
+                pass
         win32clipboard.SetClipboardData(win32con.CF_UNICODETEXT, text)
     except Exception:
         # Fallback to instant_type if clipboard lock is contended
@@ -301,6 +339,28 @@ def atomic_clipboard_paste(text: str, restore_delay: float = 0.02) -> None:
                 pass
 
 
+def get_clipboard_text(timeout: float = 0.5) -> str:
+    """Safely retrieves current text payload from Windows clipboard."""
+    ensure_dpi_aware()
+    t_end = time.perf_counter() + timeout
+    while time.perf_counter() < t_end:
+        try:
+            win32clipboard.OpenClipboard()
+            try:
+                if win32clipboard.IsClipboardFormatAvailable(win32con.CF_UNICODETEXT):
+                    data = win32clipboard.GetClipboardData(win32con.CF_UNICODETEXT)
+                    return str(data or "")
+                elif win32clipboard.IsClipboardFormatAvailable(win32con.CF_TEXT):
+                    data = win32clipboard.GetClipboardData(win32con.CF_TEXT)
+                    return data.decode("utf-8", errors="ignore") if isinstance(data, bytes) else str(data or "")
+            finally:
+                win32clipboard.CloseClipboard()
+            return ""
+        except Exception:
+            time.sleep(0.03)
+    return ""
+
+
 def mouse_move(x: int, y: int, monitor_index: int = 0, notify: bool = True) -> None:
     """Positions the mouse cursor at exact physical display coordinates."""
     ensure_dpi_aware()
@@ -329,8 +389,34 @@ def mouse_move(x: int, y: int, monitor_index: int = 0, notify: bool = True) -> N
         _notify_indicator("move", cx, cy, monitor_index)
 
 
-def mouse_down(button: str = "left") -> None:
-    """Holds down the specified mouse button."""
+def send_mouse_move_event(x: int, y: int, monitor_index: int = 0) -> None:
+    """
+    Dispatches a hardware-level MOUSEEVENTF_MOVE packet via SendInput without calling SetCursorPos.
+    Essential during mouse drag and continuous strokes (MS Paint, Canva) to prevent Windows 11
+    DirectManipulation / InkPresenter gesture cancellation caused by external cursor position warps.
+    """
+    ensure_dpi_aware()
+    attach_input_desktop()
+    cx, cy = clamp_coordinates(x, y, monitor_index)
+    w = user32.GetSystemMetrics(0)
+    h = user32.GetSystemMetrics(1)
+    if w > 0 and h > 0:
+        nx = int(cx * 65535 / (w - 1))
+        ny = int(cy * 65535 / (h - 1))
+        inp = INPUT(type=INPUT_MOUSE)
+        inp.mi = MOUSEINPUT(
+            dx=nx,
+            dy=ny,
+            mouseData=0,
+            dwFlags=MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE | MOUSEEVENTF_VIRTUALDESK,
+            time=0,
+            dwExtraInfo=0,
+        )
+        _send_inputs([inp])
+
+
+def mouse_down(button: str = "left", x: Optional[int] = None, y: Optional[int] = None, monitor_index: int = 0) -> None:
+    """Holds down the specified mouse button, optionally with explicit spatial coordinates."""
     btn = button.lower()
     flag = MOUSEEVENTF_LEFTDOWN
     if btn == "right":
@@ -338,13 +424,26 @@ def mouse_down(button: str = "left") -> None:
     elif btn == "middle":
         flag = MOUSEEVENTF_MIDDLEDOWN
 
-    inp = INPUT(type=INPUT_MOUSE)
-    inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag, time=0, dwExtraInfo=0)
-    _send_inputs([inp])
+    ensure_dpi_aware()
+    attach_input_desktop()
+
+    w = user32.GetSystemMetrics(0)
+    h = user32.GetSystemMetrics(1)
+    if x is not None and y is not None and w > 0 and h > 0:
+        cx, cy = clamp_coordinates(x, y, monitor_index)
+        nx = int(cx * 65535 / (w - 1))
+        ny = int(cy * 65535 / (h - 1))
+        inp = INPUT(type=INPUT_MOUSE)
+        inp.mi = MOUSEINPUT(dx=nx, dy=ny, mouseData=0, dwFlags=flag | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, time=0, dwExtraInfo=0)
+        _send_inputs([inp])
+    else:
+        inp = INPUT(type=INPUT_MOUSE)
+        inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag, time=0, dwExtraInfo=0)
+        _send_inputs([inp])
 
 
-def mouse_up(button: str = "left") -> None:
-    """Releases the specified mouse button."""
+def mouse_up(button: str = "left", x: Optional[int] = None, y: Optional[int] = None, monitor_index: int = 0) -> None:
+    """Releases the specified mouse button, optionally with explicit spatial coordinates."""
     btn = button.lower()
     flag = MOUSEEVENTF_LEFTUP
     if btn == "right":
@@ -352,9 +451,22 @@ def mouse_up(button: str = "left") -> None:
     elif btn == "middle":
         flag = MOUSEEVENTF_MIDDLEUP
 
-    inp = INPUT(type=INPUT_MOUSE)
-    inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag, time=0, dwExtraInfo=0)
-    _send_inputs([inp])
+    ensure_dpi_aware()
+    attach_input_desktop()
+
+    w = user32.GetSystemMetrics(0)
+    h = user32.GetSystemMetrics(1)
+    if x is not None and y is not None and w > 0 and h > 0:
+        cx, cy = clamp_coordinates(x, y, monitor_index)
+        nx = int(cx * 65535 / (w - 1))
+        ny = int(cy * 65535 / (h - 1))
+        inp = INPUT(type=INPUT_MOUSE)
+        inp.mi = MOUSEINPUT(dx=nx, dy=ny, mouseData=0, dwFlags=flag | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, time=0, dwExtraInfo=0)
+        _send_inputs([inp])
+    else:
+        inp = INPUT(type=INPUT_MOUSE)
+        inp.mi = MOUSEINPUT(dx=0, dy=0, mouseData=0, dwFlags=flag, time=0, dwExtraInfo=0)
+        _send_inputs([inp])
 
 
 def smooth_mouse_move(
@@ -442,20 +554,26 @@ def mouse_stroke(
 
     start_x, start_y = clamped_pts[0]
     mouse_move(start_x, start_y, monitor_index=monitor_index, notify=False)
-    time.sleep(0.02)
+    time.sleep(0.03)
 
-    mouse_down(button)
-    time.sleep(0.02)
+    # Hold down mouse button with explicit spatial coordinates to initiate stroke
+    mouse_down(button, x=start_x, y=start_y, monitor_index=monitor_index)
+    time.sleep(0.04)
 
     scheduled = generate_stroke_path(clamped_pts, duration=duration, smooth=smooth)
+    prev_pt = (start_x, start_y)
     for px, py, delay in scheduled:
         cx, cy = clamp_coordinates(px, py, monitor_index)
-        mouse_move(cx, cy, monitor_index=monitor_index, notify=False)
-        time.sleep(delay)
+        if (cx, cy) == prev_pt:
+            continue
+        prev_pt = (cx, cy)
+        send_mouse_move_event(cx, cy, monitor_index=monitor_index)
+        time.sleep(max(0.015, delay))
 
-    time.sleep(0.02)
-    mouse_up(button)
+    time.sleep(0.04)
     last_x, last_y = clamped_pts[-1]
+    mouse_up(button, x=last_x, y=last_y, monitor_index=monitor_index)
+    time.sleep(0.02)
     _notify_indicator("drag", last_x, last_y, monitor_index)
 
 
@@ -525,19 +643,20 @@ def mouse_drag(
         return
 
     mouse_move(start_x, start_y, monitor_index)
-    time.sleep(0.02)
+    time.sleep(0.03)
     mouse_down(button)
-    time.sleep(0.02)
+    # Hardware dwell delay: allows Windows 11 DirectManipulation / InkPresenter to establish drag contact
+    time.sleep(0.05)
 
     step_delay = duration / max(1, steps)
     for s in range(1, steps + 1):
         ratio = s / float(steps)
         cur_x = int(start_x + (end_x - start_x) * ratio)
         cur_y = int(start_y + (end_y - start_y) * ratio)
-        mouse_move(cur_x, cur_y, monitor_index)
-        time.sleep(step_delay)
+        send_mouse_move_event(cur_x, cur_y, monitor_index=monitor_index)
+        time.sleep(max(0.01, step_delay))
 
-    time.sleep(0.02)
+    time.sleep(0.03)
     mouse_up(button)
     _notify_indicator("drag", end_x, end_y, monitor_index)
 
@@ -691,17 +810,21 @@ class WindowsInputEngine(AbstractInputEngine):
     def send_hotkey(self, keys: List[str]) -> None:
         send_hotkey(keys=keys)
 
-    def atomic_clipboard_paste(self, text: str) -> None:
-        atomic_clipboard_paste(text=text)
+    def atomic_clipboard_paste(self, text: str, html: Optional[str] = None) -> None:
+        atomic_clipboard_paste(text=text, html=html)
 
     def execute_batch_actions(
-        self, actions: List[Dict[str, Any]], auto_settle: bool = True
+        self, actions: List[Dict[str, Any]], auto_settle: bool = True, auto_distill: bool = False
     ) -> Dict[str, Any]:
-        return execute_batch_actions(actions=actions, auto_settle=auto_settle)
+        return execute_batch_actions(actions=actions, auto_settle=auto_settle, auto_distill=auto_distill)
 
 
 def execute_batch_actions(
-    actions: List[Dict[str, Any]], auto_settle: bool = True, max_depth: int = 5
+    actions: List[Dict[str, Any]],
+    auto_settle: bool = True,
+    max_depth: int = 5,
+    auto_distill: bool = False,
+    max_duration_sec: float = 50.0,
 ) -> Dict[str, Any]:
     """
     Executes an atomic list of hardware actions sequentially with sub-millisecond dispatch.
@@ -728,6 +851,15 @@ def execute_batch_actions(
                     ctx["process_name"] = fg.process_name
             except Exception:
                 pass
+
+        if explicit_ctx is None and "text" not in ctx and "distilled_ui" not in ctx:
+            try:
+                from extra.core.distiller import distill_screen
+                d_res = distill_screen(format="compact", max_elements=25)
+                ctx["text"] = d_res.content
+                ctx["distilled_ui"] = d_res.content
+            except Exception:
+                pass
         return ctx
 
     def _execute_sub_list(action_list: List[Dict[str, Any]], depth: int = 0) -> bool:
@@ -736,18 +868,32 @@ def execute_batch_actions(
             return True
 
         for act in action_list:
+            if not isinstance(act, dict):
+                continue
             atype = str(act.get("action", act.get("type", ""))).lower().strip()
             if not atype:
                 continue
+
+            # Hard safety deadline guard to prevent MCP client timeout (180s deadline)
+            if (time.perf_counter() - t0) >= max_duration_sec:
+                logger.warning(
+                    "[Batch] Hard execution budget (%.1fs) reached after %d/%d actions. Pausing batch to prevent MCP timeout.",
+                    max_duration_sec, len(executed), len(actions)
+                )
+                batch_error["partial"] = True
+                batch_error["paused_at_index"] = len(executed)
+                batch_error["total_actions"] = len(actions)
+                batch_error["reason"] = f"Execution safely paused at {round(time.perf_counter() - t0, 1)}s to avoid MCP timeout limit."
+                return False
 
             step_t0 = time.perf_counter()
             current_index = len(executed)
 
             # ── SOUL Reflexive Actions ─────────────────────────────────────
-            if atype in ("eval", "condition", "branch"):
+            if atype in ("decide", "eval", "condition", "branch"):
                 condition = str(act.get("condition", act.get("query", "")))
-                if_true = act.get("if_true", act.get("then", []))
-                if_false = act.get("if_false", act.get("else", []))
+                if_true = act.get("on_true", act.get("if_true", act.get("then", [])))
+                if_false = act.get("on_false", act.get("if_false", act.get("else", [])))
                 explicit_ctx = act.get("context")
 
                 from extra.core.soul import get_soul_decider
@@ -758,12 +904,15 @@ def execute_batch_actions(
                 decision = decider.decide_boolean(condition, context=ctx)
                 eval_dur = (time.perf_counter() - eval_t0) * 1000.0
 
-                branch_name = "if_true" if decision.result else "if_false"
+                if atype == "eval":
+                    branch_name = "if_true" if decision.result else "if_false"
+                else:
+                    branch_name = "on_true" if decision.result else "on_false"
                 branch_actions = if_true if decision.result else if_false
 
                 executed.append({
                     "index": current_index,
-                    "action": "eval",
+                    "action": "decide" if atype == "decide" else "eval",
                     "condition": condition,
                     "result": decision.result,
                     "confidence": decision.confidence,
@@ -776,6 +925,38 @@ def execute_batch_actions(
                     ok = _execute_sub_list(branch_actions, depth=depth + 1)
                     if not ok:
                         return False
+
+            elif atype in ("critic", "verify_milestone", "verify_acceptance", "audit_screen"):
+                milestone = str(act.get("milestone", act.get("name", "batch_checkpoint")))
+                expected = act.get("expected", act.get("expected_elements"))
+                unwanted = act.get("unwanted", act.get("unwanted_elements"))
+                custom_cond = act.get("condition")
+                on_fail = str(act.get("on_fail", "abort")).lower()
+
+                from extra.core.soul import SoulCritic
+                critic = SoulCritic()
+                exp_list = expected if isinstance(expected, list) else ([expected] if expected else None)
+                unw_list = unwanted if isinstance(unwanted, list) else ([unwanted] if unwanted else None)
+                verdict = critic.evaluate_screen_milestone(
+                    milestone_name=milestone,
+                    expected_elements=exp_list,
+                    unwanted_elements=unw_list,
+                    custom_condition=custom_cond,
+                )
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "critic",
+                    "milestone": milestone,
+                    "passed": verdict.passed,
+                    "confidence": round(verdict.confidence, 2),
+                    "defects": verdict.defects,
+                    "latency_ms": round(verdict.latency_ms, 2),
+                    "duration_ms": round(step_dur, 2),
+                })
+                if not verdict.passed and on_fail == "abort":
+                    batch_error["error"] = f"SOUL-Critic milestone '{milestone}' rejected: {'; '.join(verdict.defects)}"
+                    return False
 
             elif atype in ("assert", "check"):
                 condition = str(act.get("condition", act.get("query", "")))
@@ -846,9 +1027,29 @@ def execute_batch_actions(
                 keys = act.get("keys", [])
                 if isinstance(keys, str):
                     keys = [keys]
-                send_hotkey(keys)
-                step_dur = (time.perf_counter() - step_t0) * 1000.0
-                executed.append({"index": current_index, "action": "hotkey", "keys": keys, "duration_ms": round(step_dur, 2)})
+                clean_keys = [str(k).lower().strip() for k in keys]
+                # Universal Win11 Anti-Snap Assist Interception:
+                # Direct hardware SendInput of Win+Up triggers Windows 11 Snap Assist overlay.
+                # Cleanly maximize the foreground window via Win32 SW_MAXIMIZE in <1ms!
+                if clean_keys in (["win", "up"], ["super", "up"], ["windows", "up"]):
+                    from extra.core.platform.windows.focus import get_foreground_window, snap_window
+                    fg = get_foreground_window()
+                    max_ok = False
+                    if fg and fg.hwnd:
+                        max_ok = snap_window(fg.hwnd, "maximize")
+                    step_dur = (time.perf_counter() - step_t0) * 1000.0
+                    executed.append({
+                        "index": current_index,
+                        "action": "hotkey",
+                        "keys": keys,
+                        "intercepted_maximize": True,
+                        "success": max_ok,
+                        "duration_ms": round(step_dur, 2),
+                    })
+                else:
+                    send_hotkey(keys)
+                    step_dur = (time.perf_counter() - step_t0) * 1000.0
+                    executed.append({"index": current_index, "action": "hotkey", "keys": keys, "duration_ms": round(step_dur, 2)})
 
             elif atype in ("type", "text", "input"):
                 text = str(act.get("text", ""))
@@ -856,6 +1057,19 @@ def execute_batch_actions(
                 instant_type(text, press_enter=press_enter)
                 step_dur = (time.perf_counter() - step_t0) * 1000.0
                 executed.append({"index": current_index, "action": "type", "length": len(text), "press_enter": press_enter, "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("paste", "clipboard_paste"):
+                text = str(act.get("text", ""))
+                html = act.get("html")
+                atomic_clipboard_paste(text=text, html=html)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "paste",
+                    "length": len(text),
+                    "has_html": html is not None,
+                    "duration_ms": round(step_dur, 2),
+                })
 
             elif atype in ("move", "mouse_move", "hover"):
                 x = int(act.get("x", 0))
@@ -883,10 +1097,60 @@ def execute_batch_actions(
                 dur = float(act.get("duration", 1.0))
                 sm = bool(act.get("smooth", True))
                 pts_tuples = [(int(p[0]), int(p[1])) for p in pts if len(p) >= 2]
+                if act.get("canvas_relative", False):
+                    try:
+                        from extra.core.soul.vision_parser import detect_canvas_viewport
+                        cv = detect_canvas_viewport()
+                        if cv:
+                            pts_tuples = [(p[0] + cv.bounding_box[0], p[1] + cv.bounding_box[1]) for p in pts_tuples]
+                    except Exception:
+                        pass
                 if pts_tuples:
                     mouse_stroke(pts_tuples, button=btn, duration=dur, smooth=sm)
                 step_dur = (time.perf_counter() - step_t0) * 1000.0
                 executed.append({"index": current_index, "action": "stroke", "point_count": len(pts_tuples), "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("drag", "mouse_drag"):
+                start_x = int(act.get("start_x", act.get("x1", 0)))
+                start_y = int(act.get("start_y", act.get("y1", 0)))
+                end_x = int(act.get("end_x", act.get("x2", 0)))
+                end_y = int(act.get("end_y", act.get("y2", 0)))
+                btn = str(act.get("button", "left"))
+                dur = float(act.get("duration", 0.2))
+                st = int(act.get("steps", 15))
+                mon = int(act.get("monitor_index", 0))
+
+                if act.get("canvas_relative", False):
+                    try:
+                        from extra.core.soul.vision_parser import detect_canvas_viewport
+                        cv = detect_canvas_viewport()
+                        if cv:
+                            start_x += cv.bounding_box[0]
+                            start_y += cv.bounding_box[1]
+                            end_x += cv.bounding_box[0]
+                            end_y += cv.bounding_box[1]
+                    except Exception:
+                        pass
+
+                mouse_drag(
+                    start_x=start_x,
+                    start_y=start_y,
+                    end_x=end_x,
+                    end_y=end_y,
+                    button=btn,
+                    steps=st,
+                    duration=dur,
+                    monitor_index=mon,
+                )
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "drag",
+                    "start": [start_x, start_y],
+                    "end": [end_x, end_y],
+                    "button": btn,
+                    "duration_ms": round(step_dur, 2),
+                })
 
             elif atype in ("click", "mouse_click"):
                 target = act.get("target", act.get("query"))
@@ -896,10 +1160,20 @@ def execute_batch_actions(
                     if ground_res.matched and ground_res.screen_point:
                         x, y = ground_res.screen_point
                     else:
-                        x, y = int(act.get("x", 0)), int(act.get("y", 0))
+                        batch_error["error"] = f"Semantic target '{target}' in batch action could not be visually grounded on screen."
+                        return False
                 else:
                     x = int(act.get("x", 0))
                     y = int(act.get("y", 0))
+                    if act.get("canvas_relative", False):
+                        try:
+                            from extra.core.soul.vision_parser import detect_canvas_viewport
+                            cv = detect_canvas_viewport()
+                            if cv:
+                                x += cv.bounding_box[0]
+                                y += cv.bounding_box[1]
+                        except Exception:
+                            pass
 
                 btn = str(act.get("button", "left"))
                 clicks = int(act.get("clicks", 1))
@@ -914,6 +1188,7 @@ def execute_batch_actions(
                 if target:
                     exec_item["grounded_target"] = str(target)
                 executed.append(exec_item)
+
 
             elif atype in ("double_click", "dblclick"):
                 x = int(act.get("x", 0))
@@ -992,6 +1267,78 @@ def execute_batch_actions(
                 step_dur = (time.perf_counter() - step_t0) * 1000.0
                 executed.append({"index": current_index, "action": "scroll", "clicks": clicks, "direction": direction, "duration_ms": round(step_dur, 2)})
 
+            elif atype in ("launch", "open_app", "start_app"):
+                app_name = str(act.get("app_name", act.get("app", act.get("name", ""))))
+                args = act.get("args")
+                maximize_arg = bool(act.get("maximize", False))
+                from extra.fastpath.shell import launch_app
+                l_res = launch_app(app_name=app_name, args=args, wait_for_window=True, maximize=maximize_arg)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "launch",
+                    "app_name": app_name,
+                    "maximize": maximize_arg,
+                    "success": l_res.success,
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("snap_layout", "snap", "layout"):
+                lay = str(act.get("layout", "side_by_side"))
+                l_win = act.get("left_window")
+                r_win = act.get("right_window")
+                win = act.get("window", act.get("target"))
+                mon = int(act.get("monitor_index", 0))
+                from extra.core.focus import snap_layout
+                snap_res = snap_layout(layout=lay, left_window=l_win, right_window=r_win, window=win, monitor_index=mon)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "snap_layout",
+                    "layout": lay,
+                    "success": snap_res.get("success", False),
+                    "windows": snap_res.get("windows", {}),
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("wait_until_settled", "settle", "wait_settled"):
+                timeout_sec = float(act.get("timeout_sec", act.get("timeout", 2.0)))
+                from extra.core.soul.gateman import wait_until_settled
+                settle_res = wait_until_settled(timeout_sec=timeout_sec)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "wait_until_settled",
+                    "settled": settle_res.get("settled", True),
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("read_clipboard", "copy", "get_clipboard"):
+                if act.get("send_hotkey", False):
+                    send_hotkey(["ctrl", "c"])
+                    time.sleep(0.04)
+                clip_text = get_clipboard_text()
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "read_clipboard",
+                    "value": clip_text,
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("distill", "translate_screen", "screen_state"):
+                fmt = str(act.get("format", "compact"))
+                from extra.core.distiller import distill_screen
+                d_res = distill_screen(format=fmt)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "distill",
+                    "state": d_res.content,
+                    "tokens": d_res.approx_tokens,
+                    "duration_ms": round(step_dur, 2),
+                })
+
             # Tier 1 In-Memory Visual Settle / Physical Action Delay
             if "settle_ms" in act:
                 time.sleep(int(act["settle_ms"]) / 1000.0)
@@ -1014,13 +1361,90 @@ def execute_batch_actions(
 
     _execute_sub_list(actions, depth=0)
 
+    # Closed-Loop Reflex & Final Settle (Phase 2.1)
+    final_settled = True
+    if auto_settle and executed:
+        last_action_item = actions[-1] if actions else {}
+        has_custom_settle = "settle_ms" in last_action_item
+        last_action = executed[-1].get("action", "")
+        if not has_custom_settle and last_action in ("click", "double_click", "focus", "activate", "hotkey", "launch", "scroll"):
+            try:
+                from extra.core.soul.gateman import wait_until_settled
+                s_res = wait_until_settled(timeout_sec=0.4, settle_frames=2, check_interval_ms=15)
+                final_settled = s_res.get("settled", True)
+            except Exception:
+                pass
+
     total_ms = (time.perf_counter() - t0) * 1000.0
+    is_success = not bool(batch_error) or batch_error.get("partial", False)
     result_dict: Dict[str, Any] = {
-        "success": not bool(batch_error),
+        "success": is_success,
         "executed_count": len(executed),
+        "total_count": len(actions),
         "total_duration_ms": round(total_ms, 2),
         "actions": executed,
+        "executed": executed,
+        "final_settled": final_settled,
     }
+
+    if batch_error.get("partial"):
+        result_dict["partial_execution"] = True
+        result_dict["remaining_count"] = batch_error.get("total_actions", len(actions)) - batch_error.get("paused_at_index", len(executed))
+        result_dict["timeout_guard_applied"] = True
+        result_dict["message"] = batch_error.get("reason", "Batch execution paused to prevent MCP timeout limit.")
+
+    # Closed-Loop Active Window & Focus Telemetry
+    try:
+        from extra.core.focus import get_foreground_window
+        fg = get_foreground_window()
+        if fg:
+            # Universal Windows 11 Snap Assist Auto-Neutralization:
+            # If Snap Assist captured foreground focus, dismiss it with Esc to protect subsequent actions.
+            if "snap assist" in fg.title.lower() or (fg.process_name and fg.process_name.lower() == "explorer.exe" and "snap" in fg.title.lower()):
+                send_hotkey(["esc"])
+                time.sleep(0.05)
+                refreshed_fg = get_foreground_window()
+                if refreshed_fg:
+                    fg = refreshed_fg
+                    result_dict["snap_assist_neutralized"] = True
+
+            result_dict["active_window"] = {
+                "title": fg.title,
+                "hwnd": fg.hwnd,
+                "process_name": fg.process_name,
+            }
+        else:
+            result_dict["active_window"] = {
+                "title": "Desktop Root",
+                "hwnd": 0,
+                "process_name": "explorer.exe",
+            }
+    except Exception as ex:
+        logger.debug("Failed active window observation in batch: %s", ex)
+        result_dict["active_window"] = {
+            "title": "Desktop Root",
+            "hwnd": 0,
+            "process_name": "explorer.exe",
+        }
+
+    # Closed-Loop Clipboard Telemetry
+    try:
+        clip = get_clipboard_text(timeout=0.08)
+        if clip:
+            result_dict["clipboard"] = clip
+    except Exception as ex:
+        logger.debug("Failed clipboard observation in batch: %s", ex)
+
+    # Closed-Loop Screen State Distillation (Phase 2.2)
+    if auto_distill:
+        try:
+            from extra.core.distiller import distill_screen
+            d_res = distill_screen(format="compact", max_elements=30)
+            result_dict["distilled_ui"] = d_res.content
+            result_dict["screen_state"] = d_res.content
+        except Exception as ex:
+            logger.debug("Failed screen distillation in batch: %s", ex)
+
     if batch_error:
         result_dict.update(batch_error)
     return result_dict

@@ -18,7 +18,7 @@ from extra.core.soul.gateman import SoulGateman, wait_until_settled
 from extra.core.input_engine import execute_batch_actions
 from extra.mcp.server import extra_batch_actions
 
-PLATFORM_INPUT = f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine"
+PLATFORM_INPUT = f"extra.core.platform.{'windows' if sys.platform == 'win32' else ('linux' if sys.platform.startswith('linux') else 'macos')}.input_engine"
 
 
 class TestTieredVerificationPhase1(unittest.TestCase):
@@ -240,10 +240,10 @@ class TestTieredVerificationPhase2(unittest.TestCase):
             assert settle_res["settled"] is True
             assert "duration_ms" in settle_res
 
-        with patch("extra.fastpath.browser.get_browser_fastpath", return_value=browser):
-            res = execute_browser_action(action="settle", value="1000")
-            assert res["success"] is True
-            assert res["settled"] is True
+            with patch("extra.fastpath.browser.get_browser_fastpath", return_value=browser):
+                res = execute_browser_action(action="settle", value="1000")
+                assert res["success"] is True
+                assert res["settled"] is True
 
 
 class TestTieredVerificationPhase3(unittest.TestCase):
