@@ -191,7 +191,7 @@ class TestUniversalBridge(unittest.TestCase):
             return
         cmd = "Write-Output 'POWERSHELL_BRIDGE_OK'"
         res = execute_bridge(runtime="powershell", payload=cmd, timeout_sec=10.0)
-        self.assertTrue(res.success)
+        self.assertTrue(res.success, f"PowerShell bridge failed: {res.error}, stderr: {res.stderr}")
         self.assertEqual(res.returncode, 0)
         self.assertIn("POWERSHELL_BRIDGE_OK", res.stdout)
 

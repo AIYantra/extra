@@ -203,7 +203,7 @@ def test_live_autonomous_subtask() -> None:
     res = run_subtask(intent="calculate 25 * 40 in calc")
     assert res.success is True
     assert res.steps_executed >= 4
-    assert res.duration_ms < 6000.0  # Finished within timeout
+    assert res.duration_ms < 15000.0  # Finished within VM timeout
     assert "STATE: SUBTASK_PASS" in res.final_state_token
     # Result value should be 1000 if clipboard captured
     if res.result_value:

@@ -43,17 +43,17 @@ def _is_safe_path(target: Union[str, Path]) -> bool:
                 pass
     else:
         # Check POSIX protected system roots
+        if resolved == Path("/"):
+            return False
         posix_roots = [
-            Path("/"), Path("/bin"), Path("/sbin"), Path("/usr"),
+            Path("/bin"), Path("/sbin"), Path("/usr"),
             Path("/etc"), Path("/lib"), Path("/lib64"), Path("/var"),
             Path("/sys"), Path("/proc"), Path("/dev"), Path("/boot"),
         ]
         for proot in posix_roots:
             try:
                 r_proot = proot.resolve()
-                if resolved == r_proot:
-                    return False
-                if r_proot in resolved.parents and r_proot not in (Path("/tmp"), Path("/home"), Path("/Users")):
+                if resolved == r_proot or r_proot in resolved.parents:
                     return False
             except Exception:
                 pass

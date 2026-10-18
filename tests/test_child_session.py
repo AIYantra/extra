@@ -7,7 +7,12 @@ and Picture-in-Picture preview window rendering.
 import os
 import sys
 import time
+import unittest
 from pathlib import Path
+
+if sys.platform != "win32":
+    raise unittest.SkipTest("Windows-only PiP and Child Session test suite")
+
 import pytest
 from PIL import Image
 

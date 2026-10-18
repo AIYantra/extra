@@ -629,7 +629,10 @@ def execute_batch_actions(
                 decision = decider.decide_boolean(condition, context=ctx)
                 eval_dur = (time.perf_counter() - eval_t0) * 1000.0
 
-                branch_name = "on_true" if decision.result else "on_false"
+                if atype == "eval":
+                    branch_name = "if_true" if decision.result else "if_false"
+                else:
+                    branch_name = "on_true" if decision.result else "on_false"
                 branch_actions = if_true if decision.result else if_false
 
                 executed.append({
@@ -1019,8 +1022,10 @@ def execute_batch_actions(
     # Closed-Loop Reflex & Final Settle (Phase 2.1)
     final_settled = True
     if auto_settle and executed:
+        last_action_item = actions[-1] if actions else {}
+        has_custom_settle = "settle_ms" in last_action_item
         last_action = executed[-1].get("action", "")
-        if last_action in ("click", "double_click", "focus", "activate", "hotkey", "type", "launch", "scroll"):
+        if not has_custom_settle and last_action in ("click", "double_click", "focus", "activate", "hotkey", "launch", "scroll"):
             try:
                 from extra.core.soul.gateman import wait_until_settled
                 s_res = wait_until_settled(timeout_sec=0.4, settle_frames=2, check_interval_ms=15)
