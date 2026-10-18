@@ -23,6 +23,13 @@ def _make_dummy_image(color=(255, 255, 255)):
 class TestCanvasStallBreaker(unittest.TestCase):
     """Tests for spatial click loop detection and spreadsheet navigation remedies."""
 
+    def setUp(self):
+        self._cursor_patch = patch("extra.core.stall_breaker.get_cursor_position", return_value=(500, 500))
+        self._cursor_patch.start()
+
+    def tearDown(self):
+        self._cursor_patch.stop()
+
     def test_spatial_canvas_loop_detected_on_sheets(self):
         sb = StallBreaker(max_strikes=2)
         img_before = _make_dummy_image()

@@ -174,13 +174,12 @@ class StallBreaker:
         ensure_dpi_aware()
         attach_input_desktop()
 
-        # 1. Corner fail-safe check (only for interactive sessions; bypassed in headless CI)
-        if not (os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS")):
-            cx, cy = get_cursor_position()
-            if cx <= self.corner_abort_pixels and cy <= self.corner_abort_pixels:
-                raise EmergencyAbortError(
-                    f"Fail-Safe Triggered: Mouse pointer detected at emergency abort corner ({cx}, {cy})."
-                )
+        # 1. Corner fail-safe check
+        cx, cy = get_cursor_position()
+        if cx <= self.corner_abort_pixels and cy <= self.corner_abort_pixels:
+            raise EmergencyAbortError(
+                f"Fail-Safe Triggered: Mouse pointer detected at emergency abort corner ({cx}, {cy})."
+            )
 
         # 2. Emergency hotkey check:
         # Windows (Ctrl + Alt + Shift + Q)
