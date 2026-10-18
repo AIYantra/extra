@@ -1,3 +1,90 @@
+# Extra Release Notes — v0.3.2
+
+**Release Date:** October 18, 2026  
+**Release Title:** Official Linux Native Desktop Automation Engine (Wayland & X11), AT-SPI2 Semantic Actuation, Universal Electron Accessibility & Tri-Platform CI/CD  
+**Target Systems:** Linux (KDE Plasma, GNOME, wlroots, X11), Windows 10/11 (x64 / ARM64), macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.2)
+
+Version 0.3.2 is a landmark milestone delivering **official native Linux desktop automation** to Extra, establishing full tri-platform parity across **Linux, Windows, and macOS**. In addition, this release integrates universal Electron accessibility injection, expands the continuous integration matrix to Ubuntu Linux, and hardens background isolated execution foundations.
+
+### Key Highlights:
+
+1. **Official Linux Desktop Platform Engine (`core/platform/linux/`):**
+   - **Wayland & X11 Dual Compatibility:** First-class support for Wayland compositors (KDE Plasma KWin, GNOME Mutter, wlroots) and traditional X11 window managers.
+   - **Pure-Python AT-SPI2 Accessibility Plane (`atspi_plane.py`):** Direct Session D-Bus (`org.a11y.Bus`) introspection of the Linux desktop accessibility hierarchy without external subprocesses, enabling sub-millisecond semantic actuation via `DoAction(0)` with physical click fallback.
+   - **Kernel-Level Hardware Input (`input_engine.py`):** Direct hardware event injection via `/dev/uinput` (`evdev`) delivering sub-millisecond keystroke dispatch with intelligent terminal-aware clipboard pasting (`Ctrl + Shift + V` for terminal emulators vs `Ctrl + V` for GUI windows).
+   - **Multi-Tier Wayland Screen Capture (`capture.py`):** Sub-3ms screen vision prioritizing KDE Spectacle D-Bus and wlroots Grim, with XShm / MSS fallback.
+   - **KWin Scripting Window Snapping (`focus.py`, `geometry.py`):** Sub-15ms programmatic window arrangement and focus activation via KWin D-Bus runner on Wayland and EWMH (`_NET_ACTIVE_WINDOW`) on X11.
+   - **Ambient Pulse Indicators (`indicators.py`):** Native Wayland overlay indicator rendering with emerald green border pulse and synthesized harmonic acoustic chimes.
+
+2. **Universal Electron & Chromium Perception Hardening (`core/platform/windows/shell.py`, `distiller.py`, `uia_plane.py`):**
+   - **Universal `--force-renderer-accessibility` Injection:** When launching Electron or Chromium applications (Canva, Slack, VS Code, Discord), Extra automatically injects `--force-renderer-accessibility` so the accessibility tree immediately exposes inner webview DOM nodes without requiring a screen reader.
+   - **Distiller Headroom & Opacity Detection:** Expanded candidate element scan buffers and added caption-only opacity detection, eliminating accessibility tree truncation in dense webview apps.
+   - **Zero-Stall Canva Declarative Skill (`skills/extra-canva/`):** Introduced official automation playbook leveraging native single-key accelerators (`T`, `R`, `C`, `Alt + /`).
+
+3. **Tri-Platform CI/CD Matrix (`.github/workflows/ci.yml`, `publish-pypi.yml`):**
+   - Expanded GitHub Actions automated test matrix to `[windows-latest, macos-latest, ubuntu-latest]` across Python 3.11, 3.12, and 3.13.
+   - Configured headless virtual display testing via `xvfb-run` and AT-SPI2 core libraries on Ubuntu Linux runners.
+
+4. **Multi-Instance Picture-in-Picture (PiP) Foundation (`core/platform/windows/child_session.py`, `pip_window.py`):**
+   - Integrated production foundation for isolated child session desktop automation, enabling background agent execution without cursor interception on the user's primary display.
+
+5. **Universal Package Ecosystem Alignment (`0.3.2`):**
+   - Synchronized version metadata across PyPI (`extra-desktop==0.3.2`), npm (`@yantraos/extra-desktop@0.3.2`), Homebrew (`Formula/extra.rb`), MCP Registry (`server.json`), Smithery (`smithery.yaml`), and Glama (`glama.json`).
+
+---
+
+# Extra Release Notes — v0.3.1
+
+**Release Date:** September 26, 2026  
+**Release Title:** Windows 11 Inking Stability, Zombie Process Elimination, Visual Grounding Hardening & Perception Calibration  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.1)
+
+Version 0.3.1 is a targeted stability and hardening release for **Windows and macOS**, resolving critical edge cases in Windows 11 hardware inking, headless zombie process lifecycles, and visual grounding precision.
+
+### Key Highlights:
+1. **Windows 11 InkPresenter & DirectManipulation Inking Stabilization:**
+   - **Root Cause Eliminated:** Continuous vector drawing in Windows 11 previously suffered from dropped lines and interrupted strokes in creative applications (MS Paint, Canva, browser whiteboards, Figma) due to intermediate `SetCursorPos` calls resetting the OS gesture recognizer and `DirectManipulation` inking context.
+   - **Native `SendInput` Event Streaming:** Re-engineered `mouse_drag` and `mouse_stroke` in `core/platform/windows/input_engine.py` to stream continuous relative/absolute mouse movement strictly via `SendInput` (`MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE`) without calling `SetCursorPos` mid-trajectory.
+   - **Hardware Dwell Time Synchronization:** Added a calibrated 60ms hardware dwell delay after `mouse_down` prior to trajectory dispatch, ensuring the OS touch/pen/mouse routing arbiter firmly locks the inking surface before stroke points stream.
+
+2. **Autonomous Headless Zombie Process Clearance (`core/platform/windows/shell.py`):**
+   - **Headless Singleton Cleanup:** Modern Chromium and Electron apps frequently maintain orphaned background singleton processes from previous runs that hold no visible UI windows. When launched, new processes hand off arguments to the zombie process and exit immediately, leaving the agent waiting on an invisible window.
+   - **Universal Windowed Process Verification:** `launch_app` now inspects running instances via `EnumWindows`; processes with zero top-level windows are automatically cleaned up prior to launch.
+   - **Host Shell Protection:** Shell and console hosts (`powershell`, `cmd`, `pwsh`, `wsl`) are strictly protected from zombie clearance.
+   - **Startup Flag Hardening:** Added Chromium startup flags (`--disable-features=msStartupBoost`, `--disable-background-mode`) to prevent silent background residency.
+   - **Strict Window Settlement Contract:** If `wait_for_window=True` and no window manifests within the timeout, `launch_app` now returns `success=False` with diagnostic telemetry rather than falsely reporting success.
+
+3. **SOUL-Eyes Visual Grounding Precision & Center-Screen Fallback Elimination (`core/soul/eyes.py`):**
+   - **Zero Spurious Center Clicks:** Previously, ungrounded UI targets (e.g. unfound buttons or inputs) fell back to clicking the center of the screen `(500, 500)`. SOUL-Eyes now strictly gates center-canvas fallback to explicit canvas/whiteboard targets (`"canvas"`, `"board"`, `"drawing"`).
+   - **Strict Grounding Contract:** All ungrounded controls strictly return `matched=False` (`None`), cleanly informing the agent that visual grounding did not succeed so it can re-inspect the UI accessibility tree or adjust viewport coordinates.
+   - **Enhanced Semantic Resolution:** Added dedicated heuristics for creative controls, modal action triggers (`"+"`, `"Create"`, `"New design"`), and dimension input rails.
+
+4. **StallBreaker Perception Calibration & Subpixel Noise Filtering (`core/stall_breaker.py`):**
+   - **Noise Filtering:** Visual delta detection now requires `pixel_diff >= 3.0` when perceptual hash distance is zero (`phash_diff == 0`), successfully filtering out false-positive visual changes caused by blinking text carets, subpixel font anti-aliasing, and system clock updates.
+   - **Global Visual Threshold:** Calibrated global visual change threshold to `2.0%` for reliable stall detection without false alarms during long-running tasks.
+
+5. **Thread Desktop Attachment Optimization (`core/platform/windows/geometry.py`):**
+   - Added desktop handle verification (`if hDesk and hDesk != curDesk:`) in `attach_input_desktop()`, eliminating redundant desktop context switches on Windows threads already attached to the active input desktop.
+
+6. **macOS Subsystem Hardening (`core/platform/macos/shell.py`):**
+   - Hardened bundle identifier resolution, application launch environment isolation, and window settling detection across Apple Silicon and Intel Macs.
+
+7. **Universal Engine Invariant Preservation:**
+   - All improvements strictly comply with the Universal Engine Invariant: zero hardcoded application names in `extra/core/`, `extra/mcp/`, or `extra/fastpath/`. All mechanisms generalize across Win32, WPF, Cocoa, Electron, and Chromium application architectures.
+
+8. **Upcoming Linux Milestone Preview:**
+   - Complete Linux platform support (Wayland KWin/GNOME/wlroots + X11, pure-Python AT-SPI2 Session D-Bus, `/dev/uinput` zero-latency hardware injection, Spectacle/Grim/MSS capture, and KWin Scripting snap layout) is implemented and verified (68/68 unit tests passing) and scheduled for public release in the upcoming v0.3.2 / v0.4.0 milestone following v0.3.1.
+
+---
+
 # Extra Release Notes — v0.3.0
 
 **Release Date:** September 24, 2026  

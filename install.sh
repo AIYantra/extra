@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#   Extra — macOS Flashless Computer-Use Engine & MCP Server Installer
+#   Extra — Universal Linux & macOS Computer-Use Engine & MCP Server Installer
 #   One-liner execution: curl -sSL https://extra.yantraos.com/install.sh | bash
 #
-#   Automated zero-friction setup for AIYantra Extra on macOS:
-#   1. Verifies macOS 12.3+ (Monterey, Ventura, Sonoma, Sequoia) on Apple Silicon / Intel.
+#   Automated zero-friction setup for AIYantra Extra on Linux and macOS:
+#   1. Detects OS: Linux (Arch, Ubuntu, Debian, Fedora, openSUSE) & macOS 12.3+.
 #   2. Discovers or installs Python 3.10+.
-#   3. Creates isolated virtual environment (~/.extra/venv).
-#   4. Installs audited Apple native PyObjC & MCP dependencies.
-#   5. Automatically configures Claude Desktop (claude_desktop_config.json).
-#   6. Automatically configures Antigravity CLI (agy) & deploys always-on AI rules.
+#   3. On Linux: configures /dev/uinput permissions, udev rules & AT-SPI2 accessibility.
+#   4. Creates isolated virtual environment (~/.extra/venv).
+#   5. Installs audited platform-native hardware dependencies (evdev, mss, jeepney / PyObjC).
+#   6. Automatically configures Claude Desktop, Antigravity (agy), Cursor & Windsurf.
 #   7. Creates global 'extra' CLI and runs diagnostic doctor.
 # ==============================================================================
 
@@ -49,38 +49,48 @@ cat << 'EOF'
   \ \_____\   /\_\/\_\    \ \_\  \ \_\ \_\  \ \_\ \_\ 
    \/_____/   \/_/\/_/     \/_/   \/_/ /_/   \/_/\/_/ 
                                                       
-  Flashless macOS Computer-Use Engine & MCP Server
+  Universal Autonomous Computer-Use Engine & MCP Server
   by AIYantra (https://extra.yantraos.com)
 ======================================================================
 EOF
 echo -e "${NC}"
 
-# 1. OS & Architecture Verification
-write_step "Validating macOS Host Environment..."
+OS_TYPE="$(uname -s)"
+ARCH="$(uname -m)"
 
-if [[ "$(uname -s)" != "Darwin" ]]; then
-    write_fail "This installer is specifically engineered for macOS. Detected: $(uname -s)"
+# 1. OS & Architecture Verification
+write_step "Validating Host Operating System..."
+
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    MACOS_VER=$(sw_vers -productVersion)
+    MAJOR_VER=$(echo "$MACOS_VER" | cut -d. -f1)
+    MINOR_VER=$(echo "$MACOS_VER" | cut -d. -f2)
+
+    if [[ "$MAJOR_VER" -lt 12 || ("$MAJOR_VER" -eq 12 && "$MINOR_VER" -lt 3) ]]; then
+        write_fail "Extra requires macOS 12.3 (Monterey) or later for ScreenCaptureKit support. Detected: $MACOS_VER"
+        exit 1
+    fi
+    write_ok "macOS host verified: $MACOS_VER ($ARCH architecture)"
+
+elif [[ "$OS_TYPE" == "Linux" ]]; then
+    DISTRO_NAME="Linux"
+    if [[ -f /etc/os-release ]]; then
+        DISTRO_NAME=$(grep -E '^PRETTY_NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')
+        [[ -z "$DISTRO_NAME" ]] && DISTRO_NAME=$(grep -E '^NAME=' /etc/os-release | cut -d= -f2 | tr -d '"')
+    fi
+    write_ok "Linux host verified: $DISTRO_NAME ($ARCH architecture)"
+
+else
+    write_fail "This installer supports Linux and macOS. Detected: $OS_TYPE"
     echo -e "For Windows, install Extra by running: ${CYAN}irm https://extra.yantraos.com/install.ps1 | iex${NC}\n"
     exit 1
 fi
 
-ARCH=$(uname -m)
-MACOS_VER=$(sw_vers -productVersion)
-MAJOR_VER=$(echo "$MACOS_VER" | cut -d. -f1)
-MINOR_VER=$(echo "$MACOS_VER" | cut -d. -f2)
-
-if [[ "$MAJOR_VER" -lt 12 || ("$MAJOR_VER" -eq 12 && "$MINOR_VER" -lt 3) ]]; then
-    write_fail "Extra requires macOS 12.3 (Monterey) or later for ScreenCaptureKit support. Detected: $MACOS_VER"
-    exit 1
-fi
-
-write_ok "macOS host verified: $MACOS_VER ($ARCH architecture)"
-
-# 2. Python 3.10+ Discovery
+# 2. Python 3.10+ Discovery & Runtime Verification
 write_step "Discovering Python 3.10+ runtime..."
 
 PYTHON_BIN=""
-for cand in python3.13 python3.12 python3.11 python3.10 python3; do
+for cand in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
     if command -v "$cand" &>/dev/null; then
         VER=$("$cand" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null || true)
         MAJ=$(echo "$VER" | cut -d. -f1)
@@ -94,20 +104,64 @@ done
 
 if [[ -z "$PYTHON_BIN" ]]; then
     write_warn "Python 3.10+ not found in PATH."
-    if command -v brew &>/dev/null; then
-        write_step "Homebrew detected. Installing python@3.12 automatically..."
+    if [[ "$OS_TYPE" == "Darwin" ]] && command -v brew &>/dev/null; then
+        write_step "Homebrew detected. Installing python@3.12..."
         brew install python@3.12
         PYTHON_BIN="$(brew --prefix python@3.12)/bin/python3"
-    else
-        write_fail "Please install Python 3.10+ using Homebrew ('brew install python') or from python.org."
-        echo -e "Download official macOS package: ${CYAN}https://www.python.org/downloads/macos/${NC}\n"
+    elif [[ "$OS_TYPE" == "Linux" ]]; then
+        if command -v pacman &>/dev/null; then
+            write_step "Arch Linux detected. Installing python..."
+            sudo pacman -S --needed --noconfirm python
+            PYTHON_BIN="$(command -v python3)"
+        elif command -v apt-get &>/dev/null; then
+            write_step "Debian/Ubuntu detected. Installing python3-venv..."
+            sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip
+            PYTHON_BIN="$(command -v python3)"
+        elif command -v dnf &>/dev/null; then
+            write_step "Fedora detected. Installing python3..."
+            sudo dnf install -y python3 python3-pip
+            PYTHON_BIN="$(command -v python3)"
+        fi
+    fi
+    if [[ -z "$PYTHON_BIN" ]]; then
+        if [[ "$OS_TYPE" == "Darwin" ]]; then
+            echo -e "Or download and install Python from: https://www.python.org/downloads/macos/\n"
+        fi
+        write_fail "Please install Python 3.10+ on your system before proceeding."
         exit 1
     fi
 fi
 
 write_ok "Using Python runtime: $PYTHON_BIN ($("$PYTHON_BIN" --version))"
 
-# 3. Setup Target Directory & Isolated Virtual Environment
+# 3. Linux Hardware Permissions & Accessibility Subsystem Setup
+if [[ "$OS_TYPE" == "Linux" ]]; then
+    write_step "Configuring Linux hardware input and accessibility permissions..."
+
+    # Check /dev/uinput permissions
+    if [[ ! -w /dev/uinput ]]; then
+        write_warn "/dev/uinput is not directly writable by current user ($USER)."
+        if [[ -d /etc/udev/rules.d ]]; then
+            write_step "Installing persistent /dev/uinput udev rule (group 'input')..."
+            echo 'KERNEL=="uinput", MODE="0660", GROUP="input", TAG+="uaccess"' | sudo tee /etc/udev/rules.d/99-uinput.rules >/dev/null 2>&1 || true
+            sudo usermod -a -G input "$USER" 2>/dev/null || true
+            sudo modprobe uinput 2>/dev/null || true
+            sudo udevadm control --reload-rules 2>/dev/null || true
+            sudo udevadm trigger 2>/dev/null || true
+            write_ok "udev rule installed. (Note: group membership takes effect upon new login or 'newgrp input')"
+        fi
+    else
+        write_ok "/dev/uinput is write-accessible."
+    fi
+
+    # Activate AT-SPI2 accessibility if gsettings available
+    if command -v gsettings &>/dev/null; then
+        gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
+        write_ok "AT-SPI2 accessibility bus activated via gsettings."
+    fi
+fi
+
+# 4. Setup Target Directory & Isolated Virtual Environment
 EXTRA_HOME="$HOME/.extra"
 VENV_DIR="$EXTRA_HOME/venv"
 INSTALL_DIR="$EXTRA_HOME/app"
@@ -121,10 +175,7 @@ if [[ -f "$SCRIPT_DIR/requirements.txt" && -f "$SCRIPT_DIR/pyproject.toml" ]]; t
     write_ok "Using local repository at $INSTALL_DIR"
     if [[ "$INSTALL_DIR" != "$EXTRA_HOME/app" ]]; then
         mkdir -p "$EXTRA_HOME"
-        ln -sfn "$INSTALL_DIR" "$EXTRA_HOME/app" 2>/dev/null || {
-            mkdir -p "$EXTRA_HOME/app"
-            cp -f "$INSTALL_DIR/STARTER_PROMPT_MACOS.md" "$EXTRA_HOME/app/" 2>/dev/null || true
-        }
+        ln -sfn "$INSTALL_DIR" "$EXTRA_HOME/app" 2>/dev/null || true
     fi
 else
     if [[ ! -f "$INSTALL_DIR/requirements.txt" ]]; then
@@ -161,16 +212,29 @@ else
     write_ok "Virtual environment created."
 fi
 
-# 4. Install Dependencies
-write_step "Installing verified native Apple PyObjC & MCP dependencies..."
+# 5. Install Dependencies
+write_step "Installing verified native dependencies & MCP engine..."
 "$VENV_DIR/bin/pip" install --quiet --upgrade pip setuptools wheel
-"$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    if [[ -f "$INSTALL_DIR/requirements_macos.txt" ]]; then
+        "$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/requirements_macos.txt"
+    else
+        "$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt"
+    fi
+elif [[ "$OS_TYPE" == "Linux" ]]; then
+    "$VENV_DIR/bin/pip" install --quiet evdev mss jeepney pillow mcp
+    if [[ -f "$INSTALL_DIR/requirements.txt" ]]; then
+        "$VENV_DIR/bin/pip" install --quiet -r "$INSTALL_DIR/requirements.txt" || true
+    fi
+fi
+
 if [[ -f "$INSTALL_DIR/pyproject.toml" ]]; then
     "$VENV_DIR/bin/pip" install --quiet -e "$INSTALL_DIR" --no-deps
 fi
 write_ok "All native dependencies successfully installed."
 
-# 5. Global CLI Executable Setup
+# 6. Global CLI Executable Setup
 write_step "Configuring global 'extra' command wrapper..."
 BIN_DIR="$HOME/.local/bin"
 mkdir -p "$BIN_DIR"
@@ -182,13 +246,13 @@ exec "$VENV_DIR/bin/python" -m extra.cli "\$@"
 EOF
 chmod +x "$BIN_DIR/extra"
 
-# Ensure ~/.local/bin is in PATH in ~/.zshrc or ~/.bash_profile
+# Ensure ~/.local/bin is in PATH
 SHELL_RC=""
 if [[ "$SHELL" == *"zsh"* ]]; then
     SHELL_RC="$HOME/.zshrc"
 elif [[ "$SHELL" == *"bash"* ]]; then
-    SHELL_RC="$HOME/.bash_profile"
-    [[ ! -f "$SHELL_RC" ]] && SHELL_RC="$HOME/.bashrc"
+    SHELL_RC="$HOME/.bashrc"
+    [[ ! -f "$SHELL_RC" && -f "$HOME/.bash_profile" ]] && SHELL_RC="$HOME/.bash_profile"
 fi
 
 if [[ -n "$SHELL_RC" ]]; then
@@ -200,9 +264,13 @@ fi
 export PATH="$BIN_DIR:$PATH"
 write_ok "Global CLI wrapper ready at $BIN_DIR/extra"
 
-# 6. Configure Claude Desktop (macOS)
+# 7. Configure Claude Desktop
 write_step "Configuring Claude Desktop MCP Integration..."
-CLAUDE_DIR="$HOME/Library/Application Support/Claude"
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    CLAUDE_DIR="$HOME/Library/Application Support/Claude"
+else
+    CLAUDE_DIR="$HOME/.config/Claude"
+fi
 CLAUDE_CONFIG="$CLAUDE_DIR/claude_desktop_config.json"
 mkdir -p "$CLAUDE_DIR"
 
@@ -233,49 +301,53 @@ with open(config_path, "w", encoding="utf-8") as f:
 EOF
 write_ok "Claude Desktop configuration updated: $CLAUDE_CONFIG"
 
-# 7. Configure Cursor IDE (if detected)
-CURSOR_DIR="$HOME/Library/Application Support/Cursor/User/globalStorage/cursor.mcp"
-CURSOR_DOT_DIR="$HOME/.cursor"
-if [[ -d "$HOME/Library/Application Support/Cursor" || -d "/Applications/Cursor.app" || -d "$CURSOR_DOT_DIR" ]]; then
-    write_step "Configuring Cursor MCP Integration..."
-    "$VENV_DIR/bin/python" - << EOF
+# 8. Configure Cursor IDE (if detected)
+CURSOR_TARGETS=()
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    CURSOR_TARGETS+=(
+        "$HOME/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/mcp.json"
+        "$HOME/.cursor/mcp.json"
+    )
+else
+    CURSOR_TARGETS+=(
+        "$HOME/.config/Cursor/User/globalStorage/cursor.mcp/mcp.json"
+        "$HOME/.cursor/mcp.json"
+    )
+fi
+
+"$VENV_DIR/bin/python" - << EOF
 import json, os
 
 python_path = os.path.expanduser("$VENV_DIR/bin/python")
-targets = [
-    os.path.expanduser("~/Library/Application Support/Cursor/User/globalStorage/cursor.mcp/mcp.json"),
-    os.path.expanduser("~/.cursor/mcp.json")
-]
+targets = [os.path.expanduser(p) for p in "$CURSOR_TARGETS".split()]
 
 for config_path in targets:
     try:
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
-        data = {"mcpServers": {}}
-        if os.path.exists(config_path):
-            try:
-                with open(config_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            except Exception:
-                pass
-        if "mcpServers" not in data:
-            data["mcpServers"] = {}
-        data["mcpServers"]["extra"] = {
-            "command": python_path,
-            "args": ["-m", "extra.mcp.server"]
-        }
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        if os.path.exists(os.path.dirname(config_path)):
+            data = {"mcpServers": {}}
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    pass
+            if "mcpServers" not in data:
+                data["mcpServers"] = {}
+            data["mcpServers"]["extra"] = {
+                "command": python_path,
+                "args": ["-m", "extra.mcp.server"]
+            }
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
     except Exception:
         pass
 EOF
-    write_ok "Cursor MCP configuration updated."
-fi
+write_ok "Cursor IDE integration updated."
 
-# 8. Configure Windsurf IDE (if detected)
-WINDSURF_DIR="$HOME/.codeium/windsurf"
-if [[ -d "$WINDSURF_DIR" || -d "/Applications/Windsurf.app" ]]; then
+# 9. Configure Windsurf IDE (if detected)
+WINDSURF_CONFIG="$HOME/.codeium/windsurf/mcp_config.json"
+if [[ -d "$HOME/.codeium/windsurf" ]]; then
     write_step "Configuring Windsurf MCP Integration..."
-    WINDSURF_CONFIG="$WINDSURF_DIR/mcp_config.json"
     "$VENV_DIR/bin/python" - << EOF
 import json, os
 
@@ -305,17 +377,18 @@ EOF
     write_ok "Windsurf MCP configuration updated: $WINDSURF_CONFIG"
 fi
 
-# 9. Configure Antigravity CLI (agy) & Deploy AI Protocol Rules
+# 10. Configure Antigravity CLI (agy) & Deploy AI Protocol Rules
 if command -v agy &>/dev/null; then
     write_step "Configuring Antigravity CLI (agy) MCP Integration & Rules..."
-    try_agy() {
-        agy mcp add extra "$VENV_DIR/bin/python" -m extra.mcp.server &>/dev/null || true
-    }
-    try_agy
+    agy mcp add extra "$VENV_DIR/bin/python" -m extra.mcp.server &>/dev/null || true
     write_ok "Antigravity CLI (agy) registered Extra MCP server."
 
-    # Deploy macOS Always-On Protocol Rules
-    RULE_SRC="$INSTALL_DIR/rules/extra_automation_macos.md"
+    # Select platform-specific protocol rules
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        RULE_SRC="$INSTALL_DIR/rules/extra_automation_macos.md"
+    else
+        RULE_SRC="$INSTALL_DIR/rules/extra_automation_linux.md"
+    fi
     [[ ! -f "$RULE_SRC" ]] && RULE_SRC="$INSTALL_DIR/rules/extra_automation.md"
 
     if [[ -f "$RULE_SRC" ]]; then
@@ -325,22 +398,21 @@ if command -v agy &>/dev/null; then
         cp -f "$RULE_SRC" "$SKILL_DIR/SKILL.md"
         write_ok "Installed global skill to $SKILL_DIR/SKILL.md"
 
-        # 2. Global Instructions: ~/.gemini/GEMINI.md
+        # 2. Global Instructions
         GEMINI_MD="$HOME/.gemini/GEMINI.md"
         mkdir -p "$HOME/.gemini"
-        if [[ ! -f "$GEMINI_MD" ]] || ! grep -q "Extra macOS Desktop Automation Protocol" "$GEMINI_MD" 2>/dev/null; then
+        if [[ ! -f "$GEMINI_MD" ]] || ! grep -q "Extra .* Desktop Automation Protocol" "$GEMINI_MD" 2>/dev/null; then
             cat "$RULE_SRC" >> "$GEMINI_MD"
             write_ok "Registered always-on protocol in $GEMINI_MD"
         fi
 
         # 3. Global MCP instructions: ~/.gemini/antigravity-cli/mcp/extra/instructions.md
         MCP_EXTRA_DIR="$HOME/.gemini/antigravity-cli/mcp/extra"
-        if [[ -d "$MCP_EXTRA_DIR" ]]; then
-            cp -f "$RULE_SRC" "$MCP_EXTRA_DIR/instructions.md"
-            write_ok "Installed MCP instructions to $MCP_EXTRA_DIR/instructions.md"
-        fi
+        mkdir -p "$MCP_EXTRA_DIR"
+        cp -f "$RULE_SRC" "$MCP_EXTRA_DIR/instructions.md"
+        write_ok "Installed MCP instructions to $MCP_EXTRA_DIR/instructions.md"
 
-        # 4. User profile workspace rules: ~/.agents/rules/extra_automation.md
+        # 4. User profile workspace rules
         USER_RULES="$HOME/.agents/rules"
         mkdir -p "$USER_RULES"
         cp -f "$RULE_SRC" "$USER_RULES/extra_automation.md"
@@ -356,11 +428,11 @@ if command -v agy &>/dev/null; then
     fi
 fi
 
-# 10. Run Extra Doctor Diagnostic
+# 11. Run Extra Doctor Diagnostic
 write_step "Running Extra Doctor Hardware Diagnostics..."
 "$VENV_DIR/bin/python" -m extra.cli doctor || true
 
-# 11. Permissions Verification Guidance
+if [[ "$OS_TYPE" == "Darwin" ]]; then
 cat << 'EOF'
 
 ----------------------------------------------------------------------
@@ -379,14 +451,29 @@ cat << 'EOF'
   Once granted, verify anytime by running: extra doctor
 ----------------------------------------------------------------------
 EOF
+fi
 
-STARTER_PROMPT_PATH="$EXTRA_HOME/app/STARTER_PROMPT_MACOS.md"
-if [[ ! -f "$STARTER_PROMPT_PATH" ]]; then
-    STARTER_PROMPT_PATH="$INSTALL_DIR/STARTER_PROMPT_MACOS.md"
+# 11b. Send Anonymous Installation Success Beacon (Non-blocking, 2s timeout)
+if [[ "${DO_NOT_TRACK:-0}" != "1" && "${EXTRA_TELEMETRY:-1}" != "0" ]]; then
+    (curl -s -m 2 -X POST "https://extra.yantraos.com/api/install-success" \
+        -H "Content-Type: application/json" \
+        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.3.1\",\"method\":\"install.sh\"}" \
+        >/dev/null 2>&1 &) || true
+fi
+
+# 12. Final Completion Banner
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    STARTER_PROMPT_PATH="$EXTRA_HOME/app/STARTER_PROMPT_MACOS.md"
+    [[ ! -f "$STARTER_PROMPT_PATH" ]] && STARTER_PROMPT_PATH="$INSTALL_DIR/STARTER_PROMPT_MACOS.md"
+    BANNER_TITLE="EXTRA IS INSTALLED AND READY ON MACOS! 🚀"
+else
+    STARTER_PROMPT_PATH="$EXTRA_HOME/app/STARTER_PROMPT_LINUX.md"
+    [[ ! -f "$STARTER_PROMPT_PATH" ]] && STARTER_PROMPT_PATH="$INSTALL_DIR/STARTER_PROMPT_LINUX.md"
+    BANNER_TITLE="EXTRA IS INSTALLED AND READY ON LINUX! 🚀"
 fi
 
 echo -e "\n${BOLD}${GREEN}======================================================================${NC}"
-echo -e "${BOLD}${GREEN}  EXTRA IS INSTALLED AND READY ON MACOS! 🚀${NC}"
+echo -e "${BOLD}${GREEN}  $BANNER_TITLE${NC}"
 echo -e "${BOLD}${GREEN}======================================================================${NC}\n"
 echo -e "${WHITE}How to use Extra (Just 1 step):${NC}"
 echo -e "${WHITE}Copy and paste this prompt into your AI (Claude, Antigravity, Cursor, Windsurf):${NC}\n"

@@ -25,7 +25,7 @@ from extra.core.composer.blueprint import Milestone, TaskBlueprint
 from extra.core.composer.verifier import MilestoneVerifier
 from extra.core.soul.critic import CriticVerdict
 
-PLATFORM_INPUT = f"extra.core.platform.{'windows' if sys.platform == 'win32' else 'macos'}.input_engine"
+PLATFORM_INPUT = f"extra.core.platform.{'windows' if sys.platform == 'win32' else ('linux' if sys.platform.startswith('linux') else 'macos')}.input_engine"
 
 
 class TestTieredVerificationBenchmarks(unittest.TestCase):

@@ -120,8 +120,21 @@ class TaskMemoryRecorder:
             conn = get_memory_connection(custom_db_path)
             duration_ms = (time.time() - self.start_time) * 1000.0
 
-            # Compute semantic embedding on full intent + outcome
-            text_to_embed = f"{self.task_name}: {self.goal}\nSummary: {summary}"
+            # Compute semantic embedding on full intent + outcome (prevent hollow goals)
+            clean_goal = str(self.goal or "").strip()
+            if not clean_goal:
+                clean_goal = str(self.task_name or "").strip()
+            if not clean_goal and summary:
+                clean_goal = str(summary).strip()
+            if not clean_goal:
+                app_names = list(self.apps.keys())
+                if app_names:
+                    clean_goal = f"Automated workflow in {', '.join(app_names)}"
+                else:
+                    clean_goal = "Autonomous desktop session"
+
+            clean_summary = str(summary or clean_goal).strip()
+            text_to_embed = f"{self.task_name or 'Task'}: {clean_goal}\nSummary: {clean_summary}"
             embedding_vec = get_embedding(text_to_embed)
 
             # 1. Insert Task Node
@@ -140,8 +153,8 @@ class TaskMemoryRecorder:
                 """,
                 {
                     "id": self.task_id,
-                    "goal": self.goal,
-                    "summary": summary,
+                    "goal": clean_goal,
+                    "summary": clean_summary,
                     "timestamp": self.start_time,
                     "duration_ms": duration_ms,
                     "total_steps": len(self.steps),
@@ -283,6 +296,10 @@ class TaskMemoryRecorder:
 
             # 7. Insert and link SoulDecisions (cap to last 50 decisions to keep graph compact)
             for idx, dec in enumerate(self.soul_decisions[-50:]):
+                clean_cond = str(dec.get("condition") or "").strip()
+                if not clean_cond or len(clean_cond) < 3:
+                    continue  # Skip hollow conditions to prevent false memory hits
+
                 dec_id = f"{self.task_id}_dec{idx}"
                 try:
                     conn.execute(
@@ -300,7 +317,7 @@ class TaskMemoryRecorder:
                         {
                             "id": dec_id,
                             "decision_type": dec["decision_type"],
-                            "condition": dec["condition"],
+                            "condition": clean_cond,
                             "result": str(dec["result"]),
                             "confidence": float(dec["confidence"]),
                             "latency_ms": float(dec["latency_ms"]),
@@ -496,5 +513,51 @@ def record_action_soul_decision(
             )
         except Exception as ex:
             logger.debug("Could not record soul decision: %s", ex)
+
+
+def record_app_session(
+    service_name: str,
+    browser: str = "chrome",
+    profile_name: str = "Default",
+    profile_path: str = "",
+    last_verified: Optional[int] = None,
+    custom_db_path: Optional[Any] = None,
+) -> bool:
+    """
+    Persists an active environmental browser session/profile into KùzuDB.
+    Eliminates multi-turn account and profile hunts.
+    """
+    clean_service = service_name.strip().lower()
+    verified_ts = last_verified if last_verified is not None else int(time.time() * 1000)
+
+    # Invalidate in-memory cache
+    try:
+        from extra.core.memory.recall import clear_app_session_cache
+        clear_app_session_cache()
+    except Exception:
+        pass
+
+    try:
+        conn = get_memory_connection(custom_db_path)
+        conn.execute(
+            """
+            MERGE (s:AppSession {service_name: $service_name})
+            ON MATCH SET s.browser = $browser, s.profile_name = $profile_name, s.profile_path = $profile_path, s.last_verified = $last_verified
+            ON CREATE SET s.browser = $browser, s.profile_name = $profile_name, s.profile_path = $profile_path, s.last_verified = $last_verified
+            """,
+            {
+                "service_name": clean_service,
+                "browser": browser.strip().lower(),
+                "profile_name": profile_name.strip(),
+                "profile_path": str(profile_path).strip(),
+                "last_verified": verified_ts,
+            },
+        )
+        logger.info("Persisted AppSession '%s' (Browser: %s, Profile: %s) to KùzuDB.", clean_service, browser, profile_name)
+        return True
+    except Exception as ex:
+        logger.debug("Could not persist app session to KùzuDB: %s", ex)
+        return False
+
 
 

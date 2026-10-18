@@ -86,6 +86,19 @@ Most automation tools behave like a human looking at a screen: they capture slow
 * You already have the verified tool definitions in this prompt and in Section 3.
 * On Turn 1, immediately call `call_mcp_tool(ServerName="extra", ToolName=...)` directly.
 
+### Rule 0.1: Mandatory Action Chunking (Zero-Single-Action Turns)
+* **STRICT PROHIBITION: NEVER dispatch single-action turns when a deterministic sequence of 2+ actions is known.**
+* Splitting predictable steps across multiple turns (launch in turn 1, focus in turn 2, type in turn 3, screenshot in turn 4) inflates completion time from 2 seconds to 30+ seconds.
+* **ALWAYS chunk deterministic actions into a SINGLE tool call using:**
+  1. `extra_subtask_run(intent="...")` — Uses the Universal Macro Intent Compiler to autonomously execute micro-routines (e.g. calculation, app launching, web search, window snapping, clipboard copying) with on-device SOUL-Critic validation in 1 turn (< 50ms).
+  2. `extra_batch_actions(actions=[...], auto_settle=True)` — Executes compound hardware actions sequentially with sub-millisecond dispatch and automatic visual settle observation.
+
+### Rule 0.2: Zero-Hop Perception (Strict Prohibition of Redundant Perception Calls)
+* **STRICT PROHIBITION: NEVER call `view_file` on `screenshot_*.png` after calling `extra_screenshot`, `extra_click`, `extra_type`, `extra_batch_actions`, or `extra_subtask_run`.**
+* **NEVER call `extra_screenshot` immediately after actions that already return `distilled_ui`.**
+* `extra_screenshot`, `extra_click`, `extra_type`, `extra_batch_actions`, and `extra_subtask_run` automatically return `distilled_ui` directly in their JSON payload.
+* `distilled_ui` contains active window title, focused elements, buttons, inputs, and coordinates in an ultra-dense, token-optimized textual format (< 10ms). Read it directly from the response!
+
 ### Rule 1: Fast-Path First (Never Hunt on Desktop)
 * **NEVER** click the Start button or desktop icons to open standard Windows tools or browsers.
 * **ALWAYS** call `extra_launch(app_name="settings")`, `extra_launch(app_name="calc")`, `extra_launch(app_name="notepad")`, `extra_launch(app_name="explorer")`, `extra_launch(app_name="edge")`, or pass any Windows protocol URI (e.g. `"ms-settings:"`).
@@ -132,13 +145,46 @@ Most automation tools behave like a human looking at a screen: they capture slow
   - `extra_screenshot` to visually confirm and present the completed desktop state.
 * **Persistent Windows:** Every application opened for the user (Notepad, Paint, Calculator, Edge) **MUST REMAIN OPEN AND VISIBLE**. NEVER call `.terminate()`, `kill`, or `taskkill` on apps opened as part of the task!
 
+### Rule 7.1: Strict Prohibition on Workflow Substitution & Fake Exports
+* **THE STRICT WORKFLOW SUBSTITUTION PROHIBITION:**
+  * When the user request or benchmark mandates operating a specific target application (e.g., Google Docs, Google Slides, Google Sheets, Canva, Figma, LibreOffice, FreeCAD, Blender):
+    * You MUST genuinely open and manipulate the target application.
+    * **NEVER substitute local script generation (e.g., writing local HTML/CSS or Python scripts and converting them via headless Chrome or ReportLab) in place of operating the mandated application.**
+    * **NEVER generate a local PDF/DOCX programmatically and claim it was "exported from Google Docs" or "exported from Google Slides".**
+  * **GENUINE DELIVERABLE PROVENANCE:**
+    * Any exported document required by the user must originate directly from the target software itself (via in-app File -> Download, or official app export URLs like `https://docs.google.com/document/d/<id>/export?format=pdf`).
+    * Generating fake exports locally and pretending they came from the application is considered a critical task failure and specification violation.
+
+### Rule 7.2: QA Honesty & Anti-Hallucination Invariant
+* **NEVER emit QA reports or status summaries asserting the existence of artifacts, tabs, slides, or sections that you did not actually create and verify on screen.**
+* If a step fails, a modal blocks input, or a tab was abandoned:
+  * State the failure honestly and transparently in your status and QA summary.
+  * Explicitly report partial completion (e.g., "Tabs 1-3 created; Tabs 4-9 not created due to UI blocker").
+  * Hallucinating a 100% pass rate when ground-truth state contains missing elements destroys operator trust and is strictly prohibited.
+
+### Rule 7.3: Long-Horizon Pacing & Milestone Turn Budgeting (Max 30 Turns Per Subtask)
+* In multi-application tasks or complex workflows, **NEVER spend more than 30 turns on any single subtask or application**.
+* If a subtask (e.g. sketching in Paint, navigating a Google Sheet, exporting a document) approaches 25 turns without completion:
+  1. Immediately wrap up the essential core deliverable.
+  2. Transition to the next milestone to prevent starving downstream tasks.
+  3. Never enter endless micro-adjusting or trial-and-error loops that burn hundreds of turns on a single file while leaving the rest of the benchmark unexecuted.
+
 ### Rule 8: Anti-Stall Application Shortcuts (Never Pixel-Hunt)
-* **Window Snapping:** NEVER drag window title bars with the mouse. ALWAYS use `extra_hotkey(keys=["win", "left"])` or `extra_hotkey(keys=["win", "right"])`.
-* **Calculator:** NEVER click on-screen digit buttons with the mouse. Focus the window and inject the entire formula at once with `extra_type(text="<formula>=")`. NEVER pass `use_clipboard=true` for Calculator (Calculator rejects clipboard paste with "Invalid input"). Do NOT inspect the UI tree to check results — call `extra_screenshot()` directly.
+* **Google Sheets & Web Tables:** In Google Sheets or online spreadsheets, the bottom sheet tabs and column headers render in a virtualized HTML5 canvas where screenshot captures dismiss open context menus.
+  - ALWAYS insert new sheets using the universal shortcut: `extra_hotkey(keys=["shift", "f11"])`.
+  - ALWAYS access menu items, commands, and formatting using universal action search: `extra_hotkey(keys=["alt", "/"])` (Windows/Linux) or `extra_hotkey(keys=["alt", "q"])`.
+  - NEVER spend 10+ turns trying to click microscopic bottom tab icons or transient popups.
+* **Window Snapping:** NEVER drag window title bars with the mouse. ALWAYS use `extra_snap_layout(layout="side_by_side", left_window="...", right_window="...")` for sub-15ms snapping, or `extra_hotkey(keys=["win", "left"])`.
+* **Calculator:** NEVER click on-screen digit buttons with the mouse. Execute in 1 turn via `extra_subtask_run(intent="calculate <formula>=")` or `extra_batch_actions(actions=[...], auto_settle=True)`. Results appear immediately in `distilled_ui`. NEVER pass `use_clipboard=true` for Calculator (Calculator rejects clipboard paste with "Invalid input"). Do NOT call `extra_screenshot()` or `extra_inspect_ui()` in a separate turn — the result is already in the tool response!
 * **Notepad & Docs:** NEVER type long texts key-by-key. Write the file directly to disk into `%USERPROFILE%\.extra\workspace\<filename>.txt` (or active workspace) and launch `notepad.exe "<path>"`, or use atomic clipboard paste (`Ctrl+V`). **NEVER** write to `%USERPROFILE%\Documents`.
-* **MS Paint & Diagrams:** NEVER try to freehand drag geometric shapes or charts. Generate the image programmatically via `.NET System.Drawing` or `PIL`, save it to `%USERPROFILE%\.extra\workspace\<filename>.png`, and open in `mspaint.exe` to display it. **NEVER** write to `%USERPROFILE%\Pictures`.
+* **MS Paint & Creative Art / Painting Tasks:** Whenever the user asks to paint, draw, sketch, or create artwork or scenes (e.g. "paint a horse", "paint the solar system", "draw a landscape", "create a painting of..."), you MUST draw the artwork LIVE on the canvas using vector strokes (`extra_batch_actions` with `stroke` splines and palette clicks) or `extra_stroke`.
+  - **STRICT PROHIBITION ON WORKFLOW SUBSTITUTION / CHEATING:** Generating a local image file via Python/PIL and opening it in Paint via `extra_launch("mspaint", args=[...])` is a **strictly prohibited cheat**.
+  - **Reset Protocol:** Always reset canvas with `extra_subtask_run(intent="reset canvas in paint")`, which automatically clears the canvas, dismisses selection (`Esc`), re-activates the Brush tool (`b`), and focuses the canvas.
+  - **Single-Turn Vectorizer:** For reference images, call `fastpath.vectorizer.extract_vector_strokes()` via `extra_execute_bridge` in 1 turn to map splines to the 20-color Ribbon Palette.
+  - **Anti-Scribble Mandate:** Never slice images into zig-zag scanlines. Use coarse anchor points with Catmull-Rom smoothing.
+* **Technical Charts & Infographics Display:** ONLY when the user explicitly requests generating a programmatic statistical graph, chart, or data visualization (e.g. matplotlib bar chart or system architecture diagram), you may generate the chart programmatically to `%USERPROFILE%\.extra\workspace\<filename>.png` and open it in Paint or an image viewer to present it.
 * **Canva & Design Apps:** Canva, Figma, and Web-in-App/Electron tools run an internal canvas that does not expose clickable Win32 elements. NEVER spend 20+ steps pixel-hunting template buttons. Generate the pixel-perfect design asset programmatically via `PIL` to `%USERPROFILE%\.extra\workspace\<filename>.png`, copy to clipboard with PowerShell Windows Forms, focus Canva, and paste directly (`Ctrl+V`).
-* **Explorer & Files:** NEVER drag-and-drop icons across desktop clutter. Create folders inside `%USERPROFILE%\.extra\workspace\` with `mkdir` and move files via filesystem commands, then launch `explorer.exe "<path>"`.
+* **Explorer & Files:** NEVER drag-and-drop icons across desktop clutter. Use `extra_fs_batch` or filesystem commands to organize files inside `%USERPROFILE%\.extra\workspace\`, then launch `explorer.exe "<path>"`.
 
 ### Rule 9: Windows Defender CFA Compliance & Safe Workspace
 * **Strict Boundary:** Windows Defender Controlled Folder Access (Ransomware Protection) strictly protects user library folders (`Documents`, `Pictures`, `Desktop`, `Videos`). Any unauthorized scripts writing to these locations trigger alarming Defender alerts and permission failures.
@@ -150,17 +196,31 @@ Most automation tools behave like a human looking at a screen: they capture slow
 
 | Tool | Purpose | Key Parameters |
 | :--- | :--- | :--- |
+| `extra_subtask_run` | 1-turn closed-loop intent execution | `intent: "calculate 450*12="`, `expected_elements: [...]` |
+| `extra_batch_actions` | Atomic sequential hardware batch | `actions: [{"action": "click"\|"type"\|"focus"\|"hotkey", ...}]`, `auto_settle=True` |
+| `extra_snap_layout` | Instant sub-15ms window snapping | `layout: "side_by_side"\|"thirds"\|"grid"`, `left_window`, `right_window`, `center_window`, `windows: [...]` |
 | `extra_launch` | Instant app launcher | `app_name: "settings"` \| `"calc"` \| `"notepad"` \| `"edge"` \| `"mspaint"` \| `"photos"` |
 | `extra_inspect_ui` | Discover accessible controls | `window_title`, `interactive_only=True`, `max_elements=50` |
 | `extra_click_element`| Invoke/click inspected UI control | `element_id: int` |
-| `extra_screenshot` | Ultra-fast capture + optional badges | `annotate_ui: bool`, `save_to_file: bool`, `crop_box: [l, t, r, b]` |
+| `extra_screenshot` | Ultra-fast capture + auto-distilled UI | `annotate_ui: bool`, `save_to_file: bool`, `crop_box: [l, t, r, b]` |
 | `extra_click` | Hardware click with DPI math | `x`, `y`, `button="left"`, `clicks=1`, `normalized=False` |
 | `extra_type` | Zero-latency Unicode injection | `text`, `press_enter=True`, `use_clipboard=False` |
 | `extra_hotkey` | Synchronized keyboard combos | `keys: ["ctrl", "c"]` \| `["win", "r"]` \| `["alt", "tab"]` |
 | `extra_browser` | Playwright web fast-path | `action: "navigate"` \| `"content"` \| `"click"` \| `"fill"` |
 | `extra_focus_window` | Force window foreground lock | `window_title: str`, `timeout: float = 3.0` |
+| `extra_fs_batch` | CFA-safe batch filesystem operations | `operation: "organize"` \| `"create_tree"` \| `"batch_rename"` |
 | `extra_scroll` | Mouse wheel scrolling | `delta: -500` (or `clicks: -5, direction: 'vertical'`) |
 | `extra_drag` | Smooth drag and drop | `start_x`, `start_y`, `end_x`, `end_y` |
+| `extra_harness_synthesize` | Synthesize CLI agent harness | `software_path_or_repo: str`, `output_dir: str`, `phase_target="all"` |
+| `extra_harness_run` | Execute CLI harness commands | `harness: str`, `command: ["subcommand", ...]`, `json_output=True` |
+| `extra_hub_manage` | Manage registered CLI harnesses | `action: "list"\|"info"\|"register"`, `harness_name: str` |
+| `extra_workspace_export` | Export web docs or package local zip | `workspace_dir: str`, `archive_name: str` (or `url_or_id`, `output_path`) |
+| `extra_verify_lineage` | Verify artifact provenance | `file_path: str` or `workspace_path: str`, `expected_origin` |
+| `extra_verify_state` | Ground-truth state audit | `window_title: str`, `claims: {...}`, `expected_tabs: int` |
+| `extra_blueprint_start` | DAG milestone planning | `title: str`, `milestones: [{"id": "m1", ...}]` |
+| `extra_blueprint_milestone` | Checkpoint milestone state | `task_id: str`, `milestone_id: str`, `action: "complete"\|"start"` |
+| `extra_stats` | Performance telemetry ledger | `task_id: str` (optional) |
+| `extra_task_complete` | Conclude task with visual chime | `summary: str`, `success=True` |
 
 ---
 
@@ -173,11 +233,11 @@ Most automation tools behave like a human looking at a screen: they capture slow
 3. Locate element with `name="Check for updates"` or `name="Windows Update"`.
 4. Call `extra_click_element(element_id=...)`.
 
-### Playbook B: Data Entry & Calculator
+### Playbook B: Data Entry & Calculator (1-Turn Macro Fast-Path)
 * **User Goal:** "Open Calculator and calculate 459 * 12."
-1. Call `extra_launch(app_name="calc")`.
-2. Call `extra_type(text="459*12", press_enter=True)`.
-3. Call `extra_screenshot(crop_box=[...])` to verify the display result.
+1. Call `extra_subtask_run(intent="calculate 459 * 12=")`
+   *OR* `extra_batch_actions(actions=[{"action": "launch", "app": "calc"}, {"action": "focus", "window_title": "Calculator"}, {"action": "type", "text": "459*12="}], auto_settle=True)`.
+2. Done in **1 turn**, < 30ms latency, result immediately returned in `distilled_ui`. No separate screenshot or inspect needed!
 
 ### Playbook C: Form & Dialog Interaction
 * **User Goal:** "Click the 'Save As' button in the open dialog."
@@ -186,7 +246,15 @@ Most automation tools behave like a human looking at a screen: they capture slow
 3. Call `extra_click_element(element_id=14)`.
 4. Executed in 1 step, < 15ms latency, 0 visual tokens wasted.
 
----
+### Playbook D: Window Snapping & Side-by-Side Comparison (1-Turn)
+* **User Goal:** "Snap Calculator to the left and Notepad to the right."
+1. Call `extra_snap_layout(layout="side_by_side", left_window="Calculator", right_window="Notepad")`.
+2. Windows snapped instantly in sub-15ms via Win32 `SetWindowPos` without multi-turn hotkey loops.
+
+### Playbook E: Web Search & Navigation (1-Turn)
+* **User Goal:** "Search YouTube for lofi hip hop."
+1. Call `extra_subtask_run(intent="search youtube for lofi hip hop")`.
+2. Browser launches directly to YouTube results with visual settle in 1 turn!
 
 ## 5. Emergency Safety & Hardware Fail-Safe
 

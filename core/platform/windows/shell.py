@@ -16,6 +16,11 @@ import subprocess
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+
 from extra.core.platform.base import AbstractShellLauncher, LaunchResult
 from extra.core.platform.windows.focus import (
     find_window_by_title,
@@ -362,10 +367,12 @@ def launch_app(
     wait_for_window: bool = True,
     timeout: float = 3.0,
     profile: Optional[str] = None,
+    maximize: bool = False,
 ) -> LaunchResult:
     """
     Deterministically launches an application or system tool on Windows.
     Bypasses desktop clicking and activates the resulting window.
+    Supports instant programmatic maximization bypassing Windows 11 Snap Assist.
     """
     ensure_dpi_aware()
     attach_input_desktop()
@@ -382,6 +389,28 @@ def launch_app(
             message=f"Could not resolve application '{app_name}'.",
         )
 
+    target_exe = os.path.basename(target).lower() if target else ""
+
+    # Universal Headless Singleton Zombie Clearance:
+    # If processes exist for target executable but have ZERO visible windows,
+    # terminate them so ShellExecute/COM can spawn a fresh interactive GUI window.
+    # Console-hosted executables (powershell, cmd, pwsh) run inside WindowsTerminal in Win11 and must not be killed.
+    CONSOLE_HOSTED_EXES = {"powershell.exe", "cmd.exe", "pwsh.exe", "wsl.exe", "conhost.exe"}
+    if wait_for_window and target_exe and target_exe not in CONSOLE_HOSTED_EXES and psutil is not None:
+        try:
+            visible_windows = list_windows(visible_only=True)
+            visible_procs = {w.process_name.lower() for w in visible_windows if w.process_name}
+            if target_exe not in visible_procs:
+                for p in psutil.process_iter(["name", "pid"]):
+                    try:
+                        p_name = p.info.get("name")
+                        if p_name and p_name.lower() == target_exe:
+                            p.terminate()
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+        except Exception:
+            pass
+
     # Record existing windows before launch
     existing_hwnds = {w.hwnd for w in list_windows(visible_only=False)}
 
@@ -390,6 +419,7 @@ def launch_app(
         target = args[0]
         params = None
         clean_args = []
+        is_chromium = False
     else:
         clean_args = list(args) if args else []
         if profile:
@@ -397,40 +427,82 @@ def launch_app(
             if not any(a.startswith("--profile-directory") for a in clean_args):
                 clean_args.append(profile_flag)
 
-        # Universal Chromium browser crash recovery suppression
-        # Detects any Chromium-based browser via process type, binary name, or directory indicators
+        # Universal Chromium & Electron Application Detection
+        # Detects Chromium browsers and Electron-based desktop applications (Canva, Slack, VS Code, Discord, Obsidian, Spotify, Teams)
+        # via binary signatures, process metadata, or standard embedded runtime packages.
         target_dir = os.path.dirname(target) if target else ""
         is_chromium = (
             (clean_app in APP_REGISTRY and APP_REGISTRY[clean_app].get("type") == "browser")
             or any(b in target.lower() for b in ("edge", "chrome", "brave", "opera", "vivaldi", "arc"))
             or (target_dir and os.path.exists(os.path.join(target_dir, "chrome_elf.dll")))
         )
-        if is_chromium:
-            suppress_flags = ["--hide-crash-restore-bubble", "--no-first-run"]
+        is_electron = bool(
+            target_dir and (
+                os.path.exists(os.path.join(target_dir, "LICENSE.electron.txt"))
+                or os.path.exists(os.path.join(target_dir, "resources", "app.asar"))
+                or os.path.exists(os.path.join(target_dir, "LICENSES.chromium.html"))
+                or os.path.exists(os.path.join(target_dir, "chrome_100_percent.pak"))
+            )
+        )
+        if is_chromium or is_electron:
+            suppress_flags = [
+                "--start-maximized",
+                "--hide-crash-restore-bubble",
+                "--no-first-run",
+                "--disable-features=msStartupBoost",
+                "--disable-background-mode",
+                "--force-renderer-accessibility",
+            ]
             for flag in reversed(suppress_flags):
                 if flag not in clean_args:
                     clean_args.insert(0, flag)
 
         clean_args, params = _format_windows_cmdline_args(clean_args)
 
-    res = shell32.ShellExecuteW(None, "open", target, params, target_dir if target_dir else None, SW_SHOWNORMAL)
+    should_maximize = maximize or (
+        (is_chromium or is_electron) and not any(f in (clean_args or []) for f in ("--window-size", "--window-position"))
+    )
 
-    # ShellExecute returns > 32 on success
-    if res <= 32:
-        # Fallback to subprocess.Popen if ShellExecute returned error code
+    # Check if isolated child session is active
+    mgr = None
+    try:
+        from extra.core.platform.windows.child_session import get_child_session_manager, SessionTier
+        mgr = get_child_session_manager()
+    except Exception:
+        pass
+
+    if mgr and mgr.is_active() and mgr.get_active_tier() == SessionTier.TIER_2_VIRTUAL_DESKTOP:
         try:
             cmd = [target] + clean_args
-            proc = subprocess.Popen(cmd, shell=False)
+            proc = mgr.launch_app(cmd, cwd=target_dir if target_dir else None)
             launched_pid = proc.pid
+            res = 42  # Synthetic success code > 32
         except Exception as e:
             return LaunchResult(
                 success=False,
                 app_name=app_name,
                 target_executed=target,
-                message=f"Failed to launch '{target}': {e}",
+                message=f"Failed to launch '{target}' in isolated desktop: {e}",
             )
     else:
-        launched_pid = None
+        res = shell32.ShellExecuteW(None, "open", target, params, target_dir if target_dir else None, SW_SHOWNORMAL)
+
+        # ShellExecute returns > 32 on success
+        if res <= 32:
+            # Fallback to subprocess.Popen if ShellExecute returned error code
+            try:
+                cmd = [target] + clean_args
+                proc = subprocess.Popen(cmd, shell=False)
+                launched_pid = proc.pid
+            except Exception as e:
+                return LaunchResult(
+                    success=False,
+                    app_name=app_name,
+                    target_executed=target,
+                    message=f"Failed to launch '{target}': {e}",
+                )
+        else:
+            launched_pid = None
 
     matched_hwnd: Optional[int] = None
     matched_title: Optional[str] = None
@@ -451,8 +523,11 @@ def launch_app(
                     matched_title = win.title
                     matched_pid = win.process_id
                     break
-                # Or matches process name
-                if expected_proc and win.process_name.lower() == expected_proc.lower():
+                # Or matches process name (including WindowsTerminal hosting console apps in Win11)
+                if (
+                    (expected_proc and win.process_name.lower() == expected_proc.lower())
+                    or (clean_app in ("powershell", "cmd", "terminal") and "terminal" in win.process_name.lower())
+                ):
                     matched_hwnd = win.hwnd
                     matched_title = win.title
                     matched_pid = win.process_id
@@ -461,19 +536,26 @@ def launch_app(
             if matched_hwnd:
                 # Force activate the new window
                 force_activate_window(matched_hwnd)
+                if should_maximize:
+                    try:
+                        from extra.core.platform.windows.focus import snap_window
+                        snap_window(matched_hwnd, "maximize")
+                    except Exception:
+                        pass
                 break
 
     duration_ms = (time.perf_counter() - t_start) * 1000.0
+    is_ok = (matched_hwnd is not None) if wait_for_window else True
 
     return LaunchResult(
-        success=True,
+        success=is_ok,
         app_name=app_name,
         target_executed=target,
         hwnd=matched_hwnd,
         window_title=matched_title,
         pid=matched_pid,
         duration_ms=round(duration_ms, 2),
-        message=f"Successfully launched '{app_name}' ({target}) in {duration_ms:.1f} ms.",
+        message=f"Successfully launched '{app_name}' ({target}) in {duration_ms:.1f} ms." if is_ok else f"Launched '{app_name}' ({target}) but no window appeared within {timeout}s.",
     )
 
 
@@ -495,6 +577,7 @@ class WindowsShellLauncher(AbstractShellLauncher):
         wait_for_window: bool = True,
         timeout: float = 5.0,
         profile: Optional[str] = None,
+        maximize: bool = False,
     ) -> LaunchResult:
         return launch_app(
             app_name=app_name,
@@ -502,6 +585,7 @@ class WindowsShellLauncher(AbstractShellLauncher):
             wait_for_window=wait_for_window,
             timeout=timeout,
             profile=profile,
+            maximize=maximize,
         )
 
     def open_uri(self, uri: str) -> bool:

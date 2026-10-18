@@ -153,7 +153,11 @@ def analyze_task_trajectory(
     if wall_clock_duration_ms is not None and wall_clock_duration_ms > sum_tool_duration_ms:
         analysis.total_duration_ms = wall_clock_duration_ms
         unrecorded_delay_ms = wall_clock_duration_ms - sum_tool_duration_ms
-        if unrecorded_delay_ms > 60_000 and (unrecorded_delay_ms > sum_tool_duration_ms * 3.0 or wall_clock_duration_ms > 120_000):
+        # In multi-step LLM tasks, model reasoning and network roundtrips occur between tool calls (~10-30s per turn).
+        # Only flag if the unrecorded delay significantly exceeds the expected turn budget (>35s per step and >120s total).
+        steps_baseline = max(1, analysis.total_steps)
+        expected_llm_budget_ms = steps_baseline * 35_000
+        if unrecorded_delay_ms > expected_llm_budget_ms and unrecorded_delay_ms > 120_000:
             analysis.friction_detected = True
             delay_sec = unrecorded_delay_ms / 1000.0
             analysis.friction_reasons.append(

@@ -120,6 +120,17 @@ class AudioIndicator:
                     sample = int(mix * 28000)
                     frames.append(struct.pack("<h", max(-32767, min(32767, sample))))
 
+            elif profile in ("alert", "error"):
+                # Discordant acoustic warning chord: dual glass strike
+                duration = 0.35
+                n_samples = int(duration * sample_rate)
+                for i in range(n_samples):
+                    t = i / sample_rate
+                    env = min(1.0, t / 0.002) * math.exp(-6.0 * t)
+                    v = 0.4 * math.sin(2 * math.pi * 440.0 * t) + 0.4 * math.sin(2 * math.pi * 466.16 * t)
+                    sample = max(-0.95, min(0.95, env * v))
+                    frames.append(struct.pack("<h", int(sample * 31000.0)))
+
             elif profile == "attention":
                 # Warm descending attention chord: G5 (783.99 Hz) -> Eb5 (622.25 Hz)
                 duration = 0.35
@@ -223,6 +234,10 @@ class IndicatorWorkerThread(threading.Thread):
         self.shockwave_active = False
         self.shockwave_start = 0.0
 
+        # Real-time cursor position tracking
+        self.last_cursor_x = -1
+        self.last_cursor_y = -1
+
     def _setup_windows(self) -> None:
         ensure_dpi_aware()
         prim = get_primary_monitor()
@@ -311,12 +326,17 @@ class IndicatorWorkerThread(threading.Thread):
         )
 
     def _update_monitor_bounds(self, monitor_index: int) -> None:
-        if monitor_index == self.current_monitor_idx and self.mon_w > 0:
-            return
-
         monitors = get_monitors_info()
         for m in monitors:
             if m.index == monitor_index:
+                if (
+                    self.current_monitor_idx == monitor_index
+                    and self.mon_left == m.left
+                    and self.mon_top == m.top
+                    and self.mon_w == m.width
+                    and self.mon_h == m.height
+                ):
+                    return
                 self.current_monitor_idx = monitor_index
                 self.mon_left = m.left
                 self.mon_top = m.top
@@ -342,7 +362,7 @@ class IndicatorWorkerThread(threading.Thread):
         hdc = win32gui.GetDC(self.hwnd_edge)
         memdc = win32gui.CreateCompatibleDC(hdc)
         bmp = win32gui.CreateCompatibleBitmap(hdc, self.mon_w, self.mon_h)
-        win32gui.SelectObject(memdc, bmp)
+        old_bmp = win32gui.SelectObject(memdc, bmp)
 
         # Clear black chroma key
         bk = win32gui.CreateSolidBrush(self.COLOR_KEY)
@@ -363,6 +383,7 @@ class IndicatorWorkerThread(threading.Thread):
 
         win32gui.BitBlt(hdc, 0, 0, self.mon_w, self.mon_h, memdc, 0, 0, win32con.SRCCOPY)
 
+        win32gui.SelectObject(memdc, old_bmp)
         win32gui.DeleteObject(bk)
         win32gui.DeleteObject(bmp)
         win32gui.DeleteDC(memdc)
@@ -382,24 +403,28 @@ class IndicatorWorkerThread(threading.Thread):
         hdc = win32gui.GetDC(self.hwnd_halo)
         memdc = win32gui.CreateCompatibleDC(hdc)
         bmp = win32gui.CreateCompatibleBitmap(hdc, self.halo_size, self.halo_size)
-        win32gui.SelectObject(memdc, bmp)
+        old_bmp = win32gui.SelectObject(memdc, bmp)
 
         # Clear background
         bk = win32gui.CreateSolidBrush(self.COLOR_KEY)
         win32gui.FillRect(memdc, (0, 0, self.halo_size, self.halo_size), bk)
 
         null_brush = win32gui.GetStockObject(win32con.NULL_BRUSH)
-        win32gui.SelectObject(memdc, null_brush)
+        old_brush = win32gui.SelectObject(memdc, null_brush)
 
         # 1. Faint outer guidance aura ring (radius 24)
         pen_aura = win32gui.CreatePen(win32con.PS_SOLID, 1, 0x4C1D95)  # Deep purple
-        win32gui.SelectObject(memdc, pen_aura)
+        old_pen = win32gui.SelectObject(memdc, pen_aura)
         win32gui.Ellipse(memdc, half - 24, half - 24, half + 24, half + 24)
+        win32gui.SelectObject(memdc, old_pen)
+        win32gui.DeleteObject(pen_aura)
 
         # 2. Inner crisp reticle ring (radius 15)
         pen_core = win32gui.CreatePen(win32con.PS_SOLID, 2, self.COLOR_RETICLE_CORE)
         win32gui.SelectObject(memdc, pen_core)
         win32gui.Ellipse(memdc, half - 15, half - 15, half + 15, half + 15)
+        win32gui.SelectObject(memdc, old_pen)
+        win32gui.DeleteObject(pen_core)
 
         # 3. Precision 4-point crosshair ticks (12, 3, 6, 9 o'clock)
         pen_ticks = win32gui.CreatePen(win32con.PS_SOLID, 1, 0xFFFFFF)
@@ -416,6 +441,8 @@ class IndicatorWorkerThread(threading.Thread):
         # Right tick
         win32gui.MoveToEx(memdc, half + 17, half)
         win32gui.LineTo(memdc, half + 26, half)
+        win32gui.SelectObject(memdc, old_pen)
+        win32gui.DeleteObject(pen_ticks)
 
         # 4. Animated expanding shockwave on click
         if shockwave_radius:
@@ -429,12 +456,15 @@ class IndicatorWorkerThread(threading.Thread):
                 half + shockwave_radius,
                 half + shockwave_radius,
             )
+            win32gui.SelectObject(memdc, old_pen)
+            win32gui.DeleteObject(pen_shock)
+
             # Secondary ambient shockwave ring
             outer_shock = min(half - 2, shockwave_radius + 6)
             pen_outer_shock = win32gui.CreatePen(win32con.PS_SOLID, 1, self.COLOR_RETICLE_ACCENT)
             win32gui.SelectObject(memdc, pen_outer_shock)
             win32gui.Ellipse(memdc, half - outer_shock, half - outer_shock, half + outer_shock, half + outer_shock)
-            win32gui.DeleteObject(pen_shock)
+            win32gui.SelectObject(memdc, old_pen)
             win32gui.DeleteObject(pen_outer_shock)
 
         # 5. Center laser pip
@@ -444,16 +474,16 @@ class IndicatorWorkerThread(threading.Thread):
         win32gui.SelectObject(memdc, dot_brush)
         win32gui.SelectObject(memdc, dot_pen)
         win32gui.Ellipse(memdc, half - 3, half - 3, half + 3, half + 3)
+        win32gui.SelectObject(memdc, old_pen)
+        win32gui.SelectObject(memdc, old_brush)
+        win32gui.DeleteObject(dot_pen)
+        win32gui.DeleteObject(dot_brush)
 
         # Push to screen
         win32gui.BitBlt(hdc, 0, 0, self.halo_size, self.halo_size, memdc, 0, 0, win32con.SRCCOPY)
 
         # Cleanup handles
-        win32gui.DeleteObject(dot_pen)
-        win32gui.DeleteObject(dot_brush)
-        win32gui.DeleteObject(pen_ticks)
-        win32gui.DeleteObject(pen_core)
-        win32gui.DeleteObject(pen_aura)
+        win32gui.SelectObject(memdc, old_bmp)
         win32gui.DeleteObject(bk)
         win32gui.DeleteObject(bmp)
         win32gui.DeleteDC(memdc)
@@ -472,7 +502,12 @@ class IndicatorWorkerThread(threading.Thread):
         )
 
     def run(self) -> None:
-        self._setup_windows()
+        try:
+            self._setup_windows()
+        except Exception as ex:
+            logger.warning("IndicatorWorkerThread failed to initialize Win32 overlay windows: %s", ex)
+            self.running = False
+            return
 
         while self.running:
             # 1. Process pending queue commands
@@ -485,9 +520,19 @@ class IndicatorWorkerThread(threading.Thread):
                         self.last_action_time = time.time()
                         mon_idx = data.get("monitor_index", 0)
                         self._update_monitor_bounds(mon_idx)
+                        win32gui.SetWindowPos(
+                            self.hwnd_edge,
+                            win32con.HWND_TOPMOST,
+                            self.mon_left,
+                            self.mon_top,
+                            self.mon_w,
+                            self.mon_h,
+                            win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW,
+                        )
                         win32gui.ShowWindow(self.hwnd_edge, win32con.SW_SHOWNOACTIVATE)
                         win32gui.ShowWindow(self.hwnd_halo, win32con.SW_SHOWNOACTIVATE)
                         cur_x, cur_y = get_cursor_position()
+                        self.last_cursor_x, self.last_cursor_y = cur_x, cur_y
                         self._set_halo_pos(cur_x, cur_y)
 
                     elif cmd == "ACTION":
@@ -498,13 +543,27 @@ class IndicatorWorkerThread(threading.Thread):
                         if self.state != "ACTIVE":
                             self.state = "ACTIVE"
                             self.state_start = time.time()
+                            win32gui.SetWindowPos(
+                                self.hwnd_edge,
+                                win32con.HWND_TOPMOST,
+                                self.mon_left,
+                                self.mon_top,
+                                self.mon_w,
+                                self.mon_h,
+                                win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW,
+                            )
                             win32gui.ShowWindow(self.hwnd_edge, win32con.SW_SHOWNOACTIVATE)
                             win32gui.ShowWindow(self.hwnd_halo, win32con.SW_SHOWNOACTIVATE)
 
                         x = data.get("x")
                         y = data.get("y")
                         if x is not None and y is not None:
+                            self.last_cursor_x, self.last_cursor_y = x, y
                             self._set_halo_pos(x, y)
+                        else:
+                            cur_x, cur_y = get_cursor_position()
+                            self.last_cursor_x, self.last_cursor_y = cur_x, cur_y
+                            self._set_halo_pos(cur_x, cur_y)
 
                         action_type = data.get("action", "move")
                         if action_type == "click":
@@ -514,9 +573,26 @@ class IndicatorWorkerThread(threading.Thread):
                     elif cmd == "COMPLETE":
                         self.state = "COMPLETING"
                         self.state_start = time.time()
+                        self.current_edge_mode = ""  # Force immediate edge redraw with COMPLETE bloom
+                        mon_idx = data.get("monitor_index", self.current_monitor_idx)
+                        self._update_monitor_bounds(mon_idx)
+                        win32gui.SetWindowPos(
+                            self.hwnd_edge,
+                            win32con.HWND_TOPMOST,
+                            self.mon_left,
+                            self.mon_top,
+                            self.mon_w,
+                            self.mon_h,
+                            win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW,
+                        )
+                        win32gui.ShowWindow(self.hwnd_edge, win32con.SW_SHOWNOACTIVATE)
+                        win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
 
                     elif cmd == "STOP":
                         self.state = "IDLE"
+                        win32gui.ShowWindow(self.hwnd_edge, win32con.SW_HIDE)
+                        win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
+                        self.current_edge_mode = ""
 
                     elif cmd == "SHUTDOWN":
                         self.running = False
@@ -533,6 +609,12 @@ class IndicatorWorkerThread(threading.Thread):
                 if self.current_edge_mode != "ACTIVE":
                     self._draw_edge_bloom(self.ACTIVE_BLOOM_BANDS)
                     self.current_edge_mode = "ACTIVE"
+
+                # Real-time cursor tracking for tactical reticle:
+                cur_x, cur_y = get_cursor_position()
+                if (cur_x, cur_y) != (self.last_cursor_x, self.last_cursor_y):
+                    self.last_cursor_x, self.last_cursor_y = cur_x, cur_y
+                    self._set_halo_pos(cur_x, cur_y)
 
                 # Breathing organic pulse: oscillates between alpha 125 and 230
                 elapsed = now - self.state_start
@@ -594,6 +676,16 @@ class IndicatorWorkerThread(threading.Thread):
                     self._draw_edge_bloom(self.COMPLETE_BLOOM_BANDS)
                     self.current_edge_mode = "COMPLETE"
                     win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
+                    win32gui.ShowWindow(self.hwnd_edge, win32con.SW_SHOWNOACTIVATE)
+                    win32gui.SetWindowPos(
+                        self.hwnd_edge,
+                        win32con.HWND_TOPMOST,
+                        self.mon_left,
+                        self.mon_top,
+                        self.mon_w,
+                        self.mon_h,
+                        win32con.SWP_NOACTIVATE | win32con.SWP_SHOWWINDOW,
+                    )
 
                 if elapsed < 0.9:
                     # Flash vibrant emerald-mint aurora
@@ -617,10 +709,14 @@ class IndicatorWorkerThread(threading.Thread):
                     self.state = "IDLE"
 
             elif self.state == "IDLE":
-                win32gui.ShowWindow(self.hwnd_edge, win32con.SW_HIDE)
-                win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
+                if self.hwnd_edge and win32gui.IsWindowVisible(self.hwnd_edge):
+                    win32gui.ShowWindow(self.hwnd_edge, win32con.SW_HIDE)
+                if self.hwnd_halo and win32gui.IsWindowVisible(self.hwnd_halo):
+                    win32gui.ShowWindow(self.hwnd_halo, win32con.SW_HIDE)
                 self.current_edge_mode = ""
                 time.sleep(0.04)
+
+            time.sleep(0.02)
 
             time.sleep(0.02)
 
@@ -731,22 +827,24 @@ class IndicatorController(AbstractIndicatorController):
         self._ensure_worker()
         self.cmd_queue.put(("COMPLETE", {"summary": summary, "success": success}))
         if play_chime:
-            self.audio.play("complete" if success else "attention")
-        logger.info("Indicator: Task completed (%s)", summary or "Success")
+            self.audio.play("complete" if success else "error")
+        logger.info("Indicator: Task completed (%s)", summary or ("Success" if success else "Failure"))
 
-    def task_indicate_status(self, status: str, message: str = "") -> None:
+    def task_indicate_status(
+        self, status: str, message: str = "", play_sound: bool = False
+    ) -> None:
         """Updates ambient status indicators."""
         if not self.enabled:
             return
         self._ensure_worker()
         clean = status.lower().strip()
-        if clean in ("active", "running"):
-            self.cmd_queue.put(("ACTION", {"action": "status", "x": None, "y": None, "monitor_index": 0}))
-        elif clean in ("complete", "done", "success"):
-            self.task_complete(summary=message, success=True, play_chime=False)
-        elif clean in ("error", "failed"):
-            self.task_complete(summary=message, success=False, play_chime=True)
-        elif clean in ("idle", "stopped"):
+        if clean in ("active", "running", "busy"):
+            self.task_start(task_name=message, play_chime=play_sound)
+        elif clean in ("complete", "done", "success", "completed"):
+            self.task_complete(summary=message, success=True, play_chime=play_sound)
+        elif clean in ("error", "failed", "fail", "abort"):
+            self.task_complete(summary=message, success=False, play_chime=play_sound)
+        elif clean in ("idle", "stopped", "stop"):
             self.task_stop()
 
     def pulse(self, color: str = "cyan") -> None:

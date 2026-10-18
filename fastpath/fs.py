@@ -13,6 +13,54 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 
+def _is_safe_path(target: Union[str, Path]) -> bool:
+    """
+    Verifies that a target path does not cross into protected OS/system roots,
+    bare drive roots, or critical system binaries.
+    """
+    try:
+        resolved = Path(target).resolve()
+    except Exception:
+        return False
+
+    # Block bare drive roots (e.g. C:\, D:\, /)
+    if resolved == resolved.parent:
+        return False
+
+    # Check Windows protected system roots
+    if os.name == "nt":
+        windir = os.environ.get("SystemRoot", r"C:\Windows")
+        progfiles = os.environ.get("ProgramFiles", r"C:\Program Files")
+        progfiles_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        for sroot_str in (windir, progfiles, progfiles_x86):
+            if not sroot_str:
+                continue
+            try:
+                sroot = Path(sroot_str).resolve()
+                if resolved == sroot or sroot in resolved.parents:
+                    return False
+            except Exception:
+                pass
+    else:
+        # Check POSIX protected system roots
+        posix_roots = [
+            Path("/"), Path("/bin"), Path("/sbin"), Path("/usr"),
+            Path("/etc"), Path("/lib"), Path("/lib64"), Path("/var"),
+            Path("/sys"), Path("/proc"), Path("/dev"), Path("/boot"),
+        ]
+        for proot in posix_roots:
+            try:
+                r_proot = proot.resolve()
+                if resolved == r_proot:
+                    return False
+                if r_proot in resolved.parents and r_proot not in (Path("/tmp"), Path("/home"), Path("/Users")):
+                    return False
+            except Exception:
+                pass
+
+    return True
+
+
 def _resolve_safe_dir(dir_path: Optional[str]) -> Path:
     """Resolves and validates target directory against protected boundaries."""
     if not dir_path:
@@ -20,6 +68,10 @@ def _resolve_safe_dir(dir_path: Optional[str]) -> Path:
     else:
         expanded = os.path.expandvars(os.path.expanduser(dir_path))
         base = Path(expanded).resolve()
+
+    if not _is_safe_path(base):
+        raise PermissionError(f"Target directory '{base}' is a protected system path.")
+
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -43,7 +95,15 @@ def execute_fs_batch(
     """
     t0 = time.perf_counter()
     op = operation.lower().strip()
-    target_dir = _resolve_safe_dir(base_dir)
+    try:
+        target_dir = _resolve_safe_dir(base_dir)
+    except PermissionError as pe:
+        return {
+            "success": False,
+            "operation": op,
+            "error": str(pe),
+            "duration_ms": (time.perf_counter() - t0) * 1000.0,
+        }
 
     if op in ("organize", "categorize", "sort"):
         # Default smart category mapping if none provided
@@ -108,27 +168,48 @@ def execute_fs_batch(
 
     elif op in ("create_tree", "create_files", "write_tree"):
         created = []
+        target_resolved = target_dir.resolve()
         for item in (files or []):
             rel_path = item.get("path") or item.get("name")
             if not rel_path:
                 continue
-            full_path = target_dir / rel_path
+            try:
+                full_path = (target_dir / rel_path).resolve()
+            except Exception as e:
+                created.append({"path": str(rel_path), "success": False, "error": f"Invalid path: {e}"})
+                continue
+
+            # Path Traversal and Protected System Root Gating
+            try:
+                is_contained = full_path.is_relative_to(target_resolved)
+            except AttributeError:
+                # Python < 3.9 fallback
+                is_contained = str(full_path).startswith(str(target_resolved))
+
+            if not is_contained or not _is_safe_path(full_path):
+                created.append({
+                    "path": str(full_path),
+                    "success": False,
+                    "error": "Path traversal or protected system path blocked"
+                })
+                continue
+
             is_dir = bool(item.get("is_dir", False))
             if is_dir:
                 full_path.mkdir(parents=True, exist_ok=True)
-                created.append({"path": str(full_path), "is_dir": True})
+                created.append({"path": str(full_path), "is_dir": True, "success": True})
             else:
                 full_path.parent.mkdir(parents=True, exist_ok=True)
                 content = item.get("content", "")
                 full_path.write_text(content, encoding="utf-8")
-                created.append({"path": str(full_path), "is_dir": False, "size_bytes": len(content.encode("utf-8"))})
+                created.append({"path": str(full_path), "is_dir": False, "size_bytes": len(content.encode("utf-8")), "success": True})
 
         dur_ms = (time.perf_counter() - t0) * 1000.0
         return {
             "success": True,
             "operation": "create_tree",
             "base_dir": str(target_dir),
-            "created_count": len(created),
+            "created_count": len([c for c in created if c.get("success", True)]),
             "items": created,
             "duration_ms": round(dur_ms, 2),
         }
@@ -142,6 +223,10 @@ def execute_fs_batch(
                 continue
             src_path = Path(src_str) if Path(src_str).is_absolute() else target_dir / src_str
             dst_path = Path(dst_str) if Path(dst_str).is_absolute() else target_dir / dst_str
+
+            if not _is_safe_path(src_path) or not _is_safe_path(dst_path):
+                renamed.append({"from": str(src_path), "to": str(dst_path), "success": False, "error": "Protected system path blocked"})
+                continue
 
             if src_path.exists():
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
@@ -163,6 +248,9 @@ def execute_fs_batch(
         deleted = []
         for d in (deletes or []):
             p = Path(d) if Path(d).is_absolute() else target_dir / d
+            if not _is_safe_path(p):
+                deleted.append({"path": str(p), "deleted": False, "error": "Protected system path blocked"})
+                continue
             if p.is_file():
                 p.unlink(missing_ok=True)
                 deleted.append({"path": str(p), "deleted": True})

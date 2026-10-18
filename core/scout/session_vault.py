@@ -144,4 +144,15 @@ class SessionVault:
         wire_headers = cls.extract_auth_from_requests(captured_requests, domain)
         session.auth_headers.update(wire_headers)
 
+        # Auto-ingest session into KùzuDB memory
+        try:
+            from extra.core.memory.ingest import record_app_session
+            record_app_session(
+                service_name=domain,
+                browser="edge",
+                profile_name="Default",
+            )
+        except Exception:
+            pass
+
         return session

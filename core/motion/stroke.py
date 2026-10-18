@@ -21,7 +21,7 @@ def generate_stroke_path(
     waypoints: List[Point],
     duration: float = 1.0,
     smooth: bool = True,
-    steps_per_segment: int = 18,
+    steps_per_segment: int = 10,
     human_jitter: bool = True,
 ) -> List[ScheduledStep]:
     """
@@ -102,7 +102,7 @@ def generate_stroke_path(
     scale = duration / total_weight
 
     result: List[ScheduledStep] = []
-    min_delay = 0.003
+    min_delay = 0.010
     max_delay = 0.035
 
     for i in range(n - 1):

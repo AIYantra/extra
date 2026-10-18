@@ -6,24 +6,25 @@
 
 # Extra
 
-### The Open-Source Astra 6 for your Mac & PC
-**Your AI can see, click, type, navigate, and get real work done on macOS & Windows.**
+### The Open-Source Astra 6 for your Linux PC, Mac & Windows
+**Your AI can see, click, type, navigate, and get real work done on Linux, macOS & Windows.**
 
 <!-- mcp-name: io.github.AIYantra/extra -->
 
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/extra-desktop?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/extra-desktop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: macOS 12.3+ & Windows 10/11](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-0078D6.svg)](https://extra.yantraos.com)
+[![Platform: Linux | macOS | Windows](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-0078D6.svg)](https://extra.yantraos.com)
 [![Protocol: Model Context Protocol (MCP)](https://img.shields.io/badge/Protocol-MCP%20Native-orange.svg)](https://modelcontextprotocol.io)
 [![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
 [![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
 
-[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [macOS Guide](README_MACOS.md) • [Architecture](ARCHITECTURE.md) • [License](LICENSE)
+[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Linux Guide](README_LINUX.md) • [macOS Guide](README_MACOS.md) • [Architecture](ARCHITECTURE.md) • [License](LICENSE)
 
 <br/>
 <br/>
 
 <a href="https://extra.yantraos.com">
-  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/banner.png" alt="Extra in action — Live Windows desktop automation" width="100%" />
+  <img src="https://raw.githubusercontent.com/AIYantra/extra/main/assets/demo.gif" alt="Extra in action — Live Windows desktop automation" width="100%" />
 </a>
 
 </div>
@@ -34,9 +35,9 @@
 
 Today's AI assistants can write brilliant essays and code, but they are trapped inside a chat window. When you need them to click a button, open an app, organize your files, or input data into a spreadsheet, they can only give you text instructions.
 
-**Extra gives your AI hands and eyes on Windows.**
+**Extra gives your AI hands and eyes on Linux, macOS & Windows.**
 
-It connects **Claude, Google Antigravity, Cursor, AGY**, or any autonomous agent directly to your Windows desktop with high-speed screen vision, pixel-perfect clicking, and instant typing.
+It connects **Claude, Google Antigravity, Cursor, AGY**, or any autonomous agent directly to your desktop with high-speed screen vision, pixel-perfect clicking, and instant typing.
 
 * **No clunky browser extensions.**
 * **No expensive cloud servers watching your screen.**
@@ -48,21 +49,26 @@ It connects **Claude, Google Antigravity, Cursor, AGY**, or any autonomous agent
 
 Once Extra is running, you can talk to your AI like a real human assistant sitting at your desk:
 
-* 📊 **Spreadsheets & Data:** *"Open Excel, calculate total revenue from the invoice CSVs in my Downloads folder, and create a summary chart."*
+* 📊 **Spreadsheets & Data:** *"Open Excel or LibreOffice Calc, calculate total revenue from the invoice CSVs in my Downloads folder, and create a summary chart."*
 * 🗂️ **Desktop & File Cleanup:** *"Clean up my messy desktop by moving screenshots into Pictures, PDFs into Documents, and deleting empty folders."*
-* 🌐 **Web Research & Data Entry:** *"Open Chrome, find the top 5 flights to Tokyo under $800, and copy their flight numbers and dates into Notepad."*
-* ⚙️ **Windows System Tasks:** *"Open Settings, check if any Windows updates are pending, and let me know if a restart is needed."*
-* 🎵 **App Control:** *"Launch Spotify, search for low-fi focus beats, and start playing."*
+* 🌐 **Web Research & Data Entry:** *"Open Chrome or Firefox, find the top 5 flights to Tokyo under $800, and copy their flight numbers and dates into a text note."*
+* ⚙️ **System Administration:** *"Open Settings or terminal, check system updates, and verify service health."*
+* 🎵 **App Control:** *"Launch Spotify or VLC, search for low-fi focus beats, and start playing."*
 
 ---
 
 ## ⚡ Quickstart (1 Minute)
 
-You can set up Extra in seconds on **macOS** or **Windows**:
+You can set up Extra in seconds on **Linux**, **macOS**, or **Windows**:
 
 ### Option A: Ask Your AI To Set It Up (Primary Funnel — Easiest)
 
 Copy and paste the single directive for your OS into **Claude Desktop**, **Google Antigravity**, **Cursor**, **Windsurf**, or any MCP agent:
+
+* **🐧 For Linux (Arch / yantraOS, Ubuntu, Debian, Fedora):**
+  ```text
+  Setup Extra on my Linux machine: In Terminal run 'curl -sSL https://extra.yantraos.com/install.sh | bash', then read and configure ~/.extra/app/STARTER_PROMPT_LINUX.md so we are ready to use Extra.
+  ```
 
 * **🍏 For macOS (Apple Silicon M1-M4 & Intel):**
   ```text
@@ -81,6 +87,11 @@ Your AI will run the installer, configure MCP and local rules, and reply:
 
 ### Option B: Run the One-Liner Yourself
 
+* **🐧 Linux Terminal (Arch / yantraOS, Ubuntu, Debian, Fedora):**
+  ```bash
+  curl -sSL https://extra.yantraos.com/install.sh | bash
+  ```
+
 * **🍏 macOS Terminal:**
   ```bash
   curl -sSL https://extra.yantraos.com/install.sh | bash
@@ -92,7 +103,7 @@ Your AI will run the installer, configure MCP and local rules, and reply:
   ```
 
 The automated installer will:
-* Verify OS architecture (macOS 12.3+ or Windows 10/11 64-bit).
+* Verify OS architecture (Linux Wayland/X11, macOS 12.3+, or Windows 10/11 64-bit).
 * Provision isolated Python 3.10+ runtime (`~/.extra/venv`).
 * Auto-configure **Claude Desktop**, **Cursor**, **Windsurf**, and **Antigravity** (`agy`).
 * Run the health diagnostic doctor and present the 1-step starter prompt.
@@ -102,7 +113,7 @@ The automated installer will:
 ### Option C: Developer Git Clone
 
 ```bash
-# macOS:
+# Linux / macOS:
 git clone https://github.com/AIYantra/extra.git ~/.extra/app
 cd ~/.extra/app && ./install.sh
 
@@ -231,8 +242,8 @@ extra/
 ├── cli.py                  # CLI runner (extra doctor, test, indicators, run, inspect, snap)
 ├── install.ps1             # 1-line PowerShell installer (Windows)
 ├── install.sh              # 1-line bash installer (macOS)
-├── pyproject.toml          # PyPI package manifest (extra-desktop v0.3.0)
-├── package.json            # npm package manifest (@yantraos/extra-desktop v0.3.0)
+├── pyproject.toml          # PyPI package manifest (extra-desktop v0.3.1)
+├── package.json            # npm package manifest (@yantraos/extra-desktop v0.3.1)
 ├── server.json             # Official MCP registry manifest
 ├── glama.json              # Glama MCP ecosystem manifest
 ├── smithery.yaml           # Smithery 1-click deployment manifest

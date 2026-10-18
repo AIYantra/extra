@@ -356,6 +356,41 @@ class TestMCPToolIntegration(unittest.TestCase):
         self.assertIn("task_id", res)
         self.assertEqual(res["total_milestones"], 2)
 
+    def test_verifier_relative_artifact_path_resolution(self):
+        """Verifies MilestoneVerifier resolves relative artifact paths against canonical workspace dir."""
+        import tempfile
+        from unittest.mock import patch
+        from extra.core.composer.blueprint import Milestone
+        from extra.core.composer.verifier import MilestoneVerifier
+
+        with tempfile.TemporaryDirectory() as tmp_ws:
+            with patch.dict(os.environ, {"EXTRA_WORKSPACE": tmp_ws}):
+                # Create artifact in workspace directory
+                ws_path = Path(tmp_ws)
+                art_file = ws_path / "manifest.json"
+                art_file.write_text("{\"project\": \"test\"}", encoding="utf-8")
+
+                m = Milestone(
+                    id="m1",
+                    name="manifest",
+                    expected_artifacts=["manifest.json"],
+                )
+                verifier = MilestoneVerifier()
+                res = verifier.verify_milestone(m)
+
+                self.assertTrue(res.passed)
+                self.assertEqual(len(res.defects), 0)
+
+                # Test missing relative artifact
+                m_missing = Milestone(
+                    id="m2",
+                    name="missing",
+                    expected_artifacts=["non_existent_file.json"],
+                )
+                res_missing = verifier.verify_milestone(m_missing)
+                self.assertFalse(res_missing.passed)
+                self.assertTrue(any("non_existent_file.json" in d for d in res_missing.defects))
+
 
 if __name__ == "__main__":
     unittest.main()

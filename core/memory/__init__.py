@@ -16,8 +16,14 @@ from extra.core.memory.ingest import (
     record_action_stall,
     record_action_quirk,
     record_action_soul_decision,
+    record_app_session,
 )
-from extra.core.memory.recall import recall_memory, recall_soul_decision
+from extra.core.memory.recall import (
+    recall_memory,
+    recall_soul_decision,
+    recall_app_session,
+    clear_app_session_cache,
+)
 
 __all__ = [
     "get_memory_db",
@@ -35,6 +41,9 @@ __all__ = [
     "record_action_stall",
     "record_action_quirk",
     "record_action_soul_decision",
+    "record_app_session",
     "recall_memory",
     "recall_soul_decision",
+    "recall_app_session",
+    "clear_app_session_cache",
 ]

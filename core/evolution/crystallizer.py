@@ -18,6 +18,57 @@ from extra.core.evolution.curator import get_default_skill_directories
 logger = logging.getLogger("extra.evolution.crystallizer")
 
 
+FORBIDDEN_EVOLUTION_PATTERNS = [
+    r"ignore\s+(all\s+)?(previous|prior)\s+instructions",
+    r"disregard\s+(all\s+)?(previous|prior)\s+instructions",
+    r"forget\s+(all\s+)?(previous|prior)\s+instructions",
+    r"you\s+are\s+now\s+a",
+    r"system\s+prompt",
+    r"\beval\s*\(",
+    r"\bexec\s*\(",
+    r"\b__import__\b",
+    r"\bsubprocess\.(Popen|call|run)\b",
+    r"\bos\.system\b",
+    r"\brm\s+-rf\b",
+    r"\bformat\s+[a-z]:\b",
+    r"\bpowershell\s+(-enc|-encodedcommand)\b",
+    r"\bbase64\s+(-d|--decode)\b",
+]
+
+
+def sanitize_evolution_text(text: str) -> str:
+    """Strips dangerous characters, excessive length, and normalizes single-line text."""
+    if not text:
+        return ""
+    clean = re.sub(r"[\r\n\t]+", " ", str(text)).strip()
+    if len(clean) > 400:
+        clean = clean[:397] + "..."
+    return clean
+
+
+def validate_evolution_payload(
+    workflow_summary: str,
+    instructions: str,
+    friction_points: Optional[List[str]] = None,
+    solutions_found: Optional[List[str]] = None,
+) -> Optional[str]:
+    """
+    Validates that evolution inputs do not contain prompt injection or malicious payloads.
+    Returns an error description if a violation is detected, None if clean.
+    """
+    corpus = [workflow_summary, instructions]
+    if friction_points:
+        corpus.extend(friction_points)
+    if solutions_found:
+        corpus.extend(solutions_found)
+
+    combined = "\n".join(corpus)
+    for pat in FORBIDDEN_EVOLUTION_PATTERNS:
+        if re.search(pat, combined, re.IGNORECASE):
+            return f"Prohibited pattern detected: '{pat}'"
+    return None
+
+
 def _find_existing_skill(slug: str, search_roots: Optional[List[Path]] = None) -> Optional[Path]:
     """Locates existing SKILL.md in workspace or user configuration directories."""
     roots = search_roots if search_roots is not None else get_default_skill_directories()
@@ -42,19 +93,22 @@ def _patch_skill_content(
     evolve_timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     has_changes = False
 
+    clean_summary = sanitize_evolution_text(workflow_summary)
+    clean_instructions = sanitize_evolution_text(instructions)
+
     # Format new fast-path entry ONLY if golden path
     if is_golden_path:
         if fastpath_file:
-            new_fast_path = f"- **Evolved API Fast-Path ({workflow_summary}):** Run `python {fastpath_file}` — {instructions}"
+            new_fast_path = f"- **Evolved API Fast-Path ({clean_summary}):** Run `python {fastpath_file}` — {clean_instructions}"
         else:
-            new_fast_path = f"- **Evolved Fast Path ({workflow_summary}):** {instructions}"
+            new_fast_path = f"- **Evolved Fast Path ({clean_summary}):** {clean_instructions}"
 
         # Inject into "## 2. Zero-Stall Fast Paths"
         fast_path_header = "## 2. Zero-Stall Fast Paths"
         if fast_path_header in content:
             parts = content.split(fast_path_header, 1)
             # Check if already present to avoid duplication
-            if workflow_summary.strip().lower() not in parts[1].lower():
+            if clean_summary.lower() not in parts[1].lower():
                 content = f"{parts[0]}{fast_path_header}\n{new_fast_path}\n{parts[1]}"
                 has_changes = True
         else:
@@ -140,6 +194,24 @@ def crystallize_skill_evolution(
     clean_name = app_name.strip().lower()
     slug = _slugify(clean_name)
     target_skill_name = skill_name or f"extra-{slug}"
+
+    # 0. Security validation (Evolution Poisoning & Prompt Injection Defense)
+    violation = validate_evolution_payload(
+        workflow_summary=workflow_summary,
+        instructions=instructions,
+        friction_points=friction_points,
+        solutions_found=solutions_found,
+    )
+    if violation:
+        logger.warning("[Evolution-Security] Rejected evolution for '%s': %s", app_name, violation)
+        return {
+            "status": "rejected",
+            "app_name": app_name,
+            "skill_name": target_skill_name,
+            "error": f"Evolution payload rejected: {violation}",
+            "skill_paths": [],
+            "summary": f"Evolution for {target_skill_name} was rejected by security guardrails: {violation}",
+        }
 
     # Target output directories
     if target_dirs is None:

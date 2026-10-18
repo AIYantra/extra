@@ -126,19 +126,33 @@ def ensure_dpi_aware() -> bool:
 
 def attach_input_desktop() -> bool:
     """
-    Attaches the current calling thread to the active interactive input desktop.
+    Attaches the current calling thread to the active interactive input desktop
+    or isolated child virtual desktop if active.
     Required for background agents, subshells, and automation services on Windows.
     """
+    try:
+        from extra.core.platform.windows.child_session import get_child_session_manager, SessionTier
+        mgr = get_child_session_manager()
+        if mgr and mgr.is_active() and mgr.get_active_tier() == SessionTier.TIER_2_VIRTUAL_DESKTOP:
+            if mgr.attach_worker_thread():
+                return True
+    except Exception:
+        pass
+
     try:
         user32.OpenInputDesktop.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         user32.OpenInputDesktop.restype = wintypes.HANDLE
         user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
         user32.SetThreadDesktop.restype = wintypes.BOOL
+        user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
+        user32.GetThreadDesktop.restype = wintypes.HANDLE
 
+        curDesk = user32.GetThreadDesktop(kernel32.GetCurrentThreadId())
         hDesk = user32.OpenInputDesktop(0, False, DESKTOP_ALL)
-        if hDesk:
+        if hDesk and hDesk != curDesk:
             res = user32.SetThreadDesktop(hDesk)
             return bool(res)
+        return True
     except Exception:
         pass
     return False

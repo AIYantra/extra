@@ -18,6 +18,12 @@ from extra.core.composer.folding import (
     create_semantic_state_token,
     fold_completed_milestone,
 )
+from extra.core.composer.lineage import (
+    ArtifactLineageVerifier,
+    ArtifactOrigin,
+    LineageVerdict,
+    verify_artifact_lineage,
+)
 from extra.core.composer.verifier import (
     MilestoneVerifier,
     VerificationResult,
@@ -36,4 +42,8 @@ __all__ = [
     "MilestoneVerifier",
     "VerificationResult",
     "verify_milestone_acceptance",
+    "ArtifactLineageVerifier",
+    "ArtifactOrigin",
+    "LineageVerdict",
+    "verify_artifact_lineage",
 ]

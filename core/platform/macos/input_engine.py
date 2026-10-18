@@ -111,7 +111,7 @@ def instant_type(text: str, press_enter: bool = False) -> None:
     _notify_indicator("type")
 
 
-def atomic_clipboard_paste(text: str, restore_delay: float = 0.02) -> None:
+def atomic_clipboard_paste(text: str, html: Optional[str] = None, restore_delay: float = 0.02) -> None:
     """
     Safely injects massive text blocks or multi-line code snippets via NSPasteboard:
     1. Saves existing pasteboard items & types.
@@ -554,17 +554,17 @@ class MacInputEngine(AbstractInputEngine):
     def send_hotkey(self, keys: List[str]) -> None:
         send_hotkey(keys)
 
-    def atomic_clipboard_paste(self, text: str) -> None:
-        atomic_clipboard_paste(text)
+    def atomic_clipboard_paste(self, text: str, html: Optional[str] = None) -> None:
+        atomic_clipboard_paste(text, html=html)
 
     def execute_batch_actions(
-        self, actions: List[Dict[str, Any]], auto_settle: bool = True
+        self, actions: List[Dict[str, Any]], auto_settle: bool = True, auto_distill: bool = True
     ) -> Dict[str, Any]:
-        return execute_batch_actions(actions=actions, auto_settle=auto_settle)
+        return execute_batch_actions(actions=actions, auto_settle=auto_settle, auto_distill=auto_distill)
 
 
 def execute_batch_actions(
-    actions: List[Dict[str, Any]], auto_settle: bool = True, max_depth: int = 5
+    actions: List[Dict[str, Any]], auto_settle: bool = True, max_depth: int = 5, auto_distill: bool = True
 ) -> Dict[str, Any]:
     """
     Executes an atomic list of hardware actions sequentially on macOS.
@@ -591,6 +591,15 @@ def execute_batch_actions(
                     ctx["process_name"] = fg.process_name
             except Exception:
                 pass
+
+        if "text" not in ctx and "distilled_ui" not in ctx:
+            try:
+                from extra.core.distiller import distill_screen
+                d_res = distill_screen(format="compact", max_elements=25)
+                ctx["text"] = d_res.content
+                ctx["distilled_ui"] = d_res.content
+            except Exception:
+                pass
         return ctx
 
     def _execute_sub_list(action_list: List[Dict[str, Any]], depth: int = 0) -> bool:
@@ -606,10 +615,10 @@ def execute_batch_actions(
             current_index = len(executed)
 
             # ── SOUL Reflexive Actions ─────────────────────────────────────
-            if atype in ("eval", "condition", "branch"):
+            if atype in ("decide", "eval", "condition", "branch"):
                 condition = str(act.get("condition", act.get("query", "")))
-                if_true = act.get("if_true", act.get("then", []))
-                if_false = act.get("if_false", act.get("else", []))
+                if_true = act.get("on_true", act.get("if_true", act.get("then", [])))
+                if_false = act.get("on_false", act.get("if_false", act.get("else", [])))
                 explicit_ctx = act.get("context")
 
                 from extra.core.soul import get_soul_decider
@@ -620,12 +629,12 @@ def execute_batch_actions(
                 decision = decider.decide_boolean(condition, context=ctx)
                 eval_dur = (time.perf_counter() - eval_t0) * 1000.0
 
-                branch_name = "if_true" if decision.result else "if_false"
+                branch_name = "on_true" if decision.result else "on_false"
                 branch_actions = if_true if decision.result else if_false
 
                 executed.append({
                     "index": current_index,
-                    "action": "eval",
+                    "action": "decide" if atype == "decide" else "eval",
                     "condition": condition,
                     "result": decision.result,
                     "confidence": decision.confidence,
@@ -638,6 +647,38 @@ def execute_batch_actions(
                     ok = _execute_sub_list(branch_actions, depth=depth + 1)
                     if not ok:
                         return False
+
+            elif atype in ("critic", "verify_milestone", "verify_acceptance", "audit_screen"):
+                milestone = str(act.get("milestone", act.get("name", "batch_checkpoint")))
+                expected = act.get("expected", act.get("expected_elements"))
+                unwanted = act.get("unwanted", act.get("unwanted_elements"))
+                custom_cond = act.get("condition")
+                on_fail = str(act.get("on_fail", "abort")).lower()
+
+                from extra.core.soul import SoulCritic
+                critic = SoulCritic()
+                exp_list = expected if isinstance(expected, list) else ([expected] if expected else None)
+                unw_list = unwanted if isinstance(unwanted, list) else ([unwanted] if unwanted else None)
+                verdict = critic.evaluate_screen_milestone(
+                    milestone_name=milestone,
+                    expected_elements=exp_list,
+                    unwanted_elements=unw_list,
+                    custom_condition=custom_cond,
+                )
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "critic",
+                    "milestone": milestone,
+                    "passed": verdict.passed,
+                    "confidence": round(verdict.confidence, 2),
+                    "defects": verdict.defects,
+                    "latency_ms": round(verdict.latency_ms, 2),
+                    "duration_ms": round(step_dur, 2),
+                })
+                if not verdict.passed and on_fail == "abort":
+                    batch_error["error"] = f"SOUL-Critic milestone '{milestone}' rejected: {'; '.join(verdict.defects)}"
+                    return False
 
             elif atype in ("assert", "check"):
                 condition = str(act.get("condition", act.get("query", "")))
@@ -739,10 +780,58 @@ def execute_batch_actions(
                 dur = float(act.get("duration", 1.0))
                 sm = bool(act.get("smooth", True))
                 pts_tuples = [(int(p[0]), int(p[1])) for p in pts if len(p) >= 2]
+                if act.get("canvas_relative", False):
+                    try:
+                        from extra.core.soul.vision_parser import detect_canvas_viewport
+                        cv = detect_canvas_viewport()
+                        if cv:
+                            pts_tuples = [(p[0] + cv.bounding_box[0], p[1] + cv.bounding_box[1]) for p in pts_tuples]
+                    except Exception:
+                        pass
                 if pts_tuples:
                     mouse_stroke(pts_tuples, button=btn, duration=dur, smooth=sm)
                 step_dur = (time.perf_counter() - step_t0) * 1000.0
                 executed.append({"index": current_index, "action": "stroke", "point_count": len(pts_tuples), "duration_ms": round(step_dur, 2)})
+
+            elif atype in ("drag", "mouse_drag"):
+                start_x = int(act.get("start_x", act.get("x1", 0)))
+                start_y = int(act.get("start_y", act.get("y1", 0)))
+                end_x = int(act.get("end_x", act.get("x2", 0)))
+                end_y = int(act.get("end_y", act.get("y2", 0)))
+                btn = str(act.get("button", "left"))
+                dur = float(act.get("duration", 0.2))
+                st = int(act.get("steps", 15))
+
+                if act.get("canvas_relative", False):
+                    try:
+                        from extra.core.soul.vision_parser import detect_canvas_viewport
+                        cv = detect_canvas_viewport()
+                        if cv:
+                            start_x += cv.bounding_box[0]
+                            start_y += cv.bounding_box[1]
+                            end_x += cv.bounding_box[0]
+                            end_y += cv.bounding_box[1]
+                    except Exception:
+                        pass
+
+                mouse_drag(
+                    start_x=start_x,
+                    start_y=start_y,
+                    end_x=end_x,
+                    end_y=end_y,
+                    button=btn,
+                    steps=st,
+                    duration=dur,
+                )
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "drag",
+                    "start": [start_x, start_y],
+                    "end": [end_x, end_y],
+                    "button": btn,
+                    "duration_ms": round(step_dur, 2),
+                })
 
             elif atype in ("click", "mouse_click"):
                 target = act.get("target", act.get("query"))
@@ -756,6 +845,15 @@ def execute_batch_actions(
                 else:
                     x = act.get("x")
                     y = act.get("y")
+                    if act.get("canvas_relative", False) and x is not None and y is not None:
+                        try:
+                            from extra.core.soul.vision_parser import detect_canvas_viewport
+                            cv = detect_canvas_viewport()
+                            if cv:
+                                x = int(x) + cv.bounding_box[0]
+                                y = int(y) + cv.bounding_box[1]
+                        except Exception:
+                            pass
 
                 btn = str(act.get("button", "left"))
                 clicks = int(act.get("clicks", 1))
@@ -769,6 +867,7 @@ def execute_batch_actions(
                 if target:
                     exec_item["grounded_target"] = str(target)
                 executed.append(exec_item)
+
 
             elif atype in ("double_click", "dblclick"):
                 x = act.get("x")
@@ -834,6 +933,67 @@ def execute_batch_actions(
                 step_dur = (time.perf_counter() - step_t0) * 1000.0
                 executed.append({"index": current_index, "action": "scroll", "clicks": clicks, "direction": direction, "duration_ms": round(step_dur, 2)})
 
+            elif atype in ("launch", "open_app", "start_app"):
+                app_name = str(act.get("app_name", act.get("app", act.get("name", ""))))
+                args = act.get("args")
+                from extra.core.platform.macos.shell import launch_app
+                l_res = launch_app(app_name=app_name, args=args)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "launch",
+                    "app_name": app_name,
+                    "success": l_res.success,
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("snap_layout", "snap", "layout"):
+                lay = str(act.get("layout", "side_by_side"))
+                l_win = act.get("left_window")
+                r_win = act.get("right_window")
+                win = act.get("window", act.get("target"))
+                mon = int(act.get("monitor_index", 0))
+                from extra.core.focus import snap_layout
+                snap_res = snap_layout(layout=lay, left_window=l_win, right_window=r_win, monitor_index=mon)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "snap_layout",
+                    "layout": lay,
+                    "success": snap_res.get("success", False),
+                    "windows": snap_res.get("windows", {}),
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("wait_until_settled", "settle", "wait_settled"):
+                timeout_sec = float(act.get("timeout_sec", act.get("timeout", 2.0)))
+                from extra.core.soul.gateman import wait_until_settled
+                settle_res = wait_until_settled(timeout_sec=timeout_sec)
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "wait_until_settled",
+                    "settled": settle_res.get("settled", True),
+                    "duration_ms": round(step_dur, 2),
+                })
+
+            elif atype in ("read_clipboard", "copy", "get_clipboard"):
+                clip_text = ""
+                try:
+                    import subprocess
+                    pb = subprocess.run(["pbpaste"], capture_output=True, text=True, timeout=0.5)
+                    if pb.returncode == 0:
+                        clip_text = pb.stdout
+                except Exception:
+                    pass
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                executed.append({
+                    "index": current_index,
+                    "action": "read_clipboard",
+                    "value": clip_text,
+                    "duration_ms": round(step_dur, 2),
+                })
+
             # Tier 1 In-Memory Visual Settle / Physical Action Delay
             if "settle_ms" in act:
                 time.sleep(int(act["settle_ms"]) / 1000.0)
@@ -856,13 +1016,61 @@ def execute_batch_actions(
 
     _execute_sub_list(actions, depth=0)
 
+    # Closed-Loop Reflex & Final Settle (Phase 2.1)
+    final_settled = True
+    if auto_settle and executed:
+        last_action = executed[-1].get("action", "")
+        if last_action in ("click", "double_click", "focus", "activate", "hotkey", "type", "launch", "scroll"):
+            try:
+                from extra.core.soul.gateman import wait_until_settled
+                s_res = wait_until_settled(timeout_sec=0.4, settle_frames=2, check_interval_ms=15)
+                final_settled = s_res.get("settled", True)
+            except Exception:
+                pass
+
     total_ms = (time.perf_counter() - t0) * 1000.0
     result_dict: Dict[str, Any] = {
         "success": not bool(batch_error),
         "executed_count": len(executed),
         "total_duration_ms": round(total_ms, 2),
         "actions": executed,
+        "executed": executed,
+        "final_settled": final_settled,
     }
+
+    # Closed-Loop Active Window & Focus Telemetry
+    try:
+        from extra.core.focus import get_foreground_window
+        fg = get_foreground_window()
+        if fg:
+            result_dict["active_window"] = {
+                "title": fg.title,
+                "hwnd": fg.hwnd,
+                "process_name": fg.process_name,
+            }
+        else:
+            result_dict["active_window"] = {
+                "title": "Desktop Root",
+                "hwnd": 0,
+                "process_name": "Finder",
+            }
+    except Exception:
+        result_dict["active_window"] = {
+            "title": "Desktop Root",
+            "hwnd": 0,
+            "process_name": "Finder",
+        }
+
+    # Closed-Loop Screen State Distillation (Phase 2.2)
+    if auto_distill:
+        try:
+            from extra.core.distiller import distill_screen
+            d_res = distill_screen(format="compact", max_elements=30)
+            result_dict["distilled_ui"] = d_res.content
+            result_dict["screen_state"] = d_res.content
+        except Exception:
+            pass
+
     if batch_error:
         result_dict.update(batch_error)
     return result_dict

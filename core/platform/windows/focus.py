@@ -129,17 +129,20 @@ def list_windows(visible_only: bool = True) -> List[WindowInfo]:
     results: List[WindowInfo] = []
     hwnds: List[int] = []
 
-    WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-    def _enum_callback(hwnd: int, lparam: int) -> bool:
-        hwnds.append(hwnd)
-        return True
-
-    proc = WNDENUMPROC(_enum_callback)
     try:
-        user32.EnumWindows(proc, 0)
+        win32gui.EnumWindows(lambda hwnd, _: hwnds.append(hwnd) or 1, None)
     except Exception:
-        pass
+        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def _enum_callback(hwnd: int, lparam: int) -> bool:
+            hwnds.append(hwnd)
+            return True
+
+        proc = WNDENUMPROC(_enum_callback)
+        try:
+            user32.EnumWindows(proc, 0)
+        except Exception:
+            pass
 
     for hwnd in hwnds:
         try:
@@ -192,6 +195,20 @@ class _DynamicProcessMap(dict):
 ALIAS_PROCESS_MAP: Dict[str, str] = _DynamicProcessMap()
 
 
+def _normalize_title(t: str) -> str:
+    """Normalizes title string by stripping zero-width and invisible control unicode chars."""
+    if not t:
+        return ""
+    return (
+        t.replace("\u200b", "")
+        .replace("\u200c", "")
+        .replace("\u200d", "")
+        .replace("\ufeff", "")
+        .strip()
+        .lower()
+    )
+
+
 def find_window_by_title(
     query: str, exact: bool = False, visible_only: bool = True, timeout: float = 0.0
 ) -> Optional[WindowInfo]:
@@ -204,28 +221,36 @@ def find_window_by_title(
     Optionally polls up to timeout seconds.
     """
     deadline = time.perf_counter() + max(0.0, timeout)
-    q = query.strip().lower()
+    q = _normalize_title(query)
+    is_querying_overlay = "overlay" in q or "extra" in q
 
     while True:
         windows = list_windows(visible_only=visible_only)
 
-        # Tier 1: Exact match
+        # Build searchable pairs with normalized titles, filtering internal overlays
+        searchable: List[Tuple[WindowInfo, str]] = []
         for win in windows:
-            if win.title.lower() == q:
+            norm_t = _normalize_title(win.title)
+            if not is_querying_overlay and win.title.startswith("Extra") and "overlay" in norm_t:
+                continue
+            searchable.append((win, norm_t))
+
+        # Tier 1: Exact match
+        for win, norm_t in searchable:
+            if norm_t == q:
                 return win
 
         if not exact:
             # Tier 2: Direct substring match
-            for win in windows:
-                if q in win.title.lower():
+            for win, norm_t in searchable:
+                if q in norm_t:
                     return win
 
             # Tier 3: Multi-word match
             words = [w for w in q.split() if len(w) > 2]
             if len(words) > 1:
-                for win in windows:
-                    w_title = win.title.lower()
-                    if all(word in w_title for word in words):
+                for win, norm_t in searchable:
+                    if all(word in norm_t for word in words):
                         return win
 
             # Tier 4: Dynamic process-level fallback via registered apps and fuzzy proc match
@@ -343,10 +368,16 @@ def snap_window(hwnd: int, position: str = "left", monitor_index: int = 0) -> bo
     ensure_dpi_aware()
     attach_input_desktop()
 
-    # Restore if iconic (minimized)
-    if win32gui.IsIconic(hwnd):
+    pos = position.lower().strip()
+    if pos in ("maximize", "max", "full"):
+        win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
+        force_activate_window(hwnd)
+        return True
+
+    # Restore if iconic (minimized) or zoomed (maximized) so SetWindowPos takes effect
+    if win32gui.IsIconic(hwnd) or user32.IsZoomed(hwnd):
         win32gui.ShowWindow(hwnd, SW_RESTORE)
-        time.sleep(0.02)
+        time.sleep(0.05)
 
     l, t, r, b = get_work_area(monitor_index)
     work_w = r - l
@@ -354,11 +385,19 @@ def snap_window(hwnd: int, position: str = "left", monitor_index: int = 0) -> bo
     half_w = work_w // 2
     half_h = work_h // 2
 
-    pos = position.lower().strip()
     if pos in ("left", "left_half", "left_split"):
         nx, ny, nw, nh = l, t, half_w, work_h
     elif pos in ("right", "right_half", "right_split"):
         nx, ny, nw, nh = l + half_w, t, work_w - half_w, work_h
+    elif pos in ("third_left", "left_third", "left_col"):
+        third_w = work_w // 3
+        nx, ny, nw, nh = l, t, third_w, work_h
+    elif pos in ("third_center", "center_third", "middle_third", "center_col"):
+        third_w = work_w // 3
+        nx, ny, nw, nh = l + third_w, t, third_w, work_h
+    elif pos in ("third_right", "right_third", "right_col"):
+        third_w = work_w // 3
+        nx, ny, nw, nh = l + 2 * third_w, t, work_w - (2 * third_w), work_h
     elif pos in ("top", "top_half"):
         nx, ny, nw, nh = l, t, work_w, half_h
     elif pos in ("bottom", "bottom_half"):
@@ -371,10 +410,6 @@ def snap_window(hwnd: int, position: str = "left", monitor_index: int = 0) -> bo
         nx, ny, nw, nh = l, t + half_h, half_w, work_h - half_h
     elif pos in ("bottom_right", "br"):
         nx, ny, nw, nh = l + half_w, t + half_h, work_w - half_w, work_h - half_h
-    elif pos in ("maximize", "max", "full"):
-        win32gui.ShowWindow(hwnd, win32con.SW_MAXIMIZE)
-        force_activate_window(hwnd)
-        return True
     elif pos in ("center", "centered"):
         cw = int(work_w * 0.8)
         ch = int(work_h * 0.8)
@@ -395,11 +430,22 @@ def snap_layout(
     layout: str = "side_by_side",
     left_window: Optional[Union[str, int]] = None,
     right_window: Optional[Union[str, int]] = None,
+    window: Optional[Union[str, int]] = None,
+    center_window: Optional[Union[str, int]] = None,
+    windows: Optional[List[Union[str, int]]] = None,
     monitor_index: int = 0,
 ) -> Dict[str, Any]:
     """
-    Arranges multiple windows into a cohesive visual layout in a single programmatic step.
+    Arranges windows into a cohesive visual layout in a single programmatic step.
     Eliminates multi-turn hotkey snapping loops.
+    
+    Supported layouts:
+      - 'side_by_side' / 'split': docks left_window to left half, right_window to right half.
+      - 'thirds' / 'side_by_side_3' / 'three_columns': docks 3 windows into left, center, right thirds.
+      - 'maximize' / 'fullscreen' / 'full': maximizes window (or left_window) to fill the screen.
+      - 'center' / 'centered': centers window occupying 80% screen work area.
+      - 'top_bottom' / 'split_vertical': docks left_window to top half, right_window to bottom half.
+      - 'grid' / 'quad' / '2x2': docks 4 windows into 2x2 quadrants.
     """
     results: Dict[str, Any] = {}
 
@@ -411,20 +457,119 @@ def snap_layout(
         win = find_window_by_title(str(target), timeout=2.0)
         return win.hwnd if win else None
 
+    # Handle windows list if provided
+    if windows and len(windows) > 0:
+        if len(windows) == 3 and layout in ("side_by_side", "thirds", "three_columns", "side_by_side_3"):
+            layout = "thirds"
+            left_window = windows[0]
+            center_window = windows[1]
+            right_window = windows[2]
+        elif len(windows) == 2:
+            left_window = windows[0]
+            right_window = windows[1]
+        elif len(windows) >= 4:
+            layout = "grid"
+
+    target_main = window if window is not None else left_window
+    h_main = _resolve_hwnd(target_main)
     h_left = _resolve_hwnd(left_window)
+    h_center = _resolve_hwnd(center_window)
     h_right = _resolve_hwnd(right_window)
 
-    if layout in ("side_by_side", "split_horizontal", "split"):
+    layout_norm = layout.lower().strip()
+    if layout_norm in ("maximize", "max", "fullscreen", "full"):
+        if h_main:
+            results["main"] = {"target": target_main, "hwnd": h_main, "success": snap_window(h_main, "maximize", monitor_index)}
+    elif layout_norm in ("center", "centered"):
+        if h_main:
+            results["main"] = {"target": target_main, "hwnd": h_main, "success": snap_window(h_main, "center", monitor_index)}
+    elif layout_norm in ("top_bottom", "split_vertical"):
+        if h_left:
+            results["top"] = {"target": left_window, "hwnd": h_left, "success": snap_window(h_left, "top", monitor_index)}
+        if h_right:
+            results["bottom"] = {"target": right_window, "hwnd": h_right, "success": snap_window(h_right, "bottom", monitor_index)}
+    elif layout_norm in ("thirds", "side_by_side_3", "three_columns", "split_3"):
+        if h_left:
+            results["left"] = {"target": left_window, "hwnd": h_left, "success": snap_window(h_left, "third_left", monitor_index)}
+        if h_center:
+            results["center"] = {"target": center_window, "hwnd": h_center, "success": snap_window(h_center, "third_center", monitor_index)}
+        if h_right:
+            results["right"] = {"target": right_window, "hwnd": h_right, "success": snap_window(h_right, "third_right", monitor_index)}
+    elif layout_norm in ("grid", "quad", "2x2"):
+        w_list = windows or [left_window, right_window, center_window, window]
+        tl_target = w_list[0] if len(w_list) > 0 else left_window
+        tr_target = w_list[1] if len(w_list) > 1 else right_window
+        bl_target = w_list[2] if len(w_list) > 2 else center_window
+        br_target = w_list[3] if len(w_list) > 3 else window
+
+        h_tl = _resolve_hwnd(tl_target)
+        h_tr = _resolve_hwnd(tr_target)
+        h_bl = _resolve_hwnd(bl_target)
+        h_br = _resolve_hwnd(br_target)
+
+        if h_tl:
+            results["top_left"] = {"target": tl_target, "hwnd": h_tl, "success": snap_window(h_tl, "top_left", monitor_index)}
+        if h_tr:
+            results["top_right"] = {"target": tr_target, "hwnd": h_tr, "success": snap_window(h_tr, "top_right", monitor_index)}
+        if h_bl:
+            results["bottom_left"] = {"target": bl_target, "hwnd": h_bl, "success": snap_window(h_bl, "bottom_left", monitor_index)}
+        if h_br:
+            results["bottom_right"] = {"target": br_target, "hwnd": h_br, "success": snap_window(h_br, "bottom_right", monitor_index)}
+    elif layout_norm in ("side_by_side", "split_horizontal", "split"):
         if h_left:
             results["left"] = {"target": left_window, "hwnd": h_left, "success": snap_window(h_left, "left", monitor_index)}
         if h_right:
             results["right"] = {"target": right_window, "hwnd": h_right, "success": snap_window(h_right, "right", monitor_index)}
+    else:
+        if h_main:
+            results["main"] = {"target": target_main, "hwnd": h_main, "success": snap_window(h_main, layout_norm, monitor_index)}
 
-    return {
-        "success": True,
+    missing: List[str] = []
+    if layout_norm in ("maximize", "max", "fullscreen", "full", "center", "centered"):
+        if target_main is not None and h_main is None:
+            missing.append(f"window '{target_main}'")
+    elif layout_norm in ("top_bottom", "split_vertical", "side_by_side", "split_horizontal", "split"):
+        if left_window is not None and h_left is None:
+            missing.append(f"left_window '{left_window}'")
+        if right_window is not None and h_right is None:
+            missing.append(f"right_window '{right_window}'")
+    elif layout_norm in ("thirds", "side_by_side_3", "three_columns", "split_3"):
+        if left_window is not None and h_left is None:
+            missing.append(f"left_window '{left_window}'")
+        if center_window is not None and h_center is None:
+            missing.append(f"center_window '{center_window}'")
+        if right_window is not None and h_right is None:
+            missing.append(f"right_window '{right_window}'")
+    elif layout_norm in ("grid", "quad", "2x2"):
+        for label, tgt, hnd in [("top_left", tl_target, h_tl), ("top_right", tr_target, h_tr), ("bottom_left", bl_target, h_bl), ("bottom_right", br_target, h_br)]:
+            if tgt is not None and hnd is None:
+                missing.append(f"{label} '{tgt}'")
+    else:
+        if target_main is not None and h_main is None:
+            missing.append(f"window '{target_main}'")
+
+    available_titles: List[str] = []
+    if missing:
+        try:
+            available_titles = [w.title for w in list_windows(visible_only=True) if w.title and len(w.title.strip()) > 1]
+        except Exception:
+            available_titles = []
+
+    success = (len(missing) == 0) and (len(results) > 0) and all(r.get("success", False) for r in results.values())
+
+    resp: Dict[str, Any] = {
+        "success": success,
         "layout": layout,
         "windows": results,
     }
+    if missing:
+        resp["error"] = f"Requested layout target(s) not found among open windows: {', '.join(missing)}."
+        resp["available_windows"] = available_titles[:15]
+        resp["suggestion"] = "Ensure the application is launched and visible before attempting to snap layout."
+    elif not success:
+        resp["error"] = "One or more windows could not be repositioned into layout."
+
+    return resp
 
 
 class WindowsFocusManager(AbstractFocusManager):
@@ -460,6 +605,17 @@ class WindowsFocusManager(AbstractFocusManager):
         layout: str = "side_by_side",
         left_window: Optional[Union[str, int]] = None,
         right_window: Optional[Union[str, int]] = None,
+        window: Optional[Union[str, int]] = None,
+        center_window: Optional[Union[str, int]] = None,
+        windows: Optional[List[Union[str, int]]] = None,
         monitor_index: int = 0,
     ) -> Dict[str, Any]:
-        return snap_layout(layout=layout, left_window=left_window, right_window=right_window, monitor_index=monitor_index)
+        return snap_layout(
+            layout=layout,
+            left_window=left_window,
+            right_window=right_window,
+            window=window,
+            center_window=center_window,
+            windows=windows,
+            monitor_index=monitor_index,
+        )

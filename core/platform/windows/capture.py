@@ -102,6 +102,15 @@ class ScreenCaptureEngine(AbstractCaptureEngine):
         img = Image.frombytes("RGB", size, bgra_bytes, "raw", raw_mode)
         duration_ms = (time.perf_counter() - t_start) * 1000.0
 
+        # Auto-update PiP preview window if active and visible
+        try:
+            from extra.core.platform.windows.pip_window import get_pip_window
+            pip = get_pip_window()
+            if pip and pip.is_visible():
+                pip.update_frame(img)
+        except Exception:
+            pass
+
         return CaptureResult(
             image=img,
             duration_ms=round(duration_ms, 2),

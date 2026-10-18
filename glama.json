@@ -2,10 +2,10 @@
   "$schema": "https://glama.ai/mcp/schema.json",
   "name": "extra",
   "displayName": "Extra - Native Computer Use",
-  "description": "Flashless macOS & Windows native computer-use engine for Claude, Antigravity, Cursor, and Windsurf. Sub-10ms desktop perception and interaction via ScreenCaptureKit, CoreGraphics, DXGI, and AXUIElement.",
+  "description": "Flashless Linux, Windows & macOS native computer-use engine for Claude, Antigravity, Cursor, and Windsurf. Sub-10ms desktop perception and interaction via Spectacle, AT-SPI2, ScreenCaptureKit, CoreGraphics, DXGI, and AXUIElement.",
   "homepage": "https://extra.yantraos.com",
   "repository": "https://github.com/AIYantra/extra",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "license": "MIT",
   "categories": [
     "computer-use",
@@ -24,6 +24,7 @@
     "element_accuracy_percent": 99.4
   },
   "install": {
+    "linux": "curl -sSL https://extra.yantraos.com/install.sh | bash",
     "macos": "curl -sSL https://extra.yantraos.com/install.sh | bash",
     "windows": "irm https://extra.yantraos.com/install.ps1 | iex",
     "brew": "brew install aiyantra/extra/extra",

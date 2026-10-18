@@ -11,11 +11,24 @@ from extra.core.soul.eyes import SoulEyes, get_soul_eyes, visual_ground
 from extra.core.soul.gateman import SoulGateman, wait_until_settled
 from extra.core.soul.compressor import SoulCompressor, compress_milestone_state
 from extra.core.soul.runtime import SoulRuntimeManager, get_soul_runtime
+from extra.core.soul.vision_parser import (
+    EdgeVisionParser,
+    detect_canvas_viewport,
+    parse_opaque_canvas,
+)
 from extra.core.soul.schemas import (
     DecisionType,
     GroundingResult,
     SoulBoundingBox,
     SoulDecision,
+    WorkSurfaceViewport,
+)
+
+from extra.core.soul.state_critic import (
+    GroundTruthStateCritic,
+    StateAuditClaim,
+    StateAuditResult,
+    audit_ground_truth_state,
 )
 
 __all__ = [
@@ -23,6 +36,7 @@ __all__ = [
     "SoulDecision",
     "SoulBoundingBox",
     "GroundingResult",
+    "WorkSurfaceViewport",
     "SoulRuntimeManager",
     "get_soul_runtime",
     "SoulDecider",
@@ -30,6 +44,9 @@ __all__ = [
     "SoulEyes",
     "get_soul_eyes",
     "visual_ground",
+    "EdgeVisionParser",
+    "parse_opaque_canvas",
+    "detect_canvas_viewport",
     "SoulGateman",
     "wait_until_settled",
     "SoulCritic",
@@ -37,5 +54,10 @@ __all__ = [
     "evaluate_screen_milestone",
     "SoulCompressor",
     "compress_milestone_state",
+    "GroundTruthStateCritic",
+    "StateAuditClaim",
+    "StateAuditResult",
+    "audit_ground_truth_state",
 ]
+
 

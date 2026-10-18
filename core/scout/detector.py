@@ -31,6 +31,10 @@ class AppProfile:
     scripting_api: Optional[str] = None  # e.g. 'bpy', 'extendscript', 'com', 'cli', 'mod-script-pipe'
     version: Optional[str] = None
     notes: List[str] = field(default_factory=list)
+    cli_harness_available: bool = False
+    cli_harness_name: Optional[str] = None
+    cli_harness_installed: bool = False
+    cli_harness_info: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -43,6 +47,10 @@ class AppProfile:
             "scripting_api": self.scripting_api,
             "version": self.version,
             "notes": self.notes,
+            "cli_harness_available": self.cli_harness_available,
+            "cli_harness_name": self.cli_harness_name,
+            "cli_harness_installed": self.cli_harness_installed,
+            "cli_harness_info": self.cli_harness_info,
         }
 
 
@@ -263,6 +271,8 @@ def detect_app_profile(app_name: str) -> AppProfile:
 
     # 1. Resolve executable dynamically
     resolved = resolve_executable(clean_name)
+    if isinstance(resolved, tuple):
+        resolved = resolved[0]
     app_dir = None
     seed_data = None
 
@@ -318,5 +328,27 @@ def detect_app_profile(app_name: str) -> AppProfile:
         # Scripting API fallback
         if not profile.scripting_api and seed_data.get("scripting_api"):
             profile.scripting_api = seed_data["scripting_api"]
+
+    # 5. Dynamic Agent-Native CLI Harness Discovery (CLI-Anything integration)
+    try:
+        from extra.fastpath.cli_harness import UniversalHarnessRunner, is_harness_available
+        from extra.fastpath.cli_hub import get_cli_hub
+
+        slug = UniversalHarnessRunner.normalize_harness_name(clean_name)
+        hub = get_cli_hub()
+        hub_info = hub.get_harness_info(slug)
+        harness_installed = is_harness_available(slug)
+
+        if hub_info or harness_installed:
+            profile.cli_harness_available = True
+            profile.cli_harness_name = f"cli-anything-{slug}"
+            profile.cli_harness_installed = harness_installed
+            profile.cli_harness_info = hub_info
+            if harness_installed:
+                profile.notes.append(f"Agent-native CLI harness 'cli-anything-{slug}' is installed and active.")
+            elif hub_info:
+                profile.notes.append(f"Agent-native CLI harness 'cli-anything-{slug}' is available via CLI-Hub.")
+    except Exception as h_ex:
+        logger.debug("[Scout] CLI harness discovery error: %s", h_ex)
 
     return profile

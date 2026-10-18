@@ -64,6 +64,16 @@ from extra.core.uia_plane import (
     UIAutomationPlane,
     UIElement,
 )
+from extra.core.distiller import (
+    DistillationResult,
+    UIDistiller,
+    distill_screen,
+)
+from extra.core.subtask import (
+    SubtaskResult,
+    SubtaskRunner,
+    run_subtask,
+)
 from extra.core.soul import (
     DecisionType,
     SoulDecision,
@@ -138,4 +148,12 @@ __all__ = [
     "SoulEyes",
     "get_soul_eyes",
     "visual_ground",
+    # Screen UI Distiller
+    "DistillationResult",
+    "UIDistiller",
+    "distill_screen",
+    # Autonomous Subtask Engine
+    "SubtaskResult",
+    "SubtaskRunner",
+    "run_subtask",
 ]

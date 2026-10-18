@@ -115,6 +115,17 @@ def init_schema(conn: kuzu.Connection) -> None:
         )
     """)
 
+    conn.execute("""
+        CREATE NODE TABLE IF NOT EXISTS AppSession (
+            service_name STRING,
+            browser STRING,
+            profile_name STRING,
+            profile_path STRING,
+            last_verified INT64,
+            PRIMARY KEY (service_name)
+        )
+    """)
+
     # 2. Relationships
     conn.execute("CREATE REL TABLE IF NOT EXISTS TARGETED (FROM Task TO App)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS EXECUTED (FROM Task TO ActionStep)")
@@ -123,6 +134,14 @@ def init_schema(conn: kuzu.Connection) -> None:
     conn.execute("CREATE REL TABLE IF NOT EXISTS EXHIBITS (FROM App TO AppQuirk)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS REFINED_BY (FROM StallEvent TO AppQuirk)")
     conn.execute("CREATE REL TABLE IF NOT EXISTS DECIDED (FROM Task TO SoulDecision)")
+    conn.execute("CREATE REL TABLE IF NOT EXISTS HAS_SESSION (FROM App TO AppSession)")
+
+    # 3. Data Hygiene Migration: Neutralize legacy hollow records
+    try:
+        conn.execute("MATCH (t:Task) WHERE t.goal = '' SET t.goal = 'Legacy desktop task trace'")
+        conn.execute("MATCH (d:SoulDecision) WHERE d.condition = '' SET d.condition = '__legacy_unspecified_condition__'")
+    except Exception as mig_ex:
+        logger.debug("Hollow record migration skipped or already clean: %s", mig_ex)
 
     logger.info("KùzuDB memory schema verified and initialized.")
 

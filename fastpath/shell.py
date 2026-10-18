@@ -26,6 +26,16 @@ if sys.platform == "darwin":
         register_app,
     )
     BROWSER_CANDIDATE_PATHS = {}
+elif sys.platform.startswith("linux"):
+    from extra.core.platform.linux.shell import (
+        APP_REGISTRY,
+        BROWSER_CANDIDATE_PATHS,
+        BUILTIN_APP_REGISTRY,
+        get_registered_apps,
+        get_user_registry_path,
+        load_user_registry,
+        register_app,
+    )
 else:
     from extra.core.platform.windows.shell import (
         APP_REGISTRY,

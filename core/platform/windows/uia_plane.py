@@ -208,11 +208,12 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
 
             count = elem_array.Length
             curr_id = 1
+            max_scan = min(count, max(max_elements * 4, 300))
 
-            for i in range(count):
-                if len(elements) >= max_elements:
-                    break
+            candidates: List[UIElement] = []
+            focused_ids: Set[int] = set()
 
+            for i in range(max_scan):
                 try:
                     elem = elem_array.GetElement(i)
                     c_type_id = elem.CurrentControlType
@@ -242,6 +243,11 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                     auto_id = str(elem.CurrentAutomationId or "").strip()
                     class_name = str(elem.CurrentClassName or "").strip()
                     is_enabled = bool(elem.CurrentIsEnabled)
+                    has_focus = False
+                    try:
+                        has_focus = bool(elem.CurrentHasKeyboardFocus)
+                    except Exception:
+                        pass
 
                     center = ((left + right) // 2, (top + bottom) // 2)
 
@@ -257,16 +263,59 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                         is_offscreen=False,
                         raw_element=elem,
                     )
-                    elements.append(ui_el)
-                    self._cached_elements[curr_id] = ui_el
+                    candidates.append(ui_el)
+                    if has_focus:
+                        focused_ids.add(curr_id)
                     curr_id += 1
                 except Exception:
                     continue
+
+            # Prioritization: If candidate list exceeds limit, bubble focused elements near front
+            if len(candidates) > max_elements:
+                if focused_ids:
+                    candidates.sort(key=lambda el: 0 if el.element_id in focused_ids else 1)
+                selected = candidates[:max_elements]
+            else:
+                selected = candidates
+
+            # Re-index element_id sequentially and cache
+            self._cached_elements.clear()
+            elements: List[UIElement] = []
+            for idx, el in enumerate(selected, start=1):
+                el.element_id = idx
+                self._cached_elements[idx] = el
+                elements.append(el)
 
         except Exception:
             pass
 
         return elements
+
+    def inspect_tree(
+        self,
+        window_title: Optional[str] = None,
+        hwnd: Optional[int] = None,
+        interactive_only: bool = False,
+        max_elements: int = 500,
+    ) -> List[UIElement]:
+        """
+        Extracts semantic UI element hierarchy for target window, finding by window_title or hwnd.
+        """
+        target_hwnd = hwnd
+        if target_hwnd is None and window_title:
+            try:
+                from extra.core.platform.windows.focus import find_window_by_title
+                win = find_window_by_title(window_title)
+                if win:
+                    target_hwnd = win.hwnd
+            except Exception:
+                target_hwnd = None
+
+        return self.inspect_window(
+            hwnd=target_hwnd,
+            interactive_only=interactive_only,
+            max_elements=max_elements,
+        )
 
     def find_element(
         self, query: str, exact: bool = False, interactive_only: bool = True

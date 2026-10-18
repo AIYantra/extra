@@ -84,6 +84,27 @@ class TestExtraScout(unittest.TestCase):
         self.assertIn("name: extra-blender", content)
         self.assertIn("blender.exe -b", content)
 
+    def test_scout_detects_cli_harness(self):
+        """Tests that detect_app_profile discovers CLI-Anything harnesses from registry/path."""
+        prof = detect_app_profile("freecad")
+        self.assertTrue(prof.cli_harness_available)
+        self.assertEqual(prof.cli_harness_name, "cli-anything-freecad")
+        self.assertIn("cli-anything-freecad", " ".join(prof.notes))
+
+    def test_format_skill_markdown_with_harness(self):
+        """Tests that format_skill_markdown renders Dual-Plane instructions when a harness exists."""
+        profile = AppProfile(
+            app_name="freecad",
+            ui_framework="qt",
+            is_installed=True,
+            cli_harness_available=True,
+            cli_harness_name="cli-anything-freecad",
+        )
+        md = format_skill_markdown("freecad", profile, {"summary": "FreeCAD CAD suite."})
+        self.assertIn("Agent-Native CLI: `cli-anything-freecad`", md)
+        self.assertIn("Dual-Plane Fast Path (cli-anything-freecad)", md)
+        self.assertIn("extra_harness_run(harness='freecad'", md)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,6 +85,7 @@ class StallBreaker:
         self._last_hwnd: Optional[int] = None
         self._last_action: Optional[str] = None
         self._recent_diffs: List[int] = []
+        self._recent_clicks: List[Tuple[int, int, str]] = []
         self._last_cognitive_state: str = "NORMAL_PROGRESS"
 
     @property
@@ -222,11 +223,14 @@ class StallBreaker:
         action_name: str = "action",
         before_full_image: Optional[Image.Image] = None,
         after_full_image: Optional[Image.Image] = None,
+        click_coords: Optional[Tuple[int, int]] = None,
+        window_title: Optional[str] = None,
     ) -> ActionOutcome:
         """
         Compares screen state before and after an action using perceptual hashing
         and numpy pixel difference. Applies the 2-strike loop breaker rule.
         Supports global fallback diffing when local ROI delta is zero (Fixes #4, credit: @harshbuttru3).
+        Detects virtual canvas click loops and injects universal keyboard fast-path remedies.
         """
         self.check_safety_abort()
 
@@ -249,22 +253,27 @@ class StallBreaker:
         arr_after = np.asarray(after_image, dtype=np.int16)
         pixel_diff = float(np.mean(np.abs(arr_before - arr_after)))
 
-        # Determine whether visible change occurred locally
-        has_visual_delta = (phash_diff > self.hash_threshold) or (pixel_diff > self.pixel_threshold)
+        # Determine whether visible change occurred locally:
+        if phash_diff > self.hash_threshold:
+            has_visual_delta = True
+        elif phash_diff >= 1 and pixel_diff > self.pixel_threshold:
+            has_visual_delta = True
+        elif phash_diff == 0 and pixel_diff >= 3.0:
+            has_visual_delta = True
+        else:
+            has_visual_delta = False
 
         # 4. Global Fallback Check (Fixes #4, credit: @harshbuttru3)
-        # If local ROI produced zero delta, check if distant screen regions (e.g. 3D viewports, canvas) changed
         global_changed = False
         full_pixel_diff = 0.0
         if not has_visual_delta and not window_changed and before_full_image is not None and after_full_image is not None:
             try:
-                # High-speed downsampled diff (sub-2ms via Nearest Neighbor + numpy mean)
                 small_before = before_full_image.resize((160, 90), Image.Resampling.NEAREST)
                 small_after = after_full_image.resize((160, 90), Image.Resampling.NEAREST)
                 full_arr_before = np.asarray(small_before, dtype=np.int16)
                 full_arr_after = np.asarray(small_after, dtype=np.int16)
                 full_pixel_diff = float(np.mean(np.abs(full_arr_before - full_arr_after)))
-                if full_pixel_diff > self.pixel_threshold:
+                if full_pixel_diff >= max(self.pixel_threshold * 2, 2.0):
                     global_changed = True
                     has_visual_delta = True
             except Exception:
@@ -272,7 +281,25 @@ class StallBreaker:
 
         has_state_change = has_visual_delta or window_changed
 
-        # 5. SOUL Cognitive Stall Analysis (Detects Spinner Loops, Modal Traps, & Crashes)
+        # 5. Spatial Canvas Loop Tracking (Anti-Doom-Loop)
+        is_canvas_loop = False
+        target_title = window_title or ""
+        if click_coords:
+            cx, cy = click_coords
+            if not has_state_change:
+                # Count recent clicks in 45px proximity
+                matching = [
+                    (rx, ry) for rx, ry, rt in self._recent_clicks
+                    if abs(rx - cx) <= 45 and abs(ry - cy) <= 45 and (not rt or not target_title or rt.lower() == target_title.lower())
+                ]
+                if len(matching) >= 2:
+                    is_canvas_loop = True
+                self._recent_clicks.append((cx, cy, target_title))
+                self._recent_clicks = self._recent_clicks[-10:]
+            else:
+                self._recent_clicks.clear()
+
+        # 6. SOUL Cognitive Stall Analysis
         is_potential_spinner = (
             not window_changed
             and 0 < phash_diff <= 8
@@ -286,7 +313,7 @@ class StallBreaker:
         is_spinner = False
         is_modal = False
 
-        if not has_visual_delta or is_potential_spinner or self._current_strikes >= 1:
+        if not has_visual_delta or is_potential_spinner or self._current_strikes >= 1 or is_canvas_loop:
             cog_state, cog_rec = self.classify_cognitive_state(
                 hwnd=after_hwnd or before_hwnd,
                 phash_diff=phash_diff,
@@ -298,11 +325,43 @@ class StallBreaker:
 
             if cog_state == "SPINNER_BLOCKED":
                 is_spinner = True
-                has_state_change = False  # Override: spinner churning is NOT true progression!
+                has_state_change = False
             elif cog_state == "MODAL_BLOCKED":
                 is_modal = True
             elif cog_state == "APP_CRASHED":
                 has_state_change = False
+
+        if is_canvas_loop:
+            self._current_strikes = max(self._current_strikes + 1, self.max_strikes)
+            cognitive_state = "CANVAS_LOOP"
+            low_title = target_title.lower()
+            if any(k in low_title for k in ("sheet", "spread", "excel", "calc")):
+                recommended_action = (
+                    "VIRTUAL CANVAS LOOP DETECTED: You are clicking repeatedly on a virtualized spreadsheet canvas "
+                    "or transient popup menu that dismisses upon focus shift. STOP clicking coordinates. "
+                    "Use universal keyboard shortcuts: "
+                    "1. Press 'Shift + F11' to insert a new sheet tab. "
+                    "2. Press 'Alt + /' (Google Sheets) or 'Alt + Q' (Excel) to open the Action Search Bar, type 'Rename sheet', and press Enter."
+                )
+            else:
+                recommended_action = (
+                    f"VIRTUAL CANVAS LOOP DETECTED: Repetitive clicks near ({click_coords[0]}, {click_coords[1]}) produced no durable change. "
+                    "Transient menus dismiss on window focus. Use keyboard shortcuts or search menus (Alt+/, Ctrl+Shift+P) instead."
+                )
+            status = StallStatus.STALLED
+            message = f"VIRTUAL CANVAS LOOP DETECTED ({self._current_strikes}/{self.max_strikes}): {recommended_action}"
+            return ActionOutcome(
+                status=status,
+                strikes=self._current_strikes,
+                phash_diff=phash_diff,
+                pixel_diff=round(pixel_diff, 3),
+                window_changed=window_changed,
+                message=message,
+                cognitive_state=cognitive_state,
+                recommended_action=recommended_action,
+                is_spinner_detected=is_spinner,
+                is_modal_blocked=is_modal,
+            )
 
         if has_state_change:
             # Action had visible effect: reset strikes
@@ -329,7 +388,6 @@ class StallBreaker:
             )
         else:
             # Action produced NO visual or window change
-            # If target changed from previous action, start a new strike count rather than compounding
             if self._last_action and self._last_action != action_name:
                 self._current_strikes = 1
             else:
@@ -385,5 +443,6 @@ class StallBreaker:
         self._last_hwnd = None
         self._last_action = None
         self._recent_diffs.clear()
+        self._recent_clicks.clear()
         self._last_cognitive_state = "NORMAL_PROGRESS"
 
