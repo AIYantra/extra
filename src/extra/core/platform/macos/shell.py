@@ -41,6 +41,9 @@ BUILTIN_MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "photos": {"target": "Photos", "bundle": "/System/Applications/Photos.app", "proc": "Photos", "type": "app"},
     "code": {"target": "Visual Studio Code", "bundle": "/Applications/Visual Studio Code.app", "proc": "Code", "type": "app"},
     "vscode": {"target": "Visual Studio Code", "bundle": "/Applications/Visual Studio Code.app", "proc": "Code", "type": "app"},
+    "vlc": {"target": "VLC", "bundle": "/Applications/VLC.app", "proc": "VLC", "type": "app"},
+    "blender": {"target": "Blender", "bundle": "/Applications/Blender.app", "proc": "Blender", "type": "app"},
+    "canva": {"target": "Canva", "bundle": "/Applications/Canva.app", "proc": "Canva", "type": "app"},
 }
 
 MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_MAC_APP_REGISTRY)

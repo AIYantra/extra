@@ -13,7 +13,7 @@ authors = [
     { name = "AIYantra Engineering Team", email = "engineering@yantraos.com" }
 ]
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2",
     "playwright>=1.47.0",
     "pillow>=10.4.0",
     "beautifulsoup4>=4.12.3",

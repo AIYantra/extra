@@ -2,7 +2,7 @@
 # Audited: 100% Enterprise-Clean & Free of Unverified Solo Binary Blobs
 
 # ── Tier 1: Microsoft & Anthropic Official ─────────────────────────────────────
-mcp>=1.0.0                      # Official Anthropic Model Context Protocol SDK
+mcp>=1.0.0,<2                   # Official Anthropic Model Context Protocol SDK
 playwright>=1.47.0              # Official Microsoft Browser Automation (Chromium/Edge/WebKit)
 
 # ── Tier 1: Python Software Foundation & Foundational OSS ──────────────────────

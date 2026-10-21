@@ -400,6 +400,7 @@ BUILTIN_APP_FALLBACKS: Dict[str, Dict[str, Any]] = {
     },
     "blender": {"candidates": ["blender"], "type": "bin", "proc": "blender"},
     "vlc": {"candidates": ["vlc"], "type": "bin", "proc": "vlc"},
+    "canva": {"candidates": ["canva"], "type": "bin", "proc": "canva"},
 }
 
 # Compatibility dictionary mapping directly to target names

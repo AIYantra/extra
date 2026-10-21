@@ -49,7 +49,7 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
-            xvfb-run python -m unittest discover tests
+            xvfb-run python -m pytest tests -p no:faulthandler
           else
-            python -m unittest discover tests
+            python -m pytest tests -p no:faulthandler
           fi

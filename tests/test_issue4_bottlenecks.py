@@ -20,12 +20,8 @@ from extra.core.platform.base import CaptureResult
 from extra.core.stall_breaker import StallBreaker, StallStatus
 from extra.mcp.server import extra_screenshot, extra_focus_window
 
-if sys.platform == "win32":
-    from extra.core.platform.windows.shell import resolve_executable, APP_REGISTRY
-    from extra.core.platform.windows.focus import find_window_by_title
-else:
-    from extra.core.platform.macos.shell import resolve_executable, MAC_APP_REGISTRY as APP_REGISTRY
-    from extra.core.platform.macos.focus import find_window_by_title
+from extra.fastpath.shell import resolve_executable, APP_REGISTRY
+from extra.core.focus import find_window_by_title
 
 
 class TestIssue4Bottlenecks(unittest.TestCase):
