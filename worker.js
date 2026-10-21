@@ -59,6 +59,46 @@ export default {
       });
     }
 
+    // Route RFC 8414 & OpenID Connect Discovery (for ChatGPT Custom MCP Server OAuth Discovery)
+    if (
+      url.pathname === "/.well-known/oauth-authorization-server" ||
+      url.pathname === "/.well-known/openid-configuration"
+    ) {
+      const oauthMetadata = {
+        issuer: "https://extra.yantraos.com",
+        authorization_endpoint: "https://extra.yantraos.com/oauth/authorize",
+        token_endpoint: "https://extra.yantraos.com/oauth/token",
+        token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        code_challenge_methods_supported: ["S256", "plain"],
+        scopes_supported: ["mcp", "offline_access"]
+      };
+      return new Response(JSON.stringify(oauthMetadata), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          ...CORS_HEADERS,
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
+    if (url.pathname === "/.well-known/oauth-protected-resource") {
+      return new Response(JSON.stringify({
+        resource: "https://extra.yantraos.com/mcp",
+        authorization_servers: ["https://extra.yantraos.com"],
+        scopes_supported: ["mcp"]
+      }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          ...CORS_HEADERS,
+          "Cache-Control": "public, max-age=3600",
+        },
+      });
+    }
+
     // Route 0: Universal CORS Preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
