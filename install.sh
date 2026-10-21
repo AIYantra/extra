@@ -241,7 +241,7 @@ mkdir -p "$BIN_DIR"
 
 cat << EOF > "$BIN_DIR/extra"
 #!/usr/bin/env bash
-export PYTHONPATH="$INSTALL_DIR:\$PYTHONPATH"
+export PYTHONPATH="$INSTALL_DIR/src:$INSTALL_DIR:\$PYTHONPATH"
 exec "$VENV_DIR/bin/python" -m extra.cli "\$@"
 EOF
 chmod +x "$BIN_DIR/extra"
