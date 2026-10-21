@@ -95,7 +95,7 @@ export default {
         method: request.method,
         headers: reqHeaders,
         body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
-        redirect: "follow",
+        redirect: "manual",
       });
 
       const resHeaders = new Headers(backendRes.headers);
