@@ -63,6 +63,9 @@ BUILTIN_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "mspaint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "photos": {"target": "ms-photos:", "type": "uri", "proc": "Photos.exe"},
     "store": {"target": "ms-windows-store:", "type": "uri", "proc": "WinStore.App.exe"},
+    "vlc": {"target": "vlc.exe", "type": "exe", "proc": "vlc.exe"},
+    "blender": {"target": "blender.exe", "type": "exe", "proc": "blender.exe"},
+    "canva": {"target": "canva.exe", "type": "exe", "proc": "canva.exe"},
 }
 
 APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_APP_REGISTRY)

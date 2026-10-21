@@ -2627,7 +2627,13 @@ def create_unified_mcp_app() -> Any:
     import contextlib
     from starlette.applications import Starlette
     from starlette.routing import Route
-    from mcp.server.fastmcp.server import StreamableHTTPASGIApp
+    try:
+        from mcp.server.fastmcp.server import StreamableHTTPASGIApp
+    except ImportError:
+        try:
+            from mcp.server.mcpserver import StreamableHTTPASGIApp
+        except ImportError:
+            StreamableHTTPASGIApp = None
 
     allowed = list(server.settings.transport_security.allowed_hosts or [])
     for h in ("testserver", "testserver:*", "127.0.0.1:*", "localhost:*", "[::1]:*"):
@@ -2639,7 +2645,10 @@ def create_unified_mcp_app() -> Any:
     _ = server.streamable_http_app()
     if hasattr(server, "_session_manager") and server._session_manager is not None:
         server._session_manager.security_settings = server.settings.transport_security
-    streamable_asgi = StreamableHTTPASGIApp(server.session_manager)
+    if StreamableHTTPASGIApp is not None and hasattr(server, "session_manager"):
+        streamable_asgi = StreamableHTTPASGIApp(server.session_manager)
+    else:
+        streamable_asgi = server.streamable_http_app()
 
     sse_route = None
     for r in sse_app.routes:
