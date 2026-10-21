@@ -45,9 +45,68 @@ export default {
     const url = new URL(request.url);
     const userAgent = (request.headers.get("user-agent") || "").toLowerCase();
 
-    // Route 0: CORS Preflight
-    if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    const AWS_MCP_HUB_ORIGIN = env && env.AWS_MCP_HUB_ORIGIN ? env.AWS_MCP_HUB_ORIGIN : "https://nfmcn307n7.execute-api.ap-south-1.amazonaws.com";
+
+    // Route OpenAI Domain Verification Challenge
+    if (url.pathname === "/.well-known/openai-apps-challenge") {
+      return new Response("F58MIaoD5s33CTGsLkyWNSdZf0KVl-UY1h4JPyWrt8o", {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=0, must-revalidate",
+        },
+      });
+    }
+
+    // Route 0: Universal CORS Preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...CORS_HEADERS,
+          "Access-Control-Allow-Headers": "Content-Type, User-Agent, Authorization, Accept, X-Requested-With",
+        },
+      });
+    }
+
+    // Route MCP: Model Context Protocol & OpenAI ChatGPT Plugin Gateway
+    if (
+      url.pathname === "/mcp" ||
+      url.pathname === "/sse" ||
+      url.pathname.startsWith("/messages") ||
+      url.pathname.startsWith("/oauth/") ||
+      url.pathname.startsWith("/api/auth/") ||
+      url.pathname.startsWith("/api/paypal/") ||
+      url.pathname.startsWith("/api/action/") ||
+      url.pathname === "/openapi.json" ||
+      url.pathname === "/openapi.yaml" ||
+      url.pathname === "/.well-known/ai-plugin.json" ||
+      url.pathname === "/plugin.json" ||
+      url.pathname === "/health"
+    ) {
+      const targetUrl = new URL(url.pathname + url.search, AWS_MCP_HUB_ORIGIN);
+      const reqHeaders = new Headers(request.headers);
+      reqHeaders.set("Host", targetUrl.hostname);
+      reqHeaders.set("X-Forwarded-Host", url.hostname);
+      reqHeaders.set("X-Forwarded-Proto", "https");
+
+      const backendRes = await fetch(targetUrl.toString(), {
+        method: request.method,
+        headers: reqHeaders,
+        body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        redirect: "follow",
+      });
+
+      const resHeaders = new Headers(backendRes.headers);
+      resHeaders.set("Access-Control-Allow-Origin", "*");
+      resHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
+      resHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
+
+      return new Response(backendRes.body, {
+        status: backendRes.status,
+        headers: resHeaders,
+      });
     }
 
     // Route 1: Health Diagnostic Check
@@ -268,7 +327,8 @@ export default {
     const targetUrl = new URL(url.pathname + url.search, S3_ORIGIN);
 
     const reqHeaders = new Headers(request.headers);
-    reqHeaders.set("Host", "extra.yantraos.com");
+    reqHeaders.delete("host");
+    reqHeaders.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
     const originRes = await fetch(targetUrl.toString(), {
       method: request.method,
@@ -286,13 +346,13 @@ export default {
       "Content-Security-Policy",
       [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' https://player.vimeo.com https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms",
+        "script-src 'self' 'unsafe-inline' https://player.vimeo.com https://static.cloudflareinsights.com https://www.googletagmanager.com https://www.clarity.ms https://*.clarity.ms https://www.paypal.com https://*.paypalobjects.com",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https: https://www.googletagmanager.com https://*.google-analytics.com https://*.clarity.ms https://c.bing.com",
         "font-src 'self' data:",
-        "frame-src 'self' https://player.vimeo.com",
+        "frame-src 'self' https://player.vimeo.com https://*.paypal.com",
         "media-src 'self' blob: data: https:",
-        "connect-src 'self' https://cloudflareinsights.com https://*.vimeo.com https://*.vimeocdn.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.clarity.ms https://c.bing.com",
+        "connect-src 'self' https://cloudflareinsights.com https://*.vimeo.com https://*.vimeocdn.com https://*.google-analytics.com https://*.analytics.google.com https://*.googletagmanager.com https://*.clarity.ms https://c.bing.com https://*.paypal.com",
         "frame-ancestors 'none'",
         "base-uri 'self'",
         "form-action 'self'",
@@ -308,7 +368,7 @@ export default {
       resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
       resHeaders.set("s-maxage", "31536000");
     } else {
-      resHeaders.set("Cache-Control", "public, max-age=0, s-maxage=3600, must-revalidate");
+      resHeaders.set("Cache-Control", "public, max-age=0, s-maxage=0, must-revalidate");
     }
 
     const finalRes = new Response(originRes.body, {

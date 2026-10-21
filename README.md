@@ -18,7 +18,7 @@
 [![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
 [![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
 
-[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Linux Guide](README_LINUX.md) • [macOS Guide](README_MACOS.md) • [Architecture](ARCHITECTURE.md) • [License](LICENSE)
+[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Linux Guide](README_LINUX.md) • [macOS Guide](README_MACOS.md) • [Architecture](docs/ARCHITECTURE.md) • [License](LICENSE)
 
 <br/>
 <br/>
@@ -249,7 +249,7 @@ extra/
 ├── smithery.yaml           # Smithery 1-click deployment manifest
 ├── requirements.txt        # Enterprise-audited dependency manifest
 ├── STARTER_PROMPT.md       # Master AI system prompt & setup directive
-├── ARCHITECTURE.md         # Full System Architecture Specification
+├── docs/                   # Full System Architecture & Specifications
 └── RELEASE_NOTES.md        # Comprehensive version release notes
 ```
 

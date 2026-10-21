@@ -184,11 +184,12 @@ def run_universal_engine_mandate_compliance() -> Dict[str, Any]:
     print("[Benchmark 3] Universal Engine Mandate Compliance Audit...", end=" ")
 
     # Files to audit
+    extra_src = repo_root / "src" / "extra" if (repo_root / "src" / "extra").exists() else repo_root / "extra"
     files_to_audit = [
-        repo_root / "extra" / "core" / "distiller.py",
-        repo_root / "extra" / "core" / "subtask.py",
-        repo_root / "extra" / "core" / "soul" / "vision_parser.py",
-        repo_root / "extra" / "mcp" / "server.py",
+        extra_src / "core" / "distiller.py",
+        extra_src / "core" / "subtask.py",
+        extra_src / "core" / "soul" / "vision_parser.py",
+        extra_src / "mcp" / "server.py",
     ]
 
     prohibited_app_names = [

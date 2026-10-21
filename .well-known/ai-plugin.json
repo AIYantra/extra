@@ -1,0 +1,40 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Extra Desktop Operator",
+  "name_for_model": "extra_desktop",
+  "description_for_human": "Sovereign desktop automation and computer-use engine that can see your screen, click UI elements, launch apps, and automate tasks.",
+  "description_for_model": "Universal computer-use engine and MCP server. Allows the model to inspect desktop displays via screenshots, launch native desktop applications, click UI elements with visual grounding, type text, send hotkeys, and arrange window layouts across Linux, Windows, and macOS.",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+    "verification_tokens": {
+      "openai": "REPLACE_WITH_YOUR_VERIFICATION_TOKEN"
+    }
+  },
+  "logo_url": "https://raw.githubusercontent.com/AIYantra/extra/main/assets/banner.png",
+  "contact_email": "support@yantraos.com",
+  "legal_info_url": "https://github.com/AIYantra/extra/blob/main/LICENSE",
+  "extensions": {
+    "com.openai": {
+      "mcp_server": {
+        "transport": "sse",
+        "url": "https://your-bridge-subdomain.trycloudflare.com/sse"
+      },
+      "capabilities": [
+        "computer_use",
+        "screen_perception",
+        "os_automation"
+      ],
+      "tools": [
+        "extra_screenshot",
+        "extra_launch",
+        "extra_click",
+        "extra_type",
+        "extra_hotkey",
+        "extra_snap_layout",
+        "extra_batch_actions",
+        "extra_task_complete"
+      ]
+    }
+  }
+}

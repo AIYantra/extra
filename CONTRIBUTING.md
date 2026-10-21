@@ -98,7 +98,7 @@ extra/
 ├── pyproject.toml          # PEP 518 / 621 package manifest
 ├── requirements.txt        # Enterprise-audited dependency manifest
 ├── STARTER_PROMPT.md       # Master AI system prompt & setup directive
-├── ARCHITECTURE.md         # Full System Architecture Specification
+├── docs/                   # Full System Architecture & Specifications
 └── test_core_engine.py     # End-to-end automated integration tests
 ```
 

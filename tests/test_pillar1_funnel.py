@@ -27,9 +27,16 @@ class TestPillar1Funnel(unittest.TestCase):
         self.readme_root_path = self.root_dir / "README.md"
         self.starter_prompt_path = self.root_dir / "STARTER_PROMPT_MACOS.md"
         self.install_sh_path = self.root_dir / "install.sh"
-        self.claude_template_path = self.root_dir / "claude_desktop_config.macos.template.json"
-        self.cursor_template_path = self.root_dir / "cursor_mcp.macos.template.json"
-        self.windsurf_template_path = self.root_dir / "windsurf_mcp.macos.template.json"
+        templates_dir = self.root_dir / "templates"
+        self.claude_template_path = (templates_dir / "claude_desktop_config.macos.template.json"
+                                     if (templates_dir / "claude_desktop_config.macos.template.json").exists()
+                                     else self.root_dir / "claude_desktop_config.macos.template.json")
+        self.cursor_template_path = (templates_dir / "cursor_mcp.macos.template.json"
+                                     if (templates_dir / "cursor_mcp.macos.template.json").exists()
+                                     else self.root_dir / "cursor_mcp.macos.template.json")
+        self.windsurf_template_path = (templates_dir / "windsurf_mcp.macos.template.json"
+                                       if (templates_dir / "windsurf_mcp.macos.template.json").exists()
+                                       else self.root_dir / "windsurf_mcp.macos.template.json")
 
     def test_entry_point_a_directive_presence(self):
         """Entry Point A single-prompt directive must exist verbatim across core docs."""

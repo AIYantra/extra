@@ -36,6 +36,17 @@ dependencies = [
     "jeepney>=0.8.0; sys_platform == 'linux'",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
+benchmark = [
+    "pytest-benchmark>=4.0.0",
+]
+
 [project.scripts]
 extra = "extra.cli:main"
 extra-desktop = "extra.cli:main"
@@ -45,17 +56,20 @@ Homepage = "https://extra.yantraos.com"
 Repository = "https://github.com/AIYantra/extra"
 Documentation = "https://extra.yantraos.com/docs"
 
-[tool.setuptools.package-dir]
-"extra" = "."
-"extra.core" = "core"
-"extra.core.platform" = "core/platform"
-"extra.core.platform.windows" = "core/platform/windows"
-"extra.core.platform.macos" = "core/platform/macos"
-"extra.core.platform.linux" = "core/platform/linux"
-"extra.fastpath" = "fastpath"
-"extra.mcp" = "mcp"
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-p no:faulthandler"
+markers = [
+    "unit: Fast isolated unit tests with zero system dependencies",
+    "integration: Subsystem integration tests",
+    "windows: Tests requiring Windows Win32 / UIA subsystems",
+    "linux: Tests requiring Linux X11 / Wayland / AT-SPI2 subsystems",
+    "macos: Tests requiring macOS Quartz / Accessibility subsystems",
+    "benchmark: Performance profiling and stress benchmark suites",
+    "security: Security audit and vulnerability verification tests",
+]
 
