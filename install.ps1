@@ -280,7 +280,7 @@ if (-not (Test-Path $binDir)) {
 
 $parentDir = Split-Path -Parent $installDir
 $cmdWrapper = Join-Path $binDir "extra.cmd"
-"@echo off`nset PYTHONPATH=$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
+"@echo off`nset PYTHONPATH=$installDir\src;$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
 
 # Add ~/.extra/bin to User PATH if not already there
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
