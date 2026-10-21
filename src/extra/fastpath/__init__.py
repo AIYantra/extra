@@ -43,6 +43,19 @@ from extra.fastpath.vectorizer import (
     extract_vector_strokes,
     generate_vectorizer_preview,
 )
+from extra.relay.tunnel import (
+    ensure_cloudflared_installed,
+    find_cloudflared_binary,
+    format_chatgpt_banner,
+    generate_secure_token,
+    start_tunnel,
+    stop_tunnel,
+)
+from extra.relay.client import (
+    DEFAULT_RELAY_URL,
+    run_relay_loop,
+    start_relay,
+)
 
 __all__ = [
     "LaunchResult",
@@ -70,5 +83,14 @@ __all__ = [
     "trigger_workspace_export",
     "extract_vector_strokes",
     "generate_vectorizer_preview",
+    "start_tunnel",
+    "stop_tunnel",
+    "find_cloudflared_binary",
+    "ensure_cloudflared_installed",
+    "generate_secure_token",
+    "format_chatgpt_banner",
+    "start_relay",
+    "run_relay_loop",
+    "DEFAULT_RELAY_URL",
 ]
 

@@ -27,7 +27,7 @@ class TestPillar2Installer(unittest.TestCase):
         self.root_dir = Path(__file__).resolve().parent.parent
         self.install_sh_path = self.root_dir / "install.sh"
         self.requirements_path = self.root_dir / "requirements.txt"
-        self.cli_path = self.root_dir / "cli.py"
+        self.cli_path = self.root_dir / "src" / "extra" / "cli.py" if (self.root_dir / "src" / "extra" / "cli.py").exists() else self.root_dir / "cli.py"
         self.content = self.install_sh_path.read_text(encoding="utf-8")
         self.req_content = self.requirements_path.read_text(encoding="utf-8")
         self.cli_content = self.cli_path.read_text(encoding="utf-8")

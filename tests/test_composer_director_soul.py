@@ -258,7 +258,8 @@ class TestUniversalEngineCompliance(unittest.TestCase):
     def test_zero_app_specific_code_in_composer(self):
         """Verifies no hardcoded creative app names in extra/core/composer."""
         repo_root = Path(__file__).resolve().parent.parent
-        composer_dir = repo_root / "core" / "composer"
+        src_root = repo_root / "src" / "extra" if (repo_root / "src" / "extra").exists() else repo_root
+        composer_dir = src_root / "core" / "composer"
         for f in composer_dir.glob("*.py"):
             content = f.read_text(encoding="utf-8").lower()
             for forbidden in ["if app == ", "if 'premiere' in", "if 'blender' in", "if 'canva' in"]:
@@ -270,7 +271,8 @@ class TestUniversalEngineCompliance(unittest.TestCase):
     def test_zero_app_specific_code_in_bridge(self):
         """Verifies no hardcoded creative app names in extra/fastpath/bridge.py."""
         repo_root = Path(__file__).resolve().parent.parent
-        bridge_file = repo_root / "fastpath" / "bridge.py"
+        src_root = repo_root / "src" / "extra" if (repo_root / "src" / "extra").exists() else repo_root
+        bridge_file = src_root / "fastpath" / "bridge.py"
         content = bridge_file.read_text(encoding="utf-8").lower()
         for forbidden in ["if app == ", "if 'canva' in", "if 'photoshop' in"]:
             self.assertNotIn(

@@ -54,6 +54,80 @@ def test_fs_batch_create_tree_path_traversal():
         assert "blocked" in traversal_item.get("error", "").lower()
 
 
+def test_fs_batch_delete_path_traversal():
+    """Verifies that delete operation strictly blocks path traversal and external file deletions."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir).resolve()
+        base_path = tmp_path / "workspace"
+        base_path.mkdir(parents=True, exist_ok=True)
+
+        victim_file = tmp_path / "victim_data.txt"
+        victim_file.write_text("SENSITIVE DATA", encoding="utf-8")
+
+        safe_file = base_path / "safe_to_delete.txt"
+        safe_file.write_text("TEMP", encoding="utf-8")
+
+        # 1. Attempt relative traversal deletion
+        res_rel = execute_fs_batch(
+            operation="delete",
+            base_dir=str(base_path),
+            deletes=["../victim_data.txt"]
+        )
+        assert victim_file.exists(), "Relative traversal delete breached containment!"
+        assert res_rel["items"][0]["deleted"] is False
+        assert "blocked" in res_rel["items"][0]["error"].lower()
+
+        # 2. Attempt absolute path deletion
+        res_abs = execute_fs_batch(
+            operation="delete",
+            base_dir=str(base_path),
+            deletes=[str(victim_file)]
+        )
+        assert victim_file.exists(), "Absolute path delete breached containment!"
+        assert res_abs["items"][0]["deleted"] is False
+        assert "blocked" in res_abs["items"][0]["error"].lower()
+
+        # 3. Legitimate contained deletion
+        res_safe = execute_fs_batch(
+            operation="delete",
+            base_dir=str(base_path),
+            deletes=["safe_to_delete.txt"]
+        )
+        assert not safe_file.exists(), "Legitimate contained deletion failed!"
+        assert res_safe["items"][0]["deleted"] is True
+
+
+def test_fs_batch_rename_path_traversal():
+    """Verifies that batch_rename strictly blocks path escapes and external renaming."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir).resolve()
+        base_path = tmp_path / "workspace"
+        base_path.mkdir(parents=True, exist_ok=True)
+
+        local_file = base_path / "origin.txt"
+        local_file.write_text("LOCAL", encoding="utf-8")
+
+        # 1. Attempt renaming outside workspace
+        res_escape = execute_fs_batch(
+            operation="batch_rename",
+            base_dir=str(base_path),
+            renames=[{"from": "origin.txt", "to": "../escaped_data.txt"}]
+        )
+        assert not (tmp_path / "escaped_data.txt").exists(), "Renamed file escaped containment!"
+        assert res_escape["items"][0]["success"] is False
+        assert "blocked" in res_escape["items"][0]["error"].lower()
+
+        # 2. Legitimate contained rename
+        res_safe = execute_fs_batch(
+            operation="batch_rename",
+            base_dir=str(base_path),
+            renames=[{"from": "origin.txt", "to": "clean_target.txt"}]
+        )
+        assert (base_path / "clean_target.txt").exists()
+        assert not local_file.exists()
+        assert res_safe["items"][0]["success"] is True
+
+
 def test_bridge_ambient_secret_scrubbing():
     """Verifies that ambient API keys and secrets do not leak into bridge execution."""
     test_secret_key = "EXTRA_TEST_SECRET_API_KEY"
@@ -126,3 +200,23 @@ def test_subtask_pattern7_shell_rejection():
     assert len(actions) > 0, "notepad macro should be accepted!"
     assert actions[0]["action"] == "launch"
     assert actions[0]["app_name"] == "notepad"
+
+
+def test_relay_allowed_tools_enforcement():
+    """Verifies that remote relay strictly blocks dangerous execution tools like extra_execute_bridge."""
+    import asyncio
+    from extra.fastpath.relay import execute_local_tool, get_allowed_relay_tools
+
+    allowed = get_allowed_relay_tools()
+    assert "extra_execute_bridge" not in allowed, "extra_execute_bridge must be excluded by default"
+    assert "extra_pip_control" not in allowed, "extra_pip_control must be excluded by default"
+
+    # Block bridge execution
+    res = asyncio.run(execute_local_tool("extra_execute_bridge", {"runtime": "python", "payload": "pass"}))
+    assert res["success"] is False
+    assert "security policy violation" in res["error"].lower()
+
+    # Block dunder / reflection execution
+    res_dunder = asyncio.run(execute_local_tool("__import__", {"name": "os"}))
+    assert res_dunder["success"] is False
+    assert "not permitted" in res_dunder["error"].lower()

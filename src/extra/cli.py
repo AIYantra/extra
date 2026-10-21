@@ -359,8 +359,45 @@ def cmd_run(args: argparse.Namespace) -> int:
         os.environ["EXTRA_ISOLATED_DESKTOP"] = "1"
     if getattr(args, "pip", False):
         os.environ["EXTRA_PIP_PREVIEW"] = "1"
+
+    transport = getattr(args, "transport", "stdio")
+    host = getattr(args, "host", "127.0.0.1")
+    port = getattr(args, "port", 8000)
+    auth_token = getattr(args, "auth_token", None)
+    allowed_hosts = getattr(args, "allowed_hosts", None)
+    tunnel = getattr(args, "tunnel", False)
+    if allowed_hosts and isinstance(allowed_hosts, str):
+        allowed_hosts = [h.strip() for h in allowed_hosts.split(",") if h.strip()]
+
     from extra.mcp.server import main
-    main()
+    main(transport=transport, host=host, port=port, auth_token=auth_token, allowed_hosts=allowed_hosts, tunnel=tunnel)
+    return 0
+
+
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Starts the Extra MCP server over SSE HTTP transport (for ChatGPT plugins & web agents)."""
+    setattr(args, "transport", "sse")
+    return cmd_run(args)
+
+
+def cmd_connect(args: argparse.Namespace) -> int:
+    """Connects this desktop to the Extra Cloud Hub for ChatGPT automation."""
+    from extra.relay import start_relay, DEFAULT_RELAY_URL
+    hub_url = getattr(args, "hub", None) or os.environ.get("EXTRA_HUB_URL") or DEFAULT_RELAY_URL
+    token = getattr(args, "token", None)
+    if not token or token == "anonymous":
+        token = os.environ.get("EXTRA_KEY") or os.environ.get("EXTRA_RELAY_KEY")
+    if not token or token == "anonymous":
+        print("[!] Error: Workstation link key is required to connect to the Extra Cloud Hub.")
+        print("    Get your key from your dashboard at: https://extra.yantraos.com/dashboard")
+        print("    Then run:")
+        print("      extra connect --key <your_key>")
+        return 1
+    start_relay(
+        hub_url=hub_url,
+        token=token,
+        device_name=getattr(args, "name", None),
+    )
     return 0
 
 
@@ -1035,7 +1072,8 @@ def check_first_run_consent() -> None:
         save_config(cfg)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Builds and returns the top-level ArgumentParser for Extra CLI."""
     parser = argparse.ArgumentParser(
         prog="extra",
         description="Extra — Flashless macOS, Windows & Linux Computer-Use Engine & MCP Server",
@@ -1069,10 +1107,31 @@ def main() -> None:
     update_parser.add_argument("--force", action="store_true", help="Force update and reset local changes to upstream")
 
     # run
-    run_parser = subparsers.add_parser("run", help="Start the MCP Server on stdio")
-    run_parser.add_argument("--transport", default="stdio", choices=["stdio"], help="Transport mode")
+    run_parser = subparsers.add_parser("run", help="Start the MCP Server on stdio or SSE")
+    run_parser.add_argument("--transport", default="stdio", choices=["stdio", "sse", "streamable-http"], help="Transport mode (default: stdio)")
+    run_parser.add_argument("--host", default="127.0.0.1", help="Host IP to bind to when running SSE or HTTP transport (default: 127.0.0.1)")
+    run_parser.add_argument("--port", "-p", type=int, default=8000, help="Port to bind to when running SSE or HTTP transport (default: 8000)")
+    run_parser.add_argument("--auth-token", "--auth", default=None, help="Bearer authorization token to secure SSE transport")
+    run_parser.add_argument("--allowed-hosts", default=None, help="Comma-separated allowed host header values for DNS rebinding protection")
+    run_parser.add_argument("--tunnel", "-t", action="store_true", help="Launch secure Cloudflare Quick Tunnel (public HTTPS) for pairing with ChatGPT or remote agents")
     run_parser.add_argument("--isolate", action="store_true", help="Confine automation to isolated child session / virtual desktop")
     run_parser.add_argument("--pip", action="store_true", help="Launch live Picture-in-Picture floating preview window")
+
+    # serve (ChatGPT Plugin & Remote Web Agent bridge)
+    serve_parser = subparsers.add_parser("serve", help="Start the Extra MCP Server over SSE HTTP transport (for ChatGPT plugins & web agents)")
+    serve_parser.add_argument("--host", default="127.0.0.1", help="Host IP to bind to (default: 127.0.0.1; use 0.0.0.0 for public/tunnel)")
+    serve_parser.add_argument("--port", "-p", type=int, default=8000, help="Port to bind to (default: 8000)")
+    serve_parser.add_argument("--auth-token", "--auth", default=None, help="Bearer authorization token to secure SSE transport")
+    serve_parser.add_argument("--allowed-hosts", default=None, help="Comma-separated allowed host headers (e.g. *.trycloudflare.com)")
+    serve_parser.add_argument("--tunnel", "-t", action="store_true", help="Launch secure Cloudflare Quick Tunnel (public HTTPS) for pairing with ChatGPT or remote agents")
+    serve_parser.add_argument("--isolate", action="store_true", help="Confine automation to isolated child session / virtual desktop")
+    serve_parser.add_argument("--pip", action="store_true", help="Launch live Picture-in-Picture floating preview window")
+
+    # connect (Desktop Relay Client for ChatGPT & Cloud Hub)
+    connect_parser = subparsers.add_parser("connect", help="Connect this desktop to the Extra Cloud Hub for ChatGPT automation")
+    connect_parser.add_argument("--hub", default=None, help="WebSocket Relay Hub URL (default: official extra.yantraos.com relay)")
+    connect_parser.add_argument("--key", "--token", dest="token", default="anonymous", help="Setup key or authentication token from extra.yantraos.com account")
+    connect_parser.add_argument("--name", default=None, help="Custom friendly device name for this workstation")
 
     # pip (Picture-in-Picture floating preview window)
     pip_parser = subparsers.add_parser("pip", help="Control hardware-accelerated Picture-in-Picture floating preview window")
@@ -1154,6 +1213,11 @@ def main() -> None:
     audit_parser.add_argument("--record", "-r", action="store_true", help="Record audited mission metrics into local impact_ledger.json")
     audit_parser.add_argument("--json", action="store_true", help="Output audit results in raw JSON")
 
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     if not args.command:
@@ -1195,6 +1259,10 @@ def main() -> None:
         sys.exit(cmd_uninstall(args))
     elif args.command == "run":
         sys.exit(cmd_run(args))
+    elif args.command == "serve":
+        sys.exit(cmd_serve(args))
+    elif args.command == "connect":
+        sys.exit(cmd_connect(args))
     elif args.command == "pip":
         sys.exit(cmd_pip(args))
     elif args.command == "inspect":

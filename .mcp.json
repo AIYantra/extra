@@ -2,7 +2,10 @@
   "mcpServers": {
     "extra": {
       "command": "npx",
-      "args": ["-y", "@yantraos/extra-desktop", "run"]
+      "args": ["-y", "@yantraos/extra-desktop", "run"],
+      "env": {
+        "EXTRA_PLATFORM": "auto"
+      }
     }
   }
 }

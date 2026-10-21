@@ -211,15 +211,31 @@ def _send_inputs(inputs: List[INPUT]) -> int:
     return int(user32.SendInput(n, arr, ctypes.sizeof(INPUT)))
 
 
+def _release_stuck_modifiers() -> None:
+    """Releases any lingering modifier keys (Ctrl, Alt, Shift, Win) to avoid keystroke corruption."""
+    mods = (
+        win32con.VK_CONTROL, win32con.VK_LCONTROL, win32con.VK_RCONTROL,
+        win32con.VK_MENU, win32con.VK_LMENU, win32con.VK_RMENU,
+        win32con.VK_SHIFT, win32con.VK_LSHIFT, win32con.VK_RSHIFT,
+        win32con.VK_LWIN, win32con.VK_RWIN,
+    )
+    for vk in mods:
+        if user32.GetAsyncKeyState(vk) & 0x8000:
+            ku = INPUT(type=INPUT_KEYBOARD)
+            ku.ki = KEYBDINPUT(wVk=vk, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+            _send_inputs([ku])
+
+
 def instant_type(text: str, press_enter: bool = False) -> None:
     """
-    Injects Unicode strings directly into the Windows input queue in sub-5ms.
+    Injects Unicode strings directly into the Windows input queue with robust hardware pacing.
     Uses Win32 KEYEVENTF_UNICODE with UTF-16 code units (supporting surrogate pairs for emojis).
+    Paced with distinct KeyDown/KeyUp separation to prevent WinUI 3 buffer overflows.
     """
     if not text and not press_enter:
         return
 
-    inputs: List[INPUT] = []
+    _release_stuck_modifiers()
 
     # Encode to UTF-16-LE words to cleanly capture surrogate pairs (e.g., emojis)
     utf16_bytes = text.encode("utf-16-le")
@@ -247,16 +263,20 @@ def instant_type(text: str, press_enter: bool = False) -> None:
             time=0,
             dwExtraInfo=0,
         )
-        inputs.extend([kd, ku])
+        _send_inputs([kd])
+        time.sleep(0.002)
+        _send_inputs([ku])
+        time.sleep(0.003)
 
     if press_enter:
+        time.sleep(0.02)
         kd_enter = INPUT(type=INPUT_KEYBOARD)
         kd_enter.ki = KEYBDINPUT(wVk=win32con.VK_RETURN, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
         ku_enter = INPUT(type=INPUT_KEYBOARD)
         ku_enter.ki = KEYBDINPUT(wVk=win32con.VK_RETURN, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
-        inputs.extend([kd_enter, ku_enter])
-
-    _send_inputs(inputs)
+        _send_inputs([kd_enter])
+        time.sleep(0.005)
+        _send_inputs([ku_enter])
     _notify_indicator("type")
 
 

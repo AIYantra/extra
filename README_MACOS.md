@@ -18,7 +18,7 @@
 [![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
 [![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
 
-[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](ARCHITECTURE_MACOS.md) • [Starter Prompt](STARTER_PROMPT_MACOS.md) • [License](LICENSE)
+[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](docs/ARCHITECTURE_MACOS.md) • [Starter Prompt](STARTER_PROMPT_MACOS.md) • [License](LICENSE)
 
 <br/>
 <br/>
@@ -274,7 +274,7 @@ extra doctor
 
 ## 🏛️ Architecture & Documentation
 
-* [**Architecture Specification (`ARCHITECTURE_MACOS.md`)**](ARCHITECTURE_MACOS.md) — Deep-dive into ScreenCaptureKit, CoreGraphics Event Taps, and `AXUIElement` architecture.
+* [**Architecture Specification (`docs/ARCHITECTURE_MACOS.md`)**](docs/ARCHITECTURE_MACOS.md) — Deep-dive into ScreenCaptureKit, CoreGraphics Event Taps, and `AXUIElement` architecture.
 * [**Starter System Prompt (`STARTER_PROMPT_MACOS.md`)**](STARTER_PROMPT_MACOS.md) — Operational guidelines and prompts for AI assistants.
 
 ---

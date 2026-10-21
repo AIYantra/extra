@@ -18,7 +18,7 @@
 [![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
 [![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
 
-[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](ARCHITECTURE_LINUX.md) • [Starter Prompt](STARTER_PROMPT_LINUX.md) • [License](LICENSE)
+[Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Architecture](docs/ARCHITECTURE_LINUX.md) • [Starter Prompt](STARTER_PROMPT_LINUX.md) • [License](LICENSE)
 
 <br/>
 <br/>

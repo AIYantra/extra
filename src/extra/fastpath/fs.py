@@ -72,6 +72,26 @@ def _is_safe_path(target: Union[str, Path]) -> bool:
     return True
 
 
+def _is_contained_in(target: Union[str, Path], base: Union[str, Path]) -> bool:
+    """
+    Verifies that target path strictly resolves within base directory
+    and is not the base directory itself.
+    Protects against path traversal (../), external absolute paths, and root deletion.
+    """
+    try:
+        r_target = Path(target).resolve()
+        r_base = Path(base).resolve()
+        if r_target == r_base:
+            return False
+        try:
+            return r_target.is_relative_to(r_base)
+        except AttributeError:
+            # Fallback for Python < 3.9
+            return str(r_target).startswith(str(r_base) + os.sep)
+    except Exception:
+        return False
+
+
 def _resolve_safe_dir(dir_path: Optional[str]) -> Path:
     """Resolves and validates target directory against protected boundaries."""
     if not dir_path:
@@ -191,13 +211,7 @@ def execute_fs_batch(
                 continue
 
             # Path Traversal and Protected System Root Gating
-            try:
-                is_contained = full_path.is_relative_to(target_resolved)
-            except AttributeError:
-                # Python < 3.9 fallback
-                is_contained = str(full_path).startswith(str(target_resolved))
-
-            if not is_contained or not _is_safe_path(full_path):
+            if not _is_contained_in(full_path, target_resolved) or not _is_safe_path(full_path):
                 created.append({
                     "path": str(full_path),
                     "success": False,
@@ -227,6 +241,7 @@ def execute_fs_batch(
 
     elif op in ("batch_rename", "rename"):
         renamed = []
+        target_resolved = target_dir.resolve()
         for r in (renames or []):
             src_str = r.get("from") or r.get("old")
             dst_str = r.get("to") or r.get("new")
@@ -237,6 +252,15 @@ def execute_fs_batch(
 
             if not _is_safe_path(src_path) or not _is_safe_path(dst_path):
                 renamed.append({"from": str(src_path), "to": str(dst_path), "success": False, "error": "Protected system path blocked"})
+                continue
+
+            if not _is_contained_in(src_path, target_resolved) or not _is_contained_in(dst_path, target_resolved):
+                renamed.append({
+                    "from": str(src_path),
+                    "to": str(dst_path),
+                    "success": False,
+                    "error": "Path traversal or outside target directory blocked"
+                })
                 continue
 
             if src_path.exists():
@@ -257,11 +281,22 @@ def execute_fs_batch(
 
     elif op in ("delete", "cleanup", "remove", "batch_delete"):
         deleted = []
+        target_resolved = target_dir.resolve()
         for d in (deletes or []):
             p = Path(d) if Path(d).is_absolute() else target_dir / d
+
             if not _is_safe_path(p):
                 deleted.append({"path": str(p), "deleted": False, "error": "Protected system path blocked"})
                 continue
+
+            if not _is_contained_in(p, target_resolved):
+                deleted.append({
+                    "path": str(p),
+                    "deleted": False,
+                    "error": "Path traversal or outside target directory blocked"
+                })
+                continue
+
             if p.is_file():
                 p.unlink(missing_ok=True)
                 deleted.append({"path": str(p), "deleted": True})
