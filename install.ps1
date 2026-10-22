@@ -80,34 +80,28 @@ Write-Success "Windows host verified: $([Environment]::OSVersion.VersionString) 
 Write-Step "Checking Python runtime environment..."
 $pythonExe = $null
 
-# First check for stable Python versions via py.exe launcher (prioritizing 3.12 and 3.11 for best binary wheel support)
-$pyLauncher = Get-Command "py.exe" -ErrorAction SilentlyContinue
-if ($pyLauncher) {
-    foreach ($v in @("-3.12", "-3.11", "-3.13", "-3.10")) {
-        $p = & $pyLauncher.Source $v -c "import sys; print(sys.executable)" 2>$null
-        if ($p -and (Test-Path $p.Trim())) {
-            $pythonExe = $p.Trim()
-            break
-        }
-    }
-}
-
-if (-not $pythonExe) {
-    $pythonCandidates = @("python.exe", "py.exe", "python3.exe")
-    foreach ($cmd in $pythonCandidates) {
-        $found = Get-Command $cmd -ErrorAction SilentlyContinue
-        if ($found) {
-            $verStr = & $found.Source -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
+$pythonCandidates = @("python.exe", "py.exe", "python3.exe")
+foreach ($cmd in $pythonCandidates) {
+    $found = Get-Command $cmd -ErrorAction SilentlyContinue
+    if ($found) {
+        try {
+            $pyPath = $found.Source
+            $verStr = & $pyPath -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>$null
             if ($verStr) {
-                $parts = $verStr.Split('.')
+                $parts = $verStr.Trim().Split('.')
                 $major = [int]$parts[0]
                 $minor = [int]$parts[1]
                 if ($major -eq 3 -and $minor -ge 10) {
-                    $pythonExe = $found.Source
-                    break
+                    if ($cmd -eq "py.exe") {
+                        $actualPy = & $pyPath -c "import sys; print(sys.executable)" 2>$null
+                        if ($actualPy) { $pythonExe = $actualPy.Trim() }
+                    } else {
+                        $pythonExe = $pyPath
+                    }
+                    if ($pythonExe) { break }
                 }
             }
-        }
+        } catch {}
     }
 }
 
