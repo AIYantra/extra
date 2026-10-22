@@ -503,7 +503,12 @@ def extra_type(
     _stall_breaker.check_safety_abort()
 
     t0 = time.perf_counter()
-    if use_clipboard or html is not None:
+    # Universal Lossless Input Routing:
+    # Short formulas / query terms (< 80 chars, single-line) use instant VK_PACKET keystrokes.
+    # Long documents, code blocks, or multi-line strings automatically route via atomic clipboard paste
+    # to eliminate timer quantization delays and prevent dropped characters in modern WinUI/Electron apps.
+    should_use_clipboard = use_clipboard or html is not None or (len(text) > 80 or "\n" in text)
+    if should_use_clipboard:
         atomic_clipboard_paste(text, html=html)
         if press_enter:
             send_hotkey(["enter"])

@@ -242,19 +242,7 @@ class UIDistiller:
             except Exception as ex:
                 logger.debug("Edge Vision fallback skipped: %s", ex)
 
-        # Truncate to max_elements limit
-        final_elements = filtered_elements[:max_elements]
-
-        # 4. Spatially Sort (Top-to-Bottom, Left-to-Right by rows)
-        sorted_elements = self._spatial_sort(final_elements)
-
-        # Count interactives
-        interactive_count = sum(
-            1 for el in sorted_elements
-            if el.control_type in ACTION_CONTROL_TYPES or el.control_type in INPUT_CONTROL_TYPES
-        )
-
-        # 4.5 Discover High-Contrast Work Surface / Canvas Viewport (< 5ms)
+        # 4. Discover High-Contrast Work Surface / Custom Canvas Viewport (< 5ms)
         work_surface_dict = None
         if target_hwnd:
             try:
@@ -264,8 +252,50 @@ class UIDistiller:
                 ws = self._vision_parser.detect_work_surface_in_window(target_hwnd)
                 if ws:
                     work_surface_dict = ws.to_dict()
+
+                    # Universal Hybrid Canvas Vision:
+                    # Detect opaque, custom-rendered surfaces (e.g. Qt/WebGL/DirectX canvas viewports,
+                    # chat lists, artboards) where accessibility provides zero/minimal child elements.
+                    ws_left, ws_top, ws_right, ws_bottom = ws.left, ws.top, ws.right, ws.bottom
+                    elements_inside_ws = [
+                        el for el in filtered_elements
+                        if ws_left <= el.center[0] <= ws_right and ws_top <= el.center[1] <= ws_bottom
+                    ]
+
+                    # If the work surface spans a major area (>= 160x160 px) but has <= 2 accessibility controls inside it:
+                    if ws.width >= 160 and ws.height >= 160 and len(elements_inside_ws) <= 2:
+                        try:
+                            canvas_crop = (ws_left, ws_top, ws_right, ws_bottom)
+                            vision_canvas_elements = self._vision_parser.parse_window(
+                                target_hwnd, max_elements=max_elements, crop_box=canvas_crop
+                            )
+                            if vision_canvas_elements:
+                                existing_names = {
+                                    (el.name or "").lower().strip()
+                                    for el in filtered_elements if el.name
+                                }
+                                for vel in vision_canvas_elements:
+                                    vel_name = (vel.name or "").strip().lower()
+                                    if not vel_name or vel_name not in existing_names:
+                                        filtered_elements.append(vel)
+                                        if vel_name:
+                                            existing_names.add(vel_name)
+                        except Exception as c_ex:
+                            logger.debug("Canvas vision parsing skipped: %s", c_ex)
             except Exception as ex:
                 logger.debug("Work surface viewport detection skipped: %s", ex)
+
+        # Truncate to max_elements limit
+        final_elements = filtered_elements[:max_elements]
+
+        # 4.5 Spatially Sort (Top-to-Bottom, Left-to-Right by rows)
+        sorted_elements = self._spatial_sort(final_elements)
+
+        # Count interactives
+        interactive_count = sum(
+            1 for el in sorted_elements
+            if el.control_type in ACTION_CONTROL_TYPES or el.control_type in INPUT_CONTROL_TYPES
+        )
 
         # 5. Format Content
         fmt_clean = format.lower().strip()

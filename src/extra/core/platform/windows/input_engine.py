@@ -228,55 +228,54 @@ def _release_stuck_modifiers() -> None:
 
 def instant_type(text: str, press_enter: bool = False) -> None:
     """
-    Injects Unicode strings directly into the Windows input queue with robust hardware pacing.
+    Injects Unicode strings directly into the Windows input queue with atomic hardware delivery.
     Uses Win32 KEYEVENTF_UNICODE with UTF-16 code units (supporting surrogate pairs for emojis).
-    Paced with distinct KeyDown/KeyUp separation to prevent WinUI 3 buffer overflows.
+    Batches KeyDown and KeyUp pairs atomically to prevent WinUI 3 input buffer desynchronization.
+    Translates newlines to physical Enter keystrokes to ensure 100% fidelity across native editors.
     """
     if not text and not press_enter:
         return
 
     _release_stuck_modifiers()
 
-    # Encode to UTF-16-LE words to cleanly capture surrogate pairs (e.g., emojis)
-    utf16_bytes = text.encode("utf-16-le")
-    code_units = [
-        int.from_bytes(utf16_bytes[i : i + 2], "little")
-        for i in range(0, len(utf16_bytes), 2)
-    ]
+    # Normalize line endings to avoid duplicate carriage returns
+    clean_text = text.replace("\r\n", "\n").replace("\r", "\n")
 
-    for unit in code_units:
-        # Key down
-        kd = INPUT(type=INPUT_KEYBOARD)
-        kd.ki = KEYBDINPUT(
-            wVk=0,
-            wScan=unit,
-            dwFlags=KEYEVENTF_UNICODE,
-            time=0,
-            dwExtraInfo=0,
-        )
-        # Key up
-        ku = INPUT(type=INPUT_KEYBOARD)
-        ku.ki = KEYBDINPUT(
-            wVk=0,
-            wScan=unit,
-            dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP,
-            time=0,
-            dwExtraInfo=0,
-        )
-        _send_inputs([kd])
-        time.sleep(0.002)
-        _send_inputs([ku])
-        time.sleep(0.003)
+    for ch in clean_text:
+        if ch == "\n":
+            # Translate newline to physical Enter keystroke for native Win32 & WinUI edit controls
+            kd_enter = INPUT(type=INPUT_KEYBOARD)
+            kd_enter.ki = KEYBDINPUT(wVk=win32con.VK_RETURN, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
+            ku_enter = INPUT(type=INPUT_KEYBOARD)
+            ku_enter.ki = KEYBDINPUT(wVk=win32con.VK_RETURN, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+            _send_inputs([kd_enter, ku_enter])
+            time.sleep(0.003)
+            continue
+
+        # Encode character to UTF-16-LE words to capture surrogate pairs
+        utf16_bytes = ch.encode("utf-16-le")
+        code_units = [
+            int.from_bytes(utf16_bytes[i : i + 2], "little")
+            for i in range(0, len(utf16_bytes), 2)
+        ]
+
+        for unit in code_units:
+            kd = INPUT(type=INPUT_KEYBOARD)
+            kd.ki = KEYBDINPUT(wVk=0, wScan=unit, dwFlags=KEYEVENTF_UNICODE, time=0, dwExtraInfo=0)
+            ku = INPUT(type=INPUT_KEYBOARD)
+            ku.ki = KEYBDINPUT(wVk=0, wScan=unit, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+            # Dispatch KeyDown and KeyUp atomically together in a single OS SendInput batch
+            _send_inputs([kd, ku])
+            time.sleep(0.001)
 
     if press_enter:
-        time.sleep(0.02)
+        time.sleep(0.005)
         kd_enter = INPUT(type=INPUT_KEYBOARD)
         kd_enter.ki = KEYBDINPUT(wVk=win32con.VK_RETURN, wScan=0, dwFlags=0, time=0, dwExtraInfo=0)
         ku_enter = INPUT(type=INPUT_KEYBOARD)
         ku_enter.ki = KEYBDINPUT(wVk=win32con.VK_RETURN, wScan=0, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
-        _send_inputs([kd_enter])
-        time.sleep(0.005)
-        _send_inputs([ku_enter])
+        _send_inputs([kd_enter, ku_enter])
+
     _notify_indicator("type")
 
 

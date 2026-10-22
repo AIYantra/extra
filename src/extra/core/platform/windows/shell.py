@@ -514,12 +514,23 @@ def launch_app(
     if wait_for_window:
         deadline = time.perf_counter() + timeout
         expected_proc = APP_REGISTRY.get(clean_app, {}).get("proc", "")
+        EXCLUDED_SHELL_CLASSES = {
+            "progman", "workerw", "shell_traywnd", "shell_secondarytraywnd",
+            "windows.ui.core.corewindow", "dv2controlhost",
+        }
+        EXCLUDED_SHELL_TITLES = {"program manager", "", "taskbar", "start"}
 
         while time.perf_counter() < deadline:
             time.sleep(0.1)
             current_windows = list_windows(visible_only=True)
 
             for win in current_windows:
+                # Universal System Shell Filter: ignore desktop backdrops and taskbars
+                win_class = (getattr(win, "class_name", "") or "").lower()
+                win_title = (getattr(win, "title", "") or "").strip().lower()
+                if win_class in EXCLUDED_SHELL_CLASSES or win_title in EXCLUDED_SHELL_TITLES:
+                    continue
+
                 # Prioritize newly created window handles
                 if win.hwnd not in existing_hwnds:
                     matched_hwnd = win.hwnd
