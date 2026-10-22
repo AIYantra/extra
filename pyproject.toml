@@ -14,13 +14,14 @@ authors = [
 ]
 dependencies = [
     "mcp>=1.0.0,<2",
+    "websockets>=13.0",
     "playwright>=1.47.0",
     "pillow>=10.4.0",
     "beautifulsoup4>=4.12.3",
     "imagehash>=4.3.1",
     "numpy>=1.26.0",
     "psutil>=6.0.0",
-    "kuzu>=0.11.0",
+    "kuzu>=0.11.0; python_version < '3.14'",
     "fastembed>=0.8.0",
     "onnxruntime>=1.19.0",
     "pywin32>=306; sys_platform == 'win32'",

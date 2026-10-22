@@ -3,6 +3,7 @@
 
 # ── Tier 1: Microsoft & Anthropic Official ─────────────────────────────────────
 mcp>=1.0.0,<2                   # Official Anthropic Model Context Protocol SDK
+websockets>=13.0                 # High-speed WebSocket relay client
 playwright>=1.47.0              # Official Microsoft Browser Automation (Chromium/Edge/WebKit)
 
 # ── Tier 1: Python Software Foundation & Foundational OSS ──────────────────────
@@ -13,7 +14,7 @@ numpy>=1.26.0                   # High-performance pixel array buffers
 psutil>=6.0.0                   # Process & window metadata discovery
 
 # ── Tier 1: Local Knowledge Graph & Memory Subsystem ───────────────────────────
-kuzu>=0.11.0                    # Embedded episodic and relational graph database
+kuzu>=0.11.0; python_version < "3.14"                    # Embedded episodic and relational graph database
 fastembed>=0.8.0                # Sub-3ms pure ONNX vector embeddings for memory recall
 onnxruntime>=1.19.0              # Direct ONNX execution engine for SOUL perception and embeddings
 
