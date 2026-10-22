@@ -410,7 +410,7 @@ if (-not $SkipDoctor) {
 # 11. Send Anonymous Installation Success Beacon (Non-blocking, 2s timeout)
 if ($env:DO_NOT_TRACK -ne "1" -and $env:EXTRA_TELEMETRY -ne "0") {
     try {
-        $beaconBody = '{"os":"windows","arch":"' + $env:PROCESSOR_ARCHITECTURE + '","version":"0.3.2","method":"install.ps1"}'
+        $beaconBody = '{"os":"windows","arch":"' + $env:PROCESSOR_ARCHITECTURE + '","version":"0.3.3","method":"install.ps1"}'
         if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
             Start-Process -FilePath "curl.exe" -ArgumentList @("-s", "-m", "2", "-X", "POST", "https://extra.yantraos.com/api/install-success", "-H", "Content-Type: application/json", "-d", $beaconBody) -WindowStyle Hidden
         } else {

@@ -1,7 +1,7 @@
 {
   "name": "extra-desktop",
   "displayName": "Extra Desktop Automation",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Sovereign desktop automation and native computer-use engine for AI agents across Linux, Windows, and macOS.",
   "author": {
     "name": "YantraOS",

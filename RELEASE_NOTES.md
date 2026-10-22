@@ -1,399 +1,441 @@
-# Extra Release Notes — v0.3.2
+# Extra Release Notes — v0.3.3
 
-**Release Date:** October 18, 2026  
-**Release Title:** Official Linux Native Desktop Automation Engine (Wayland & X11), AT-SPI2 Semantic Actuation, Universal Electron Accessibility & Tri-Platform CI/CD  
+**Release Date:** October 22, 2026  
+**Release Title:** Official Cloud MCP Relay & ChatGPT Integration, Universal Hybrid Canvas Vision, Lossless Atomic Input Engine & Enterprise UI Perception  
 **Target Systems:** Linux (KDE Plasma, GNOME, wlroots, X11), Windows 10/11 (x64 / ARM64), macOS (Apple Silicon / Intel)  
 
 ---
 
-## 1. Executive Summary & Major Milestones (v0.3.2)
+## 1. Executive Summary & Major Milestones (v0.3.3)
 
-Version 0.3.2 is a landmark milestone delivering **official native Linux desktop automation** to Extra, establishing full tri-platform parity across **Linux, Windows, and macOS**. In addition, this release integrates universal Electron accessibility injection, expands the continuous integration matrix to Ubuntu Linux, and hardens background isolated execution foundations.
-
-### Key Highlights:
-
-1. **Official Linux Desktop Platform Engine (`core/platform/linux/`):**
-   - **Wayland & X11 Dual Compatibility:** First-class support for Wayland compositors (KDE Plasma KWin, GNOME Mutter, wlroots) and traditional X11 window managers.
-   - **Pure-Python AT-SPI2 Accessibility Plane (`atspi_plane.py`):** Direct Session D-Bus (`org.a11y.Bus`) introspection of the Linux desktop accessibility hierarchy without external subprocesses, enabling sub-millisecond semantic actuation via `DoAction(0)` with physical click fallback.
-   - **Kernel-Level Hardware Input (`input_engine.py`):** Direct hardware event injection via `/dev/uinput` (`evdev`) delivering sub-millisecond keystroke dispatch with intelligent terminal-aware clipboard pasting (`Ctrl + Shift + V` for terminal emulators vs `Ctrl + V` for GUI windows).
-   - **Multi-Tier Wayland Screen Capture (`capture.py`):** Sub-3ms screen vision prioritizing KDE Spectacle D-Bus and wlroots Grim, with XShm / MSS fallback.
-   - **KWin Scripting Window Snapping (`focus.py`, `geometry.py`):** Sub-15ms programmatic window arrangement and focus activation via KWin D-Bus runner on Wayland and EWMH (`_NET_ACTIVE_WINDOW`) on X11.
-   - **Ambient Pulse Indicators (`indicators.py`):** Native Wayland overlay indicator rendering with emerald green border pulse and synthesized harmonic acoustic chimes.
-
-2. **Universal Electron & Chromium Perception Hardening (`core/platform/windows/shell.py`, `distiller.py`, `uia_plane.py`):**
-   - **Universal `--force-renderer-accessibility` Injection:** When launching Electron or Chromium applications (Canva, Slack, VS Code, Discord), Extra automatically injects `--force-renderer-accessibility` so the accessibility tree immediately exposes inner webview DOM nodes without requiring a screen reader.
-   - **Distiller Headroom & Opacity Detection:** Expanded candidate element scan buffers and added caption-only opacity detection, eliminating accessibility tree truncation in dense webview apps.
-   - **Zero-Stall Canva Declarative Skill (`skills/extra-canva/`):** Introduced official automation playbook leveraging native single-key accelerators (`T`, `R`, `C`, `Alt + /`).
-
-3. **Tri-Platform CI/CD Matrix (`.github/workflows/ci.yml`, `publish-pypi.yml`):**
-   - Expanded GitHub Actions automated test matrix to `[windows-latest, macos-latest, ubuntu-latest]` across Python 3.11, 3.12, and 3.13.
-   - Configured headless virtual display testing via `xvfb-run` and AT-SPI2 core libraries on Ubuntu Linux runners.
-
-4. **Multi-Instance Picture-in-Picture (PiP) Foundation (`core/platform/windows/child_session.py`, `pip_window.py`):**
-   - Integrated production foundation for isolated child session desktop automation, enabling background agent execution without cursor interception on the user's primary display.
-
-5. **Universal Package Ecosystem Alignment (`0.3.2`):**
-   - Synchronized version metadata across PyPI (`extra-desktop==0.3.2`), npm (`@yantraos/extra-desktop@0.3.2`), Homebrew (`Formula/extra.rb`), MCP Registry (`server.json`), Smithery (`smithery.yaml`), and Glama (`glama.json`).
-
----
-
-# Extra Release Notes — v0.3.1
-
-**Release Date:** September 26, 2026  
-**Release Title:** Windows 11 Inking Stability, Zombie Process Elimination, Visual Grounding Hardening & Perception Calibration  
-**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
-
----
-
-## 1. Executive Summary & Major Milestones (v0.3.1)
-
-Version 0.3.1 is a targeted stability and hardening release for **Windows and macOS**, resolving critical edge cases in Windows 11 hardware inking, headless zombie process lifecycles, and visual grounding precision.
+Version 0.3.3 is a major milestone delivering **Cloud MCP Relay support** to Project Extra, allowing cloud-hosted AI assistants (ChatGPT Custom Actions, Claude on web, and remote agentic frameworks) to pilot physical workstations securely through an encrypted WebSocket cloud tunnel (`extra connect`). In addition, this release delivers fundamental architectural hardening across desktop perception (Universal Hybrid Canvas Vision), input fidelity (lossless atomic keystroke batching), shell window lifecycle management (Progman filtering), and console buffer inspection (UIA TextPattern).
 
 ### Key Highlights:
-1. **Windows 11 InkPresenter & DirectManipulation Inking Stabilization:**
-   - **Root Cause Eliminated:** Continuous vector drawing in Windows 11 previously suffered from dropped lines and interrupted strokes in creative applications (MS Paint, Canva, browser whiteboards, Figma) due to intermediate `SetCursorPos` calls resetting the OS gesture recognizer and `DirectManipulation` inking context.
-   - **Native `SendInput` Event Streaming:** Re-engineered `mouse_drag` and `mouse_stroke` in `core/platform/windows/input_engine.py` to stream continuous relative/absolute mouse movement strictly via `SendInput` (`MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE`) without calling `SetCursorPos` mid-trajectory.
-   - **Hardware Dwell Time Synchronization:** Added a calibrated 60ms hardware dwell delay after `mouse_down` prior to trajectory dispatch, ensuring the OS touch/pen/mouse routing arbiter firmly locks the inking surface before stroke points stream.
 
-2. **Autonomous Headless Zombie Process Clearance (`core/platform/windows/shell.py`):**
-   - **Headless Singleton Cleanup:** Modern Chromium and Electron apps frequently maintain orphaned background singleton processes from previous runs that hold no visible UI windows. When launched, new processes hand off arguments to the zombie process and exit immediately, leaving the agent waiting on an invisible window.
-   - **Universal Windowed Process Verification:** `launch_app` now inspects running instances via `EnumWindows`; processes with zero top-level windows are automatically cleaned up prior to launch.
-   - **Host Shell Protection:** Shell and console hosts (`powershell`, `cmd`, `pwsh`, `wsl`) are strictly protected from zombie clearance.
-   - **Startup Flag Hardening:** Added Chromium startup flags (`--disable-features=msStartupBoost`, `--disable-background-mode`) to prevent silent background residency.
-   - **Strict Window Settlement Contract:** If `wait_for_window=True` and no window manifests within the timeout, `launch_app` now returns `success=False` with diagnostic telemetry rather than falsely reporting success.
+1. **Official Cloud MCP Relay & ChatGPT Custom Action Bridge (`extra/relay/`, `extra-mcp-hub`):**
+   - **Encrypted WebSocket Device Tunnel:** Users can pair any physical machine (Windows, macOS, Linux) to the cloud relay in 1 second using `extra connect --key <setup_key>`.
+   - **RFC 8414 & OpenID Connect Discovery:** Live auto-discovery endpoints published at `/.well-known/oauth-authorization-server` and `/.well-known/openid-configuration`, enabling zero-configuration ChatGPT Custom Action and plugin setup.
+   - **Multi-Tenant Session Isolation & Quota Metering:** DynamoDB-backed connection registry (`ap-south-1`) with strict tenant isolation, preventing cross-device hijacking and providing real-time action quota tracking for Free (100 actions/mo) and Pro (unlimited) tiers.
+   - **Zero-Config MCP Direct Link:** Direct secure endpoint `https://extra.yantraos.com/mcp?key=...` allowing immediate access for any MCP-compliant client without OAuth overhead.
 
-3. **SOUL-Eyes Visual Grounding Precision & Center-Screen Fallback Elimination (`core/soul/eyes.py`):**
-   - **Zero Spurious Center Clicks:** Previously, ungrounded UI targets (e.g. unfound buttons or inputs) fell back to clicking the center of the screen `(500, 500)`. SOUL-Eyes now strictly gates center-canvas fallback to explicit canvas/whiteboard targets (`"canvas"`, `"board"`, `"drawing"`).
-   - **Strict Grounding Contract:** All ungrounded controls strictly return `matched=False` (`None`), cleanly informing the agent that visual grounding did not succeed so it can re-inspect the UI accessibility tree or adjust viewport coordinates.
-   - **Enhanced Semantic Resolution:** Added dedicated heuristics for creative controls, modal action triggers (`"+"`, `"Create"`, `"New design"`), and dimension input rails.
+2. **Universal Hybrid Canvas Vision (`core/distiller.py`, `core/soul/vision_parser.py`):**
+   - **Actuator vs. Perception Canvas Resolution:** Eliminates the classic failure mode where custom-rendered GUI surfaces (Qt widgets in Telegram Desktop, WebGL viewports, Figma artboards, CAD canvases) render as opaque `CANVAS` blocks without accessible child elements.
+   - **Automated Sub-Surface Edge Vision Parsing:** Detects work surfaces spanning $\ge 160\times 160$ px with sparse accessibility nodes ($\le 2$), and automatically triggers localized high-speed Edge Vision OCR on that bounding box, extracting contact names, chat entries, and actionable canvas nodes into `distilled_ui`.
+   - **Strict Zero App-Specific Rule Adherence:** Solves opaque viewport perception universally across all applications without hardcoded application branches.
 
-4. **StallBreaker Perception Calibration & Subpixel Noise Filtering (`core/stall_breaker.py`):**
-   - **Noise Filtering:** Visual delta detection now requires `pixel_diff >= 3.0` when perceptual hash distance is zero (`phash_diff == 0`), successfully filtering out false-positive visual changes caused by blinking text carets, subpixel font anti-aliasing, and system clock updates.
-   - **Global Visual Threshold:** Calibrated global visual change threshold to `2.0%` for reliable stall detection without false alarms during long-running tasks.
+3. **Lossless Atomic Keystroke Delivery (`core/platform/windows/input_engine.py`, `mcp/server.py`):**
+   - **Atomic KeyDown/KeyUp Batching:** Injects Win32 `KEYEVENTF_UNICODE` (`VK_PACKET`) KeyDown and KeyUp pairs within a single atomic `SendInput` batch, eliminating the 15.6 ms Windows timer quantization gap that previously dropped keystrokes in WinUI 3 (Notepad).
+   - **Hardware Enter Keystroke Translation:** Translates `\n` to physical `VK_RETURN` keystrokes to ensure 100% newline fidelity across native Windows text editors.
+   - **Automatic High-Fidelity Clipboard Routing:** `extra_type` automatically routes multi-line strings or text blocks $> 80$ characters through `atomic_clipboard_paste`, guaranteeing zero-latency, 100% lossless delivery of code blocks, audit reports, and rich text without character drops.
 
-5. **Thread Desktop Attachment Optimization (`core/platform/windows/geometry.py`):**
-   - Added desktop handle verification (`if hDesk and hDesk != curDesk:`) in `attach_input_desktop()`, eliminating redundant desktop context switches on Windows threads already attached to the active input desktop.
+4. **Universal System Shell Window Filter (`core/platform/windows/shell.py`):**
+   - **Progman & Taskbar Window Collision Elimination:** When launching or focusing applications (such as `explorer.exe`), Extra automatically filters out system desktop backdrops (`Program Manager`, class `Progman` / `WorkerW`) and taskbar hosts (`Shell_TrayWnd`), guaranteeing that window activations always lock onto true application windows (`CabinetWClass`).
 
-6. **macOS Subsystem Hardening (`core/platform/macos/shell.py`):**
-   - Hardened bundle identifier resolution, application launch environment isolation, and window settling detection across Apple Silicon and Intel Macs.
+5. **Console & Terminal Buffer Perception (`core/platform/windows/uia_plane.py`):**
+   - **UIA TextPattern Terminal Extraction:** Added native inspection of `IUIAutomationTextPattern` (`DocumentRange.GetText`) for `Document` and `Text` control types, allowing the assistant to read live stdout/stderr streams from PowerShell, Windows Terminal, and CMD directly through `extra_inspect_ui`.
+   - **ValuePattern Fallback:** Auto-inspects `IUIAutomationValuePattern` for edit fields and search boxes with empty `CurrentName`.
 
-7. **Universal Engine Invariant Preservation:**
-   - All improvements strictly comply with the Universal Engine Invariant: zero hardcoded application names in `extra/core/`, `extra/mcp/`, or `extra/fastpath/`. All mechanisms generalize across Win32, WPF, Cocoa, Electron, and Chromium application architectures.
-
-8. **Upcoming Linux Milestone Preview:**
-   - Complete Linux platform support (Wayland KWin/GNOME/wlroots + X11, pure-Python AT-SPI2 Session D-Bus, `/dev/uinput` zero-latency hardware injection, Spectacle/Grim/MSS capture, and KWin Scripting snap layout) is implemented and verified (68/68 unit tests passing) and scheduled for public release in the upcoming v0.3.2 / v0.4.0 milestone following v0.3.1.
+6. **Universal Package Ecosystem Alignment (`0.3.3`):**
+   - Synchronized version metadata across PyPI (`extra-desktop==0.3.3`), npm (`@yantraos/extra-desktop@0.3.3`), Homebrew (`Formula/extra.rb`), MCP Registry (`server.json`), Smithery (`smithery.yaml`), Glama (`glama.json`), and Cursor Plugin (`plugin.json`).
 
 ---
 
-# Extra Release Notes — v0.3.0
-
-**Release Date:** September 24, 2026  
-**Release Title:** Project SOUL, Autonomous Live Desktop Pilot, and Sovereign Reflex Engine  
-**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
-
----
-
-## 1. Executive Summary & Major Milestones (v0.3.0)
-
-Version 0.3.0 is a milestone release delivering the **Cognitive Trinity** architecture for sovereign desktop computer use:
-- **Mind (System Two):** Frontier LLM for strategic planning, long-horizon tool selection, and complex reasoning.
-- **Soul (System One):** Local Reflex AI (Project SOUL) delivering **< 70 µs** reflexive micro-decisions, dynamic modal branching, and sub-15ms edge visual grounding without cloud round-trip latency.
-- **Body (Hardware Execution):** Native Platform Abstraction Layer (PAL) with zero-latency `SendInput`, ScreenCaptureKit / DXGI desktop vision, and human-like Bezier cursor flight paths.
-
-### Key Architectural Highlights:
-1. **The Live Desktop Pilot Mandate:**
-   - Strict prohibition on background Python scripting and exploratory shell scripts for desktop automation.
-   - All interactions execute live on the glass via native MCP tools (`extra_launch`, `extra_focus_window`, `extra_click`, `extra_stroke`, `extra_type`, `extra_batch_actions`).
-   - Human-observable cursor flight paths (`human_like=True` by default) with realistic Bezier trajectories and ambient indicator halos.
-   - Zero clipboard "cheats": creative and drawing tasks are rendered with genuine vector strokes and tool selections on the canvas.
-2. **Project SOUL (System One Ultra-fast Layer):**
-   - Sub-millisecond on-device reflex decider (`eval`, `assert`, `wait_for_state`) inside `extra_batch_actions`.
-   - `extra_click` upgraded with semantic target grounding (`target="..."`) via SOUL-Eyes.
-   - Dynamic batch action reflex evaluation achieved median latency of **0.062 ms (62 µs)** across benchmark tests.
-3. **Anti-Poisoning Trajectory Evaluation & Strict Golden-Path Hardening:**
-   - **Full Parameter Decoding:** Fixed telemetry blindspot where batch action arguments were stripped before trajectory analysis. The analyzer now decodes nested actions, detecting undos (`Ctrl+Z`), repeated clicking, and coordinate hunting.
-   - **Strict Golden-Path Gating:** Trajectories with undos (`undo_count > 0`), stalls (`stall_count > 0`), or friction are strictly disqualified from golden paths (`is_golden_path = False`).
-   - **Zero Hallucinated Fast-Paths:** Eliminated contradictory logic that synthesized noisy recovery steps into "fast paths". Evolution prompts now explicitly restrict noisy runs to recording anti-stall guardrails only.
-4. **Active Window Perception Telemetry & Multi-Webview Invariants:**
-   - `extra_screenshot` now returns `active_window_title` and `active_window_hwnd` alongside capture metadata, enabling agents to verify the active foreground window directly without guessing.
-   - Established the **Electron Multi-Webview Accessibility Invariant**: documented how Chromium-based apps retain background webview nodes in the OS UI Automation tree, preventing agents from falling into infinite tab-switching loops.
-   - Added drawing tool verification warnings to `extra_task_complete` to ensure low-level mouse stroke dispatch is not conflated with on-screen visual inking.
-5. **Ground-Truth Inking Verification & Anti-Hallucination Guardrails:**
-   - **Programmatic Ink Verification in `extra_stroke` & `extra_batch_actions`:** Real-time pre/post screen difference capture computing exact pixel deltas (`pixels_changed`). If hardware mouse strokes produce 0 visual change (e.g. pen tool not engaged or canvas unfocused), `extra_stroke` immediately fails with `GHOST STROKE DETECTED`, halting runaway blind actions.
-   - **Strict Inking Enforcement in `extra_task_complete`:** If stroke actions were executed during a session, `extra_task_complete` verifies cumulative `pixels_changed > 0`. If 0 visual pixels were deposited, completion is **unconditionally rejected** (`success: false, error: TASK COMPLETION REJECTED`), preventing AI agents from hallucinating or falsely asserting visual drawing completion.
-   - **StallBreaker 2-Strike Click Loop Breaker:** Updated `extra_click` to evaluate consecutive zero-change attempts against generalized action classes. When 2 consecutive clicks produce zero visible change anywhere on screen, `extra_click` immediately returns `success: false` with `STALL DETECTED`, forcing the agent to adapt rather than looping blindly.
-6. **Self-Healing Skill Library Curator & Automated Migration Engine:**
-   - **Automated Startup Migration:** Upon upgrading to v0.3.0, Extra runs a one-time migration (`ensure_startup_migration`) that purges legacy unhardened evolved lines and mock test skills across user directories.
-   - **MCP Tool `extra_curate_skills`:** Exposes on-demand skill library audits and sanitization over stdio transport.
-   - **CLI Tool `extra curate [--sanitize]`:** Provides command-line inspection and healing of discovered skill playbooks.
-   - **Universal Dynamic Path Discovery:** Replaced hardcoded host paths with dynamic cross-platform discovery (`get_default_skill_directories()`) covering project, workspace, and global user configs across macOS, Windows, and Linux.
-7. **Episodic Graph Memory (KùzuDB + FastEmbed):**
-   - On-device knowledge graph persisting past task workflows, artifacts, and known application quirks.
-   - Sub-2ms graph retrieval with in-memory caching for zero-contention reflex execution.
-8. **Scout & Web-to-API Self-Evolution:**
-   - Autonomous Chrome/Edge DevTools Protocol (CDP) network sniffer and session vaulting for automated reverse-engineering of slow web flows into permanent, instant API fast-paths.
-9. **Native Complete Uninstaller Subsystem (`extra uninstall`):**
-   - Native OS confirmation modal dialog with warning disclaimer and strict default button on **NO / Cancel** to prevent accidental uninstallation.
-   - Comprehensive clean-up: deregisters Extra from Claude Desktop, Antigravity (`agy`), Cursor, and Windsurf MCP configurations.
-   - Restores user environment: cleanly removes `~/.extra/bin` from User PATH (`HKCU\Environment\Path` on Windows / shell profiles on macOS).
-   - Detached self-purging: completely deletes the `~/.extra` directory (runtime, venv, KùzuDB memory databases, blueprints, checkpoints, and workspaces) after process termination.
-10. **100% Test Suite Pass Rate:**
-   - 1,948 tests executed with 1,941 passes, 7 platform-specific skips, 0 failures, and 0 errors.
-
----
-
-
-# Extra Release Notes — v0.2.5
-
-**Release Date:** September 18, 2026  
-**Release Title:** Computer-Use Acceleration Suite (Atomic Input Batching, Settle Normalization, Browser Crash Recovery Auto-Suppression, and Anti-Blind Completion Protocol)  
-**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
-
----
-
-## 1. Executive Summary & Problem Resolution (v0.2.5)
-
-In live end-to-end benchmark testing across real desktop automation workflows (file management, web research, document editing, and multi-tab browser workflows), critical performance and robustness breakthroughs were achieved, reducing compound task durations from **365 seconds down to 26 seconds (93% speedup)**:
-
-### 1. Multi-Format Sleep Parameter Normalization (`extra_batch_actions`)
-- **Problem:** When language models generate compound hardware action batches, sleep steps frequently pass varied parameter names (`"duration_ms"`, `"duration"`, `"seconds"`, `"delay_ms"`). The engine previously strictly expected `"ms"` or `"delay"`, causing batch sleep actions to fall back to a default 100ms. In browser workflows, this caused hotkey and typing actions to fire before web pages or bookmark dialogs had mounted.
-- **Fix:** Both Windows and macOS input engines now seamlessly parse and normalize `ms`, `duration_ms`, `seconds` (multiplied to ms), `delay_ms`, and `duration`.
-
-### 2. Browser Crash Recovery Modal Auto-Suppression
-- **Problem:** If a previous automation task terminated a browser process forcefully (e.g. `Stop-Process msedge -Force`), Chromium-based browsers (Edge, Chrome) record an unclean shutdown and display the blocking modal prompt: *"Microsoft Edge closed unexpectedly. Restore pages?"*. This prompt hijacked keyboard focus and blocked tab-wide shortcuts like `Ctrl+Shift+D`.
-- **Fix:** The application launcher (`extra/core/platform/windows/shell.py`) now automatically injects `--hide-crash-restore-bubble` and `--no-first-run` into all Edge and Chrome launches. Browsers launch clean, isolated, and immediately receptive to keyboard input.
-
-### 3. Anti-Blind Completion & Anti-Stall Guardrails
-- **Problem:** Models frequently called `extra_screenshot` and `extra_task_complete` in the exact same tool-calling turn, declaring completion blindly without ever receiving or inspecting the verification visual state. Additionally, large accessibility dumps (`extra_inspect_ui`) triggered multiple paged `view_file` calls that burned 40+ seconds of context latency.
-- **Fix:** Enforced the **Strict Anti-Blind Completion Mandate** (Turn N captures/inspects; Turn N+1 verifies and completes). Added strict prohibitions against accessibility dump paging and PowerShell HWND hunting loops.
-
----
-
-# Extra Release Notes — v0.2.4
-
-**Release Date:** September 17, 2026  
-**Release Title:** macOS Integration Test Resilience, High-DPI Retina Stall Recovery Fallback, and Multi-Path CLI Diagnostic Suite  
-**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
-
----
-
-## 1. Executive Summary & Problem Resolution (v0.2.4)
-
-In multi-platform testing across macOS Sonoma/Sequoia systems (e.g. MacBook Air Retina displays) and fresh package installations, two key issues were identified and resolved:
-
-### 1. macOS StallBreaker False-Stall on Pending Accessibility Permissions
-- **Problem:** When running `extra test` on a macOS machine where Accessibility permissions have not yet been granted to Terminal, `inspect_window()` returns 0 interactive UI elements. Because 0 elements were present, `SetOfMarkAnnotator` generated an annotated image (`ann_img`) 100% identical to the raw screen capture (`cap.image`). In Phase 6, the test verifies that a visual change successfully resets stall strikes back to 0. Passing `cap.image` and `ann_img` into `StallBreaker` registered zero perceptual hash and zero pixel difference, causing the supervisor to interpret the recovery step as a 3rd stall strike and throwing an unhandled `AssertionError`.
-- **Root Cause & Retina Display Dynamics:** On high-resolution Retina displays (such as MacBook Air 2880×1800), even small local fallback bounding boxes (e.g. 50×50 px) occupy less than 0.05% of the total pixel area, which averages out to less than `pixel_threshold = 0.5` and downsamples to zero in standard 8×8 pHash.
-- **Fix:** In `test_core_engine.py` (Phase 6), when `len(elements) == 0`, the test applies a global visual invert fallback (`ImageOps.invert(cap.image.convert("RGB"))`). This ensures a 100% perceptual hash difference and high pixel delta across all display scales (from 720p to 5K/8K Retina), reliably verifying the stall recovery logic even when Accessibility permissions are pending.
-
-### 2. Multi-Path Test Suite Resolution in CLI (`extra test`)
-- **Problem:** Running `extra test` (`python -m extra.cli test`) imported from `extra.test_core_engine`, which failed with `ModuleNotFoundError` if tests were distributed inside `tests/` or in custom project directories.
-- **Fix:** `cmd_test()` in `extra/cli.py` now resolves test suites through a resilient fallback cascade (`extra.tests.test_core_engine` -> `extra.test_core_engine` -> `test_core_engine` -> local `Artifacts/extra` path). Added `tests/test_core_engine.py` as an official part of the package test distribution.
-
-### 3. Test Progress Indexing & Universal Platform Symmetry
-- **Problem:** The integration test suite had inconsistent progress counters (`[1/6]` through `[6/6]`, followed by `[7/7]`), and printed `"Testing Win32 Input Engine Mechanics..."` on macOS systems.
-- **Fix:** Progress counters are normalized to `[1/7]` through `[7/7]`, and logging is standardized to platform-neutral `"Testing Input Engine Mechanics..."`.
-
----
-
-# Extra Release Notes — v0.2.3
-
-**Release Date:** September 16, 2026  
-**Release Title:** Desktop Automation Bottlenecks Resolution (Screenshot Persistence, StallBreaker Viewport Fallback, Window Focus Polling, and Microsoft Store/UWP App Resolution)  
-**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)  
-**Special Thanks & Attribution:** Special credit to [@harshbuttru3](https://github.com/harshbuttru3) for identifying and reporting these real-world automation bottlenecks in [Issue #4](https://github.com/AIYantra/extra/issues/4) during complex 3D modeling workflows in Blender 3.6 on Windows 11.
-
----
-
-## 1. Executive Summary & Problem Resolution (v0.2.3)
-
-In real-world desktop automation sessions driving complex CAD and 3D modeling workflows (e.g., Blender 3.6 on Windows 11 with Antigravity / Gemini), four operational friction points were identified and resolved:
-
-### 1. `extra_screenshot` Payload Truncation Fix
-- **Problem:** Returning full-resolution screenshots as raw base64 strings in `result["screenshot_base64"]` generated 200 KB – 400 KB payloads, exceeding LLM tool output buffers (40 KB–50 KB). Client harnesses (Antigravity, Cursor, Claude Code) dumped output to disk `.txt` files, interrupting agent flows.
-- **Fix:** `extra_screenshot` now defaults to saving captures into the CFA-safe scratch workspace (`~/.extra/workspace/screenshots/screenshot_<timestamp>.png`) and returning `file_path`. The raw base64 string is omitted by default (`include_base64: bool = False`), keeping tool responses under 1 KB while providing immediate clickable file links.
-
-### 2. StallBreaker 200×200 ROI False-Stall Elimination
-- **Problem:** `StallBreaker` evaluated visual diffs over a localized 200×200 ROI around the clicked coordinate. In applications like Blender, CAD software, and IDEs, clicking a header icon or toolbar toggle updates a distant 3D viewport canvas or preview area while the local 200×200 ROI registers zero delta, causing premature `STALL DETECTED` aborts.
-- **Fix:** `extra_click` and `StallBreaker` now feature a zero-latency global fallback diff. If the local ROI shows zero change, `StallBreaker` downsamples the full monitor frame (sub-2ms via Nearest Neighbor downsampling + numpy mean diff). If remote screen areas changed, strikes are reset to 0 and the action succeeds with `remote visual change` status.
-
-### 3. `extra_focus_window` Retry Polling
-- **Problem:** `extra_focus_window` was an instantaneous single-shot check. When an application was launched asynchronously, calling `extra_focus_window` immediately failed with `Window not found`.
-- **Fix:** Added a `timeout: float = 3.0` parameter to `extra_focus_window` and `find_window_by_title` with an active 100ms polling loop, allowing asynchronously initializing windows to be focused reliably without artificial sleep scripts.
-
-### 4. Microsoft Store / MSIX / UWP App Resolution
-- **Problem:** Applications installed from the Microsoft Store or winget (Blender, Windows Terminal, Python) install execution aliases in `%LOCALAPPDATA%\Microsoft\WindowsApps`. `resolve_executable` previously failed to search this directory or common Program Files locations, causing launch resolution failures and `FileNotFoundError`.
-- **Fix:** `resolve_executable` now searches `%LOCALAPPDATA%\Microsoft\WindowsApps`, standard Program Files locations, and explicit Blender Foundation installation paths. Added `"blender"` to `APP_REGISTRY`.
-
----
-
-# Extra Release Notes — v0.2.2
-
-**Release Date:** September 16, 2026  
-**Release Title:** Developer Binary Auto-Whitelisting & Controlled Folder Access (CFA) Workspace Diagnostics  
-**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)
-
----
-
-## 1. Executive Summary & Root Cause Analysis (v0.2.2)
-
-Following the successful release of v0.2.1 (which achieved **zero AMSI/Trojan malware detections** on Windows Defender), follow-up testing on host `SURYA` uncovered a subtle, recurring friction point in user environments:
-
-### Incident C: The 5 Post-Update Controlled Folder Access (CFA) Blocks
-In `defenderhistory (2).md` recorded on **16-Sep-2026 at 12:47 IST**, 5 additional Controlled Folder Access (Event ID 1123) blocks were registered:
-```
-16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.agents\rules  | Process: agy.exe
-16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.agents\skills | Process: agy.exe
-16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.extra         | Process: agy.exe
-16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work                | Process: python.exe
-16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work                | Process: powershell.exe
-```
-
-### Forensic Diagnosis:
-1. **The Culprit: Working Inside Windows Protected Libraries**
-   - The user initialized or cloned their project directory inside `C:\Users\Surya\Documents\work`.
-   - Windows Defender Controlled Folder Access monitors `Documents`, `Pictures`, `Desktop`, `Videos`, and `Music` indiscriminately.
-   - When `agy` launched to supervise coding tasks, `agy.exe`, Python, and PowerShell attempted to read/write project metadata (`.agents/skills`, `.extra`, git worktrees).
-   - Because `agy.exe` and user/venv Python instances were not explicitly in the Defender CFA allowlist, Defender blocked each write attempt, triggering toast alerts.
-
-2. **The Dual Solution in v0.2.2:**
-   - **Automated Binary Whitelisting:** `install.ps1` now proactively registers `agy.exe`, the active Python interpreter, the `.extra` virtualenv Python, and `powershell.exe` in Defender's `ControlledFolderAccessAllowedApplications`.
-   - **Workspace Location Diagnostics:** `extra doctor` now inspects the current directory. If the user runs `extra doctor` inside a protected folder (e.g. `Documents`), it emits an actionable warning and offers a one-click elevated fix via `extra doctor --fix-cfa`.
-
----
-
-## 2. What Was Added in v0.2.2
-
-### 1. Developer Binary Whitelisting in `install.ps1`
-Step 6 of `install.ps1` automatically detects active developer toolchains and whitelists them:
-```powershell
-Add-MpPreference -ControlledFolderAccessAllowedApplications `
-    "$agyPath", "$sysPython", "$venvPython", "$psPath"
-```
-Even if a developer chooses to place their workspace inside `Documents\my-project`, Defender recognizes `agy.exe` and Python as trusted tools and allows operations without alerts.
-
-### 2. Workspace Proximity Guard in `extra doctor`
-Running `extra doctor` now checks if `Get-Location` is inside `Documents`, `Desktop`, `Pictures`, `Videos`, or `Music`:
-```text
-[!] WARNING: Current workspace is inside a Windows Protected Folder:
-    C:\Users\Surya\Documents\work
-    Windows Defender Controlled Folder Access (CFA) may block write operations.
-    Recommended: Move project to C:\work or run 'extra doctor --fix-cfa' to allowlist.
-```
-
-### 3. One-Click UAC Elevation Repair: `extra doctor --fix-cfa`
-Users or automated agents can trigger instant, clean Windows UAC elevation to allowlist developer tools:
-```powershell
-extra doctor --fix-cfa
-```
-This triggers a native Windows UAC prompt (`Start-Process powershell -Verb RunAs`) to execute `Add-MpPreference` for all discovered developer binaries without requiring manual PowerShell administration.
-
----
-
-# Extra Release Notes — v0.2.1
-
-**Release Date:** September 16, 2026  
-**Release Title:** Windows Defender Zero-Alarm Architecture & Controlled Folder Access (CFA) Compliance  
-**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)
-
----
-
-## 1. Executive Summary & Forensic Disclosure
-
-In the spirit of complete transparency, Extra v0.2.1 addresses real-world security log discoveries from production Windows 11 deployments between **September 13, 2026 and September 16, 2026**.
-
-During real-hardware automated computer-use sessions on a Windows 11 host (`SURYA`), Microsoft Defender registered **31 security events** across two separate protection subsystems:
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                              DEFENDER LOG FORENSIC BREAKDOWN                                │
-├─────────────────────────┬───────┬──────────┬───────────────────────┬────────────────────────┤
-│ Protection Subsystem    │ Count │ Severity │ Trigger Resource      │ Underlying Cause       │
-├─────────────────────────┼───────┼──────────┼───────────────────────┼────────────────────────┤
-│ AMSI Cloud ML Engine    │ 5     │ Severe   │ powershell.exe        │ irm ... | iex in-memory│
-│ (Trojan:Win32/          │       │ (Level 5)│ irm .../install.ps1   │ download cradle flagged│
-│ Commando.A!ml)          │       │          │ | iex                 │ as stager dropper      │
-├─────────────────────────┼───────┼──────────┼───────────────────────┼────────────────────────┤
-│ Controlled Folder Access│ 26    │ Low /    │ python.exe, cmd.exe,  │ Unwhitelisted processes│
-│ (Ransomware Protection  │       │ Info     │ powershell.exe        │ writing to Documents & │
-│ Event ID 1123)          │       │          │ -> \Documents, \Pictures Pictures libraries     │
-└─────────────────────────┴───────┴──────────┴───────────────────────┴────────────────────────┘
-```
-
-For any normal user, these notifications are alarming:
-1. **"Severe Threat Detected: Trojan:Win32/Commando.A!ml"** during installation makes users believe they just ran a destructive Trojan or remote-access exploit.
-2. **"Protected Folder Access Blocked: Ransomware Protection"** popping up 26 times whenever the AI creates audit reports, spreadsheets, or charts makes users believe the AI is attempting to encrypt or hijack their personal files.
-
-**Extra v0.2.1 permanently eliminates both classes of false positives and execution blockades directly at the architectural level.**
-
----
-
-## 2. Root Cause Analysis
-
-### Incident A: The `Commando.A!ml` Installer False Positive
-* **What Happened:** On 13-Sep-2026 at 19:42:59 and 19:43:08 IST, running `irm https://extra.yantraos.com/install.ps1 | iex` was immediately intercepted and remediated (`Action: Remove`) by Microsoft Defender.
-* **Why Defender Intercepted It:**
-  1. **In-Memory Download Cradle:** Piping remote HTTP payloads directly into `iex` (Invoke-Expression) without writing to disk is the signature pattern of malware loaders, memory-only droppers, and offensive penetration tools (hence Defender ML classifying it under the `Commando` family).
-  2. **System Environment Modifications in Memory:** The installer modified machine/user environment variables, downloaded GitHub archives, created CLI wrappers, and registered MCP configurations while running in a memory buffer.
-  3. **Installer Telemetry Callback:** The raw HTTP POST to a telemetry endpoint at the end of the script resembled a post-exploitation beacon to Defender's cloud ML heuristics.
-
-### Incident B: The 26 Controlled Folder Access (CFA) Blocks
-* **What Happened:** Between 13-Sep-2026 and 16-Sep-2026, Defender recorded 26 blocks (Event ID 1123) against `python.exe` (Python 3.12), `cmd.exe`, `powershell.exe`, and even `Photos.exe`:
-  * `16-Sep 11:19:56`: `cmd.exe` blocked writing to `%userprofile%\Documents\GST_Audit_Final_Report`
-  * `16-Sep 11:19:48`: `python.exe` blocked writing to `%userprofile%\Documents\GST_Audit_Source_Data`
-  * `13-Sep 19:13–19:15`: `powershell.exe` and `cmd.exe` blocked in `%userprofile%\Pictures\`
-  * `13-Sep 18:27–18:34`: `python.exe` and `cmd.exe` blocked in `%userprofile%\Documents\Astra6_Win11_AI_Laptop_Research`
-* **Why Defender Blocked It:**
-  Windows Defender Controlled Folder Access (Ransomware Protection) strictly locks down default Windows shell user libraries:
-  * `%USERPROFILE%\Documents`
-  * `%USERPROFILE%\Pictures`
-  * `%USERPROFILE%\Desktop`
-  * `%USERPROFILE%\Videos`
-  * `%USERPROFILE%\Music`
-  
-  When an AI agent executed fast-path instructions (e.g., generating text files for Notepad or PNG charts for MS Paint), the agent intuitively chose `%userprofile%\Documents` or `%userprofile%\Pictures` as the destination. Because Python and CMD are not in the Defender CFA allowlist by default, Defender blocked every single write operation with `Access is denied` / `PermissionError: [Errno 13]`, triggering repeated ransomware warnings.
-
----
-
-## 3. What Was Fixed in v0.2.1
-
-### 1. Staged, Two-Step Installation Pipeline (Erasing `Commando.A!ml`)
-* **Eliminated `irm | iex` Memory Cradle:** The recommended installation method is now a clean, staged on-disk download:
-  ```powershell
-  iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"
-  ```
-  By saving the script to disk before execution, Defender inspects the script statically as a legitimate developer installer rather than treating it as an in-memory remote execution exploit.
-* **Stripped Raw Telemetry from Installer:** Removed the external `Invoke-RestMethod` telemetry call from `install.ps1` to keep the setup script 100% local, audited, and telemetry-free.
-
-### 2. Isolated Safe Scratch Workspace (`~/.extra/workspace`)
-* **Architectural Exemption from CFA:** Windows Defender Controlled Folder Access **only** monitors default user libraries. It **never** monitors custom directories such as `C:\Users\<user>\.extra\workspace\`.
-* **Zero Permission Errors:** `install.ps1` now automatically creates and provisions `%USERPROFILE%\.extra\workspace\` and exports the `EXTRA_WORKSPACE` environment variable.
-* All AI fast-path scratch files (Notepad briefs, Paint PNG charts, temporary CSVs, research folders) are directed here by default.
-
-### 3. Proactive CFA Detection & Auto-Whitelisting in `install.ps1`
-* `install.ps1` now interrogates Windows Defender via `Get-MpPreference`.
-* If Controlled Folder Access is active and the installer is executed in an elevated session, it silently registers Extra's virtual environment (`.extra\venv\Scripts\python.exe`) with `Add-MpPreference -ControlledFolderAccessAllowedApplications`.
-* If non-elevated, it transparently configures the safe workspace path without requiring administrator intervention or causing user panic.
-
-### 4. Native Windows Defender Diagnostics in `extra doctor`
-* `extra doctor` in `extra/cli.py` now includes a dedicated **Windows Defender & Controlled Folder Access (CFA)** health check matching our existing macOS TCC privacy checks.
-* It verifies whether CFA is Enabled, in Audit Mode, or Disabled, and verifies that `%USERPROFILE%\.extra\workspace\` is writable with zero Defender alerts.
-
-### 5. Updated Agent Directives (`extra_automation.md` & `STARTER_PROMPT.md`)
-* The high-speed automation protocol has been upgraded with a strict **Directory Boundary Guardrail**:
-  * **Rule:** NEVER write directly to `%USERPROFILE%\Documents`, `Pictures`, or `Desktop`.
-  * **Rule:** ALWAYS route fast-path outputs to `%USERPROFILE%\.extra\workspace\<filename>` or the active workspace.
-  * Windows applications (Notepad, MS Paint, File Explorer) are launched pointing to these unblocked safe paths, maintaining instant visual presentation with zero friction.
-
----
-
-## 4. How This Makes Your AI Work Flawlessly
-
-1. **Zero Silent Crashes:** Python scripts and terminal commands will never fail with `PermissionError: [Errno 13] Access is denied` or `File not found` errors caused by Defender intercepting write calls.
-2. **Zero False Alarms for Users:** The user's screen stays clean—no scary "Trojan" or "Ransomware Blocked" toast notifications.
-3. **Pristine Visual Automation:** The user still sees Notepad open with their report, MS Paint open with their data chart, and File Explorer open with their organized files—completely unaware of the underlying sandboxing that kept their system calm and secure.
-4. **Enterprise Compliant:** Organizations that enforce Windows Defender Controlled Folder Access and strict AMSI policies can now run Extra seamlessly without disabling security controls.
-
----
-
-*AIYantra Engineering Team — Sovereignty, Speed, and Complete Transparency.*
+# Extra Release Notes — v0.3.2
+
+**Release Date:** October 18, 2026  
+**Release Title:** Official Linux Native Desktop Automation Engine (Wayland & X11), AT-SPI2 Semantic Actuation, Universal Electron Accessibility & Tri-Platform CI/CD  
+**Target Systems:** Linux (KDE Plasma, GNOME, wlroots, X11), Windows 10/11 (x64 / ARM64), macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.2)
+
+Version 0.3.2 is a landmark milestone delivering **official native Linux desktop automation** to Extra, establishing full tri-platform parity across **Linux, Windows, and macOS**. In addition, this release integrates universal Electron accessibility injection, expands the continuous integration matrix to Ubuntu Linux, and hardens background isolated execution foundations.
+
+### Key Highlights:
+
+1. **Official Linux Desktop Platform Engine (`core/platform/linux/`):**
+   - **Wayland & X11 Dual Compatibility:** First-class support for Wayland compositors (KDE Plasma KWin, GNOME Mutter, wlroots) and traditional X11 window managers.
+   - **Pure-Python AT-SPI2 Accessibility Plane (`atspi_plane.py`):** Direct Session D-Bus (`org.a11y.Bus`) introspection of the Linux desktop accessibility hierarchy without external subprocesses, enabling sub-millisecond semantic actuation via `DoAction(0)` with physical click fallback.
+   - **Kernel-Level Hardware Input (`input_engine.py`):** Direct hardware event injection via `/dev/uinput` (`evdev`) delivering sub-millisecond keystroke dispatch with intelligent terminal-aware clipboard pasting (`Ctrl + Shift + V` for terminal emulators vs `Ctrl + V` for GUI windows).
+   - **Multi-Tier Wayland Screen Capture (`capture.py`):** Sub-3ms screen vision prioritizing KDE Spectacle D-Bus and wlroots Grim, with XShm / MSS fallback.
+   - **KWin Scripting Window Snapping (`focus.py`, `geometry.py`):** Sub-15ms programmatic window arrangement and focus activation via KWin D-Bus runner on Wayland and EWMH (`_NET_ACTIVE_WINDOW`) on X11.
+   - **Ambient Pulse Indicators (`indicators.py`):** Native Wayland overlay indicator rendering with emerald green border pulse and synthesized harmonic acoustic chimes.
+
+2. **Universal Electron & Chromium Perception Hardening (`core/platform/windows/shell.py`, `distiller.py`, `uia_plane.py`):**
+   - **Universal `--force-renderer-accessibility` Injection:** When launching Electron or Chromium applications (Canva, Slack, VS Code, Discord), Extra automatically injects `--force-renderer-accessibility` so the accessibility tree immediately exposes inner webview DOM nodes without requiring a screen reader.
+   - **Distiller Headroom & Opacity Detection:** Expanded candidate element scan buffers and added caption-only opacity detection, eliminating accessibility tree truncation in dense webview apps.
+   - **Zero-Stall Canva Declarative Skill (`skills/extra-canva/`):** Introduced official automation playbook leveraging native single-key accelerators (`T`, `R`, `C`, `Alt + /`).
+
+3. **Tri-Platform CI/CD Matrix (`.github/workflows/ci.yml`, `publish-pypi.yml`):**
+   - Expanded GitHub Actions automated test matrix to `[windows-latest, macos-latest, ubuntu-latest]` across Python 3.11, 3.12, and 3.13.
+   - Configured headless virtual display testing via `xvfb-run` and AT-SPI2 core libraries on Ubuntu Linux runners.
+
+4. **Multi-Instance Picture-in-Picture (PiP) Foundation (`core/platform/windows/child_session.py`, `pip_window.py`):**
+   - Integrated production foundation for isolated child session desktop automation, enabling background agent execution without cursor interception on the user's primary display.
+
+5. **Universal Package Ecosystem Alignment (`0.3.2`):**
+   - Synchronized version metadata across PyPI (`extra-desktop==0.3.2`), npm (`@yantraos/extra-desktop@0.3.2`), Homebrew (`Formula/extra.rb`), MCP Registry (`server.json`), Smithery (`smithery.yaml`), and Glama (`glama.json`).
+
+---
+
+# Extra Release Notes — v0.3.1
+
+**Release Date:** September 26, 2026  
+**Release Title:** Windows 11 Inking Stability, Zombie Process Elimination, Visual Grounding Hardening & Perception Calibration  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.1)
+
+Version 0.3.1 is a targeted stability and hardening release for **Windows and macOS**, resolving critical edge cases in Windows 11 hardware inking, headless zombie process lifecycles, and visual grounding precision.
+
+### Key Highlights:
+1. **Windows 11 InkPresenter & DirectManipulation Inking Stabilization:**
+   - **Root Cause Eliminated:** Continuous vector drawing in Windows 11 previously suffered from dropped lines and interrupted strokes in creative applications (MS Paint, Canva, browser whiteboards, Figma) due to intermediate `SetCursorPos` calls resetting the OS gesture recognizer and `DirectManipulation` inking context.
+   - **Native `SendInput` Event Streaming:** Re-engineered `mouse_drag` and `mouse_stroke` in `core/platform/windows/input_engine.py` to stream continuous relative/absolute mouse movement strictly via `SendInput` (`MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE`) without calling `SetCursorPos` mid-trajectory.
+   - **Hardware Dwell Time Synchronization:** Added a calibrated 60ms hardware dwell delay after `mouse_down` prior to trajectory dispatch, ensuring the OS touch/pen/mouse routing arbiter firmly locks the inking surface before stroke points stream.
+
+2. **Autonomous Headless Zombie Process Clearance (`core/platform/windows/shell.py`):**
+   - **Headless Singleton Cleanup:** Modern Chromium and Electron apps frequently maintain orphaned background singleton processes from previous runs that hold no visible UI windows. When launched, new processes hand off arguments to the zombie process and exit immediately, leaving the agent waiting on an invisible window.
+   - **Universal Windowed Process Verification:** `launch_app` now inspects running instances via `EnumWindows`; processes with zero top-level windows are automatically cleaned up prior to launch.
+   - **Host Shell Protection:** Shell and console hosts (`powershell`, `cmd`, `pwsh`, `wsl`) are strictly protected from zombie clearance.
+   - **Startup Flag Hardening:** Added Chromium startup flags (`--disable-features=msStartupBoost`, `--disable-background-mode`) to prevent silent background residency.
+   - **Strict Window Settlement Contract:** If `wait_for_window=True` and no window manifests within the timeout, `launch_app` now returns `success=False` with diagnostic telemetry rather than falsely reporting success.
+
+3. **SOUL-Eyes Visual Grounding Precision & Center-Screen Fallback Elimination (`core/soul/eyes.py`):**
+   - **Zero Spurious Center Clicks:** Previously, ungrounded UI targets (e.g. unfound buttons or inputs) fell back to clicking the center of the screen `(500, 500)`. SOUL-Eyes now strictly gates center-canvas fallback to explicit canvas/whiteboard targets (`"canvas"`, `"board"`, `"drawing"`).
+   - **Strict Grounding Contract:** All ungrounded controls strictly return `matched=False` (`None`), cleanly informing the agent that visual grounding did not succeed so it can re-inspect the UI accessibility tree or adjust viewport coordinates.
+   - **Enhanced Semantic Resolution:** Added dedicated heuristics for creative controls, modal action triggers (`"+"`, `"Create"`, `"New design"`), and dimension input rails.
+
+4. **StallBreaker Perception Calibration & Subpixel Noise Filtering (`core/stall_breaker.py`):**
+   - **Noise Filtering:** Visual delta detection now requires `pixel_diff >= 3.0` when perceptual hash distance is zero (`phash_diff == 0`), successfully filtering out false-positive visual changes caused by blinking text carets, subpixel font anti-aliasing, and system clock updates.
+   - **Global Visual Threshold:** Calibrated global visual change threshold to `2.0%` for reliable stall detection without false alarms during long-running tasks.
+
+5. **Thread Desktop Attachment Optimization (`core/platform/windows/geometry.py`):**
+   - Added desktop handle verification (`if hDesk and hDesk != curDesk:`) in `attach_input_desktop()`, eliminating redundant desktop context switches on Windows threads already attached to the active input desktop.
+
+6. **macOS Subsystem Hardening (`core/platform/macos/shell.py`):**
+   - Hardened bundle identifier resolution, application launch environment isolation, and window settling detection across Apple Silicon and Intel Macs.
+
+7. **Universal Engine Invariant Preservation:**
+   - All improvements strictly comply with the Universal Engine Invariant: zero hardcoded application names in `extra/core/`, `extra/mcp/`, or `extra/fastpath/`. All mechanisms generalize across Win32, WPF, Cocoa, Electron, and Chromium application architectures.
+
+8. **Upcoming Linux Milestone Preview:**
+   - Complete Linux platform support (Wayland KWin/GNOME/wlroots + X11, pure-Python AT-SPI2 Session D-Bus, `/dev/uinput` zero-latency hardware injection, Spectacle/Grim/MSS capture, and KWin Scripting snap layout) is implemented and verified (68/68 unit tests passing) and scheduled for public release in the upcoming v0.3.2 / v0.4.0 milestone following v0.3.1.
+
+---
+
+# Extra Release Notes — v0.3.0
+
+**Release Date:** September 24, 2026  
+**Release Title:** Project SOUL, Autonomous Live Desktop Pilot, and Sovereign Reflex Engine  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.0)
+
+Version 0.3.0 is a milestone release delivering the **Cognitive Trinity** architecture for sovereign desktop computer use:
+- **Mind (System Two):** Frontier LLM for strategic planning, long-horizon tool selection, and complex reasoning.
+- **Soul (System One):** Local Reflex AI (Project SOUL) delivering **< 70 µs** reflexive micro-decisions, dynamic modal branching, and sub-15ms edge visual grounding without cloud round-trip latency.
+- **Body (Hardware Execution):** Native Platform Abstraction Layer (PAL) with zero-latency `SendInput`, ScreenCaptureKit / DXGI desktop vision, and human-like Bezier cursor flight paths.
+
+### Key Architectural Highlights:
+1. **The Live Desktop Pilot Mandate:**
+   - Strict prohibition on background Python scripting and exploratory shell scripts for desktop automation.
+   - All interactions execute live on the glass via native MCP tools (`extra_launch`, `extra_focus_window`, `extra_click`, `extra_stroke`, `extra_type`, `extra_batch_actions`).
+   - Human-observable cursor flight paths (`human_like=True` by default) with realistic Bezier trajectories and ambient indicator halos.
+   - Zero clipboard "cheats": creative and drawing tasks are rendered with genuine vector strokes and tool selections on the canvas.
+2. **Project SOUL (System One Ultra-fast Layer):**
+   - Sub-millisecond on-device reflex decider (`eval`, `assert`, `wait_for_state`) inside `extra_batch_actions`.
+   - `extra_click` upgraded with semantic target grounding (`target="..."`) via SOUL-Eyes.
+   - Dynamic batch action reflex evaluation achieved median latency of **0.062 ms (62 µs)** across benchmark tests.
+3. **Anti-Poisoning Trajectory Evaluation & Strict Golden-Path Hardening:**
+   - **Full Parameter Decoding:** Fixed telemetry blindspot where batch action arguments were stripped before trajectory analysis. The analyzer now decodes nested actions, detecting undos (`Ctrl+Z`), repeated clicking, and coordinate hunting.
+   - **Strict Golden-Path Gating:** Trajectories with undos (`undo_count > 0`), stalls (`stall_count > 0`), or friction are strictly disqualified from golden paths (`is_golden_path = False`).
+   - **Zero Hallucinated Fast-Paths:** Eliminated contradictory logic that synthesized noisy recovery steps into "fast paths". Evolution prompts now explicitly restrict noisy runs to recording anti-stall guardrails only.
+4. **Active Window Perception Telemetry & Multi-Webview Invariants:**
+   - `extra_screenshot` now returns `active_window_title` and `active_window_hwnd` alongside capture metadata, enabling agents to verify the active foreground window directly without guessing.
+   - Established the **Electron Multi-Webview Accessibility Invariant**: documented how Chromium-based apps retain background webview nodes in the OS UI Automation tree, preventing agents from falling into infinite tab-switching loops.
+   - Added drawing tool verification warnings to `extra_task_complete` to ensure low-level mouse stroke dispatch is not conflated with on-screen visual inking.
+5. **Ground-Truth Inking Verification & Anti-Hallucination Guardrails:**
+   - **Programmatic Ink Verification in `extra_stroke` & `extra_batch_actions`:** Real-time pre/post screen difference capture computing exact pixel deltas (`pixels_changed`). If hardware mouse strokes produce 0 visual change (e.g. pen tool not engaged or canvas unfocused), `extra_stroke` immediately fails with `GHOST STROKE DETECTED`, halting runaway blind actions.
+   - **Strict Inking Enforcement in `extra_task_complete`:** If stroke actions were executed during a session, `extra_task_complete` verifies cumulative `pixels_changed > 0`. If 0 visual pixels were deposited, completion is **unconditionally rejected** (`success: false, error: TASK COMPLETION REJECTED`), preventing AI agents from hallucinating or falsely asserting visual drawing completion.
+   - **StallBreaker 2-Strike Click Loop Breaker:** Updated `extra_click` to evaluate consecutive zero-change attempts against generalized action classes. When 2 consecutive clicks produce zero visible change anywhere on screen, `extra_click` immediately returns `success: false` with `STALL DETECTED`, forcing the agent to adapt rather than looping blindly.
+6. **Self-Healing Skill Library Curator & Automated Migration Engine:**
+   - **Automated Startup Migration:** Upon upgrading to v0.3.0, Extra runs a one-time migration (`ensure_startup_migration`) that purges legacy unhardened evolved lines and mock test skills across user directories.
+   - **MCP Tool `extra_curate_skills`:** Exposes on-demand skill library audits and sanitization over stdio transport.
+   - **CLI Tool `extra curate [--sanitize]`:** Provides command-line inspection and healing of discovered skill playbooks.
+   - **Universal Dynamic Path Discovery:** Replaced hardcoded host paths with dynamic cross-platform discovery (`get_default_skill_directories()`) covering project, workspace, and global user configs across macOS, Windows, and Linux.
+7. **Episodic Graph Memory (KùzuDB + FastEmbed):**
+   - On-device knowledge graph persisting past task workflows, artifacts, and known application quirks.
+   - Sub-2ms graph retrieval with in-memory caching for zero-contention reflex execution.
+8. **Scout & Web-to-API Self-Evolution:**
+   - Autonomous Chrome/Edge DevTools Protocol (CDP) network sniffer and session vaulting for automated reverse-engineering of slow web flows into permanent, instant API fast-paths.
+9. **Native Complete Uninstaller Subsystem (`extra uninstall`):**
+   - Native OS confirmation modal dialog with warning disclaimer and strict default button on **NO / Cancel** to prevent accidental uninstallation.
+   - Comprehensive clean-up: deregisters Extra from Claude Desktop, Antigravity (`agy`), Cursor, and Windsurf MCP configurations.
+   - Restores user environment: cleanly removes `~/.extra/bin` from User PATH (`HKCU\Environment\Path` on Windows / shell profiles on macOS).
+   - Detached self-purging: completely deletes the `~/.extra` directory (runtime, venv, KùzuDB memory databases, blueprints, checkpoints, and workspaces) after process termination.
+10. **100% Test Suite Pass Rate:**
+   - 1,948 tests executed with 1,941 passes, 7 platform-specific skips, 0 failures, and 0 errors.
+
+---
+
+
+# Extra Release Notes — v0.2.5
+
+**Release Date:** September 18, 2026  
+**Release Title:** Computer-Use Acceleration Suite (Atomic Input Batching, Settle Normalization, Browser Crash Recovery Auto-Suppression, and Anti-Blind Completion Protocol)  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Problem Resolution (v0.2.5)
+
+In live end-to-end benchmark testing across real desktop automation workflows (file management, web research, document editing, and multi-tab browser workflows), critical performance and robustness breakthroughs were achieved, reducing compound task durations from **365 seconds down to 26 seconds (93% speedup)**:
+
+### 1. Multi-Format Sleep Parameter Normalization (`extra_batch_actions`)
+- **Problem:** When language models generate compound hardware action batches, sleep steps frequently pass varied parameter names (`"duration_ms"`, `"duration"`, `"seconds"`, `"delay_ms"`). The engine previously strictly expected `"ms"` or `"delay"`, causing batch sleep actions to fall back to a default 100ms. In browser workflows, this caused hotkey and typing actions to fire before web pages or bookmark dialogs had mounted.
+- **Fix:** Both Windows and macOS input engines now seamlessly parse and normalize `ms`, `duration_ms`, `seconds` (multiplied to ms), `delay_ms`, and `duration`.
+
+### 2. Browser Crash Recovery Modal Auto-Suppression
+- **Problem:** If a previous automation task terminated a browser process forcefully (e.g. `Stop-Process msedge -Force`), Chromium-based browsers (Edge, Chrome) record an unclean shutdown and display the blocking modal prompt: *"Microsoft Edge closed unexpectedly. Restore pages?"*. This prompt hijacked keyboard focus and blocked tab-wide shortcuts like `Ctrl+Shift+D`.
+- **Fix:** The application launcher (`extra/core/platform/windows/shell.py`) now automatically injects `--hide-crash-restore-bubble` and `--no-first-run` into all Edge and Chrome launches. Browsers launch clean, isolated, and immediately receptive to keyboard input.
+
+### 3. Anti-Blind Completion & Anti-Stall Guardrails
+- **Problem:** Models frequently called `extra_screenshot` and `extra_task_complete` in the exact same tool-calling turn, declaring completion blindly without ever receiving or inspecting the verification visual state. Additionally, large accessibility dumps (`extra_inspect_ui`) triggered multiple paged `view_file` calls that burned 40+ seconds of context latency.
+- **Fix:** Enforced the **Strict Anti-Blind Completion Mandate** (Turn N captures/inspects; Turn N+1 verifies and completes). Added strict prohibitions against accessibility dump paging and PowerShell HWND hunting loops.
+
+---
+
+# Extra Release Notes — v0.2.4
+
+**Release Date:** September 17, 2026  
+**Release Title:** macOS Integration Test Resilience, High-DPI Retina Stall Recovery Fallback, and Multi-Path CLI Diagnostic Suite  
+**Target Systems:** Windows 10/11 (x64 / ARM64) & macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Problem Resolution (v0.2.4)
+
+In multi-platform testing across macOS Sonoma/Sequoia systems (e.g. MacBook Air Retina displays) and fresh package installations, two key issues were identified and resolved:
+
+### 1. macOS StallBreaker False-Stall on Pending Accessibility Permissions
+- **Problem:** When running `extra test` on a macOS machine where Accessibility permissions have not yet been granted to Terminal, `inspect_window()` returns 0 interactive UI elements. Because 0 elements were present, `SetOfMarkAnnotator` generated an annotated image (`ann_img`) 100% identical to the raw screen capture (`cap.image`). In Phase 6, the test verifies that a visual change successfully resets stall strikes back to 0. Passing `cap.image` and `ann_img` into `StallBreaker` registered zero perceptual hash and zero pixel difference, causing the supervisor to interpret the recovery step as a 3rd stall strike and throwing an unhandled `AssertionError`.
+- **Root Cause & Retina Display Dynamics:** On high-resolution Retina displays (such as MacBook Air 2880×1800), even small local fallback bounding boxes (e.g. 50×50 px) occupy less than 0.05% of the total pixel area, which averages out to less than `pixel_threshold = 0.5` and downsamples to zero in standard 8×8 pHash.
+- **Fix:** In `test_core_engine.py` (Phase 6), when `len(elements) == 0`, the test applies a global visual invert fallback (`ImageOps.invert(cap.image.convert("RGB"))`). This ensures a 100% perceptual hash difference and high pixel delta across all display scales (from 720p to 5K/8K Retina), reliably verifying the stall recovery logic even when Accessibility permissions are pending.
+
+### 2. Multi-Path Test Suite Resolution in CLI (`extra test`)
+- **Problem:** Running `extra test` (`python -m extra.cli test`) imported from `extra.test_core_engine`, which failed with `ModuleNotFoundError` if tests were distributed inside `tests/` or in custom project directories.
+- **Fix:** `cmd_test()` in `extra/cli.py` now resolves test suites through a resilient fallback cascade (`extra.tests.test_core_engine` -> `extra.test_core_engine` -> `test_core_engine` -> local `Artifacts/extra` path). Added `tests/test_core_engine.py` as an official part of the package test distribution.
+
+### 3. Test Progress Indexing & Universal Platform Symmetry
+- **Problem:** The integration test suite had inconsistent progress counters (`[1/6]` through `[6/6]`, followed by `[7/7]`), and printed `"Testing Win32 Input Engine Mechanics..."` on macOS systems.
+- **Fix:** Progress counters are normalized to `[1/7]` through `[7/7]`, and logging is standardized to platform-neutral `"Testing Input Engine Mechanics..."`.
+
+---
+
+# Extra Release Notes — v0.2.3
+
+**Release Date:** September 16, 2026  
+**Release Title:** Desktop Automation Bottlenecks Resolution (Screenshot Persistence, StallBreaker Viewport Fallback, Window Focus Polling, and Microsoft Store/UWP App Resolution)  
+**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)  
+**Special Thanks & Attribution:** Special credit to [@harshbuttru3](https://github.com/harshbuttru3) for identifying and reporting these real-world automation bottlenecks in [Issue #4](https://github.com/AIYantra/extra/issues/4) during complex 3D modeling workflows in Blender 3.6 on Windows 11.
+
+---
+
+## 1. Executive Summary & Problem Resolution (v0.2.3)
+
+In real-world desktop automation sessions driving complex CAD and 3D modeling workflows (e.g., Blender 3.6 on Windows 11 with Antigravity / Gemini), four operational friction points were identified and resolved:
+
+### 1. `extra_screenshot` Payload Truncation Fix
+- **Problem:** Returning full-resolution screenshots as raw base64 strings in `result["screenshot_base64"]` generated 200 KB – 400 KB payloads, exceeding LLM tool output buffers (40 KB–50 KB). Client harnesses (Antigravity, Cursor, Claude Code) dumped output to disk `.txt` files, interrupting agent flows.
+- **Fix:** `extra_screenshot` now defaults to saving captures into the CFA-safe scratch workspace (`~/.extra/workspace/screenshots/screenshot_<timestamp>.png`) and returning `file_path`. The raw base64 string is omitted by default (`include_base64: bool = False`), keeping tool responses under 1 KB while providing immediate clickable file links.
+
+### 2. StallBreaker 200×200 ROI False-Stall Elimination
+- **Problem:** `StallBreaker` evaluated visual diffs over a localized 200×200 ROI around the clicked coordinate. In applications like Blender, CAD software, and IDEs, clicking a header icon or toolbar toggle updates a distant 3D viewport canvas or preview area while the local 200×200 ROI registers zero delta, causing premature `STALL DETECTED` aborts.
+- **Fix:** `extra_click` and `StallBreaker` now feature a zero-latency global fallback diff. If the local ROI shows zero change, `StallBreaker` downsamples the full monitor frame (sub-2ms via Nearest Neighbor downsampling + numpy mean diff). If remote screen areas changed, strikes are reset to 0 and the action succeeds with `remote visual change` status.
+
+### 3. `extra_focus_window` Retry Polling
+- **Problem:** `extra_focus_window` was an instantaneous single-shot check. When an application was launched asynchronously, calling `extra_focus_window` immediately failed with `Window not found`.
+- **Fix:** Added a `timeout: float = 3.0` parameter to `extra_focus_window` and `find_window_by_title` with an active 100ms polling loop, allowing asynchronously initializing windows to be focused reliably without artificial sleep scripts.
+
+### 4. Microsoft Store / MSIX / UWP App Resolution
+- **Problem:** Applications installed from the Microsoft Store or winget (Blender, Windows Terminal, Python) install execution aliases in `%LOCALAPPDATA%\Microsoft\WindowsApps`. `resolve_executable` previously failed to search this directory or common Program Files locations, causing launch resolution failures and `FileNotFoundError`.
+- **Fix:** `resolve_executable` now searches `%LOCALAPPDATA%\Microsoft\WindowsApps`, standard Program Files locations, and explicit Blender Foundation installation paths. Added `"blender"` to `APP_REGISTRY`.
+
+---
+
+# Extra Release Notes — v0.2.2
+
+**Release Date:** September 16, 2026  
+**Release Title:** Developer Binary Auto-Whitelisting & Controlled Folder Access (CFA) Workspace Diagnostics  
+**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)
+
+---
+
+## 1. Executive Summary & Root Cause Analysis (v0.2.2)
+
+Following the successful release of v0.2.1 (which achieved **zero AMSI/Trojan malware detections** on Windows Defender), follow-up testing on host `SURYA` uncovered a subtle, recurring friction point in user environments:
+
+### Incident C: The 5 Post-Update Controlled Folder Access (CFA) Blocks
+In `defenderhistory (2).md` recorded on **16-Sep-2026 at 12:47 IST**, 5 additional Controlled Folder Access (Event ID 1123) blocks were registered:
+```
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.agents\rules  | Process: agy.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.agents\skills | Process: agy.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work\.extra         | Process: agy.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work                | Process: python.exe
+16-09-2026 12:47:58 | Access blocked: C:\Users\Surya\Documents\work                | Process: powershell.exe
+```
+
+### Forensic Diagnosis:
+1. **The Culprit: Working Inside Windows Protected Libraries**
+   - The user initialized or cloned their project directory inside `C:\Users\Surya\Documents\work`.
+   - Windows Defender Controlled Folder Access monitors `Documents`, `Pictures`, `Desktop`, `Videos`, and `Music` indiscriminately.
+   - When `agy` launched to supervise coding tasks, `agy.exe`, Python, and PowerShell attempted to read/write project metadata (`.agents/skills`, `.extra`, git worktrees).
+   - Because `agy.exe` and user/venv Python instances were not explicitly in the Defender CFA allowlist, Defender blocked each write attempt, triggering toast alerts.
+
+2. **The Dual Solution in v0.2.2:**
+   - **Automated Binary Whitelisting:** `install.ps1` now proactively registers `agy.exe`, the active Python interpreter, the `.extra` virtualenv Python, and `powershell.exe` in Defender's `ControlledFolderAccessAllowedApplications`.
+   - **Workspace Location Diagnostics:** `extra doctor` now inspects the current directory. If the user runs `extra doctor` inside a protected folder (e.g. `Documents`), it emits an actionable warning and offers a one-click elevated fix via `extra doctor --fix-cfa`.
+
+---
+
+## 2. What Was Added in v0.2.2
+
+### 1. Developer Binary Whitelisting in `install.ps1`
+Step 6 of `install.ps1` automatically detects active developer toolchains and whitelists them:
+```powershell
+Add-MpPreference -ControlledFolderAccessAllowedApplications `
+    "$agyPath", "$sysPython", "$venvPython", "$psPath"
+```
+Even if a developer chooses to place their workspace inside `Documents\my-project`, Defender recognizes `agy.exe` and Python as trusted tools and allows operations without alerts.
+
+### 2. Workspace Proximity Guard in `extra doctor`
+Running `extra doctor` now checks if `Get-Location` is inside `Documents`, `Desktop`, `Pictures`, `Videos`, or `Music`:
+```text
+[!] WARNING: Current workspace is inside a Windows Protected Folder:
+    C:\Users\Surya\Documents\work
+    Windows Defender Controlled Folder Access (CFA) may block write operations.
+    Recommended: Move project to C:\work or run 'extra doctor --fix-cfa' to allowlist.
+```
+
+### 3. One-Click UAC Elevation Repair: `extra doctor --fix-cfa`
+Users or automated agents can trigger instant, clean Windows UAC elevation to allowlist developer tools:
+```powershell
+extra doctor --fix-cfa
+```
+This triggers a native Windows UAC prompt (`Start-Process powershell -Verb RunAs`) to execute `Add-MpPreference` for all discovered developer binaries without requiring manual PowerShell administration.
+
+---
+
+# Extra Release Notes — v0.2.1
+
+**Release Date:** September 16, 2026  
+**Release Title:** Windows Defender Zero-Alarm Architecture & Controlled Folder Access (CFA) Compliance  
+**Target Systems:** Windows 10/11 (x64) & macOS (Apple Silicon / Intel)
+
+---
+
+## 1. Executive Summary & Forensic Disclosure
+
+In the spirit of complete transparency, Extra v0.2.1 addresses real-world security log discoveries from production Windows 11 deployments between **September 13, 2026 and September 16, 2026**.
+
+During real-hardware automated computer-use sessions on a Windows 11 host (`SURYA`), Microsoft Defender registered **31 security events** across two separate protection subsystems:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                              DEFENDER LOG FORENSIC BREAKDOWN                                │
+├─────────────────────────┬───────┬──────────┬───────────────────────┬────────────────────────┤
+│ Protection Subsystem    │ Count │ Severity │ Trigger Resource      │ Underlying Cause       │
+├─────────────────────────┼───────┼──────────┼───────────────────────┼────────────────────────┤
+│ AMSI Cloud ML Engine    │ 5     │ Severe   │ powershell.exe        │ irm ... | iex in-memory│
+│ (Trojan:Win32/          │       │ (Level 5)│ irm .../install.ps1   │ download cradle flagged│
+│ Commando.A!ml)          │       │          │ | iex                 │ as stager dropper      │
+├─────────────────────────┼───────┼──────────┼───────────────────────┼────────────────────────┤
+│ Controlled Folder Access│ 26    │ Low /    │ python.exe, cmd.exe,  │ Unwhitelisted processes│
+│ (Ransomware Protection  │       │ Info     │ powershell.exe        │ writing to Documents & │
+│ Event ID 1123)          │       │          │ -> \Documents, \Pictures Pictures libraries     │
+└─────────────────────────┴───────┴──────────┴───────────────────────┴────────────────────────┘
+```
+
+For any normal user, these notifications are alarming:
+1. **"Severe Threat Detected: Trojan:Win32/Commando.A!ml"** during installation makes users believe they just ran a destructive Trojan or remote-access exploit.
+2. **"Protected Folder Access Blocked: Ransomware Protection"** popping up 26 times whenever the AI creates audit reports, spreadsheets, or charts makes users believe the AI is attempting to encrypt or hijack their personal files.
+
+**Extra v0.2.1 permanently eliminates both classes of false positives and execution blockades directly at the architectural level.**
+
+---
+
+## 2. Root Cause Analysis
+
+### Incident A: The `Commando.A!ml` Installer False Positive
+* **What Happened:** On 13-Sep-2026 at 19:42:59 and 19:43:08 IST, running `irm https://extra.yantraos.com/install.ps1 | iex` was immediately intercepted and remediated (`Action: Remove`) by Microsoft Defender.
+* **Why Defender Intercepted It:**
+  1. **In-Memory Download Cradle:** Piping remote HTTP payloads directly into `iex` (Invoke-Expression) without writing to disk is the signature pattern of malware loaders, memory-only droppers, and offensive penetration tools (hence Defender ML classifying it under the `Commando` family).
+  2. **System Environment Modifications in Memory:** The installer modified machine/user environment variables, downloaded GitHub archives, created CLI wrappers, and registered MCP configurations while running in a memory buffer.
+  3. **Installer Telemetry Callback:** The raw HTTP POST to a telemetry endpoint at the end of the script resembled a post-exploitation beacon to Defender's cloud ML heuristics.
+
+### Incident B: The 26 Controlled Folder Access (CFA) Blocks
+* **What Happened:** Between 13-Sep-2026 and 16-Sep-2026, Defender recorded 26 blocks (Event ID 1123) against `python.exe` (Python 3.12), `cmd.exe`, `powershell.exe`, and even `Photos.exe`:
+  * `16-Sep 11:19:56`: `cmd.exe` blocked writing to `%userprofile%\Documents\GST_Audit_Final_Report`
+  * `16-Sep 11:19:48`: `python.exe` blocked writing to `%userprofile%\Documents\GST_Audit_Source_Data`
+  * `13-Sep 19:13–19:15`: `powershell.exe` and `cmd.exe` blocked in `%userprofile%\Pictures\`
+  * `13-Sep 18:27–18:34`: `python.exe` and `cmd.exe` blocked in `%userprofile%\Documents\Astra6_Win11_AI_Laptop_Research`
+* **Why Defender Blocked It:**
+  Windows Defender Controlled Folder Access (Ransomware Protection) strictly locks down default Windows shell user libraries:
+  * `%USERPROFILE%\Documents`
+  * `%USERPROFILE%\Pictures`
+  * `%USERPROFILE%\Desktop`
+  * `%USERPROFILE%\Videos`
+  * `%USERPROFILE%\Music`
+  
+  When an AI agent executed fast-path instructions (e.g., generating text files for Notepad or PNG charts for MS Paint), the agent intuitively chose `%userprofile%\Documents` or `%userprofile%\Pictures` as the destination. Because Python and CMD are not in the Defender CFA allowlist by default, Defender blocked every single write operation with `Access is denied` / `PermissionError: [Errno 13]`, triggering repeated ransomware warnings.
+
+---
+
+## 3. What Was Fixed in v0.2.1
+
+### 1. Staged, Two-Step Installation Pipeline (Erasing `Commando.A!ml`)
+* **Eliminated `irm | iex` Memory Cradle:** The recommended installation method is now a clean, staged on-disk download:
+  ```powershell
+  iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"
+  ```
+  By saving the script to disk before execution, Defender inspects the script statically as a legitimate developer installer rather than treating it as an in-memory remote execution exploit.
+* **Stripped Raw Telemetry from Installer:** Removed the external `Invoke-RestMethod` telemetry call from `install.ps1` to keep the setup script 100% local, audited, and telemetry-free.
+
+### 2. Isolated Safe Scratch Workspace (`~/.extra/workspace`)
+* **Architectural Exemption from CFA:** Windows Defender Controlled Folder Access **only** monitors default user libraries. It **never** monitors custom directories such as `C:\Users\<user>\.extra\workspace\`.
+* **Zero Permission Errors:** `install.ps1` now automatically creates and provisions `%USERPROFILE%\.extra\workspace\` and exports the `EXTRA_WORKSPACE` environment variable.
+* All AI fast-path scratch files (Notepad briefs, Paint PNG charts, temporary CSVs, research folders) are directed here by default.
+
+### 3. Proactive CFA Detection & Auto-Whitelisting in `install.ps1`
+* `install.ps1` now interrogates Windows Defender via `Get-MpPreference`.
+* If Controlled Folder Access is active and the installer is executed in an elevated session, it silently registers Extra's virtual environment (`.extra\venv\Scripts\python.exe`) with `Add-MpPreference -ControlledFolderAccessAllowedApplications`.
+* If non-elevated, it transparently configures the safe workspace path without requiring administrator intervention or causing user panic.
+
+### 4. Native Windows Defender Diagnostics in `extra doctor`
+* `extra doctor` in `extra/cli.py` now includes a dedicated **Windows Defender & Controlled Folder Access (CFA)** health check matching our existing macOS TCC privacy checks.
+* It verifies whether CFA is Enabled, in Audit Mode, or Disabled, and verifies that `%USERPROFILE%\.extra\workspace\` is writable with zero Defender alerts.
+
+### 5. Updated Agent Directives (`extra_automation.md` & `STARTER_PROMPT.md`)
+* The high-speed automation protocol has been upgraded with a strict **Directory Boundary Guardrail**:
+  * **Rule:** NEVER write directly to `%USERPROFILE%\Documents`, `Pictures`, or `Desktop`.
+  * **Rule:** ALWAYS route fast-path outputs to `%USERPROFILE%\.extra\workspace\<filename>` or the active workspace.
+  * Windows applications (Notepad, MS Paint, File Explorer) are launched pointing to these unblocked safe paths, maintaining instant visual presentation with zero friction.
+
+---
+
+## 4. How This Makes Your AI Work Flawlessly
+
+1. **Zero Silent Crashes:** Python scripts and terminal commands will never fail with `PermissionError: [Errno 13] Access is denied` or `File not found` errors caused by Defender intercepting write calls.
+2. **Zero False Alarms for Users:** The user's screen stays clean—no scary "Trojan" or "Ransomware Blocked" toast notifications.
+3. **Pristine Visual Automation:** The user still sees Notepad open with their report, MS Paint open with their data chart, and File Explorer open with their organized files—completely unaware of the underlying sandboxing that kept their system calm and secure.
+4. **Enterprise Compliant:** Organizations that enforce Windows Defender Controlled Folder Access and strict AMSI policies can now run Extra seamlessly without disabling security controls.
+
+---
+
+*AIYantra Engineering Team — Sovereignty, Speed, and Complete Transparency.*

@@ -27,7 +27,7 @@ When you choose to enable community telemetry (`extra telemetry on`), Extra tran
 ```json
 {
   "client_hash": "4b048fc826fd6548...",
-  "extra_version": "0.3.1",
+  "extra_version": "0.3.3",
   "platform": {
     "os": "win32",
     "release": "10.0.26100",

@@ -3,7 +3,7 @@ class Extra < Formula
 
   desc "Flashless Linux, Windows & macOS Computer-Use Engine & MCP Server"
   homepage "https://extra.yantraos.com"
-  url "https://github.com/AIYantra/extra/archive/refs/tags/v0.3.2.tar.gz"
+  url "https://github.com/AIYantra/extra/archive/refs/tags/v0.3.3.tar.gz"
   sha256 "0a94a273624e24b7347d725ac721a411601562ea2201414550514109de978bcc"
   license "MIT"
 
@@ -20,6 +20,6 @@ class Extra < Formula
   end
 
   test do
-    assert_match "extra 0.3.2", shell_output("#{bin}/extra --version")
+    assert_match "extra 0.3.3", shell_output("#{bin}/extra --version")
   end
 end
