@@ -360,18 +360,29 @@ class EdgeVisionParser:
 
         return None
 
-    def parse_window(self, hwnd: int, max_elements: int = 50) -> List[UIElement]:
-        """Captures window image and returns parsed visual UIElements with screen coordinates."""
+    def parse_window(
+        self,
+        hwnd: int,
+        max_elements: int = 50,
+        crop_box: Optional[Tuple[int, int, int, int]] = None,
+    ) -> List[UIElement]:
+        """Captures window image (or sub-region crop_box) and returns parsed visual UIElements with screen coordinates."""
         win_info = get_window_info(hwnd)
         if not win_info or win_info.width <= 10 or win_info.height <= 10:
             return []
 
         try:
             from extra.core.capture import capture_roi
-            left = max(0, int(win_info.rect[0]))
-            top = max(0, int(win_info.rect[1]))
-            right = max(left + 20, int(win_info.rect[2]))
-            bottom = max(top + 20, int(win_info.rect[3]))
+            if crop_box:
+                left = max(0, int(crop_box[0]))
+                top = max(0, int(crop_box[1]))
+                right = max(left + 20, int(crop_box[2]))
+                bottom = max(top + 20, int(crop_box[3]))
+            else:
+                left = max(0, int(win_info.rect[0]))
+                top = max(0, int(win_info.rect[1]))
+                right = max(left + 20, int(win_info.rect[2]))
+                bottom = max(top + 20, int(win_info.rect[3]))
             cap = capture_roi(left, top, right, bottom)
             return self.parse_image_to_elements(
                 cap.image,

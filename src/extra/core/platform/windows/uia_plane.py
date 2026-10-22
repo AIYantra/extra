@@ -114,6 +114,7 @@ CONTROL_TYPE_NAMES: Dict[int, str] = {
 INTERACTIVE_TYPES: Set[str] = {
     "Button",
     "Edit",
+    "Document",
     "Hyperlink",
     "CheckBox",
     "RadioButton",
@@ -129,6 +130,7 @@ INTERACTIVE_TYPES: Set[str] = {
 UIA_INVOKE_PATTERN_ID = 10000
 UIA_TOGGLE_PATTERN_ID = 10015
 UIA_VALUE_PATTERN_ID = 10002
+UIA_TEXT_PATTERN_ID = 10014
 
 
 class UIAutomationPlane(AbstractAccessibilityPlane):
@@ -240,6 +242,31 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                         continue
 
                     name = str(elem.CurrentName or "").strip()
+
+                    # Fallback A: ValuePattern (for Edit / ComboBox controls with empty Name)
+                    if not name:
+                        try:
+                            val_pat = elem.GetCurrentPattern(UIA_VALUE_PATTERN_ID)
+                            if val_pat:
+                                val_iface = val_pat.QueryInterface(self._mod.IUIAutomationValuePattern)
+                                name = str(val_iface.CurrentValue or "").strip()
+                        except Exception:
+                            pass
+
+                    # Fallback B: TextPattern (for Terminal buffers, PowerShell console, and rich text documents)
+                    if not name and c_type_name in ("Document", "Text", "Edit"):
+                        try:
+                            txt_pat = elem.GetCurrentPattern(UIA_TEXT_PATTERN_ID)
+                            if txt_pat:
+                                txt_iface = txt_pat.QueryInterface(self._mod.IUIAutomationTextPattern)
+                                doc_range = txt_iface.DocumentRange
+                                full_txt = str(doc_range.GetText(300) or "").strip()
+                                if full_txt:
+                                    lines = [ln.strip() for ln in full_txt.splitlines() if ln.strip()]
+                                    name = " \n ".join(lines[-3:]) if len(lines) > 3 else full_txt
+                        except Exception:
+                            pass
+
                     auto_id = str(elem.CurrentAutomationId or "").strip()
                     class_name = str(elem.CurrentClassName or "").strip()
                     is_enabled = bool(elem.CurrentIsEnabled)
