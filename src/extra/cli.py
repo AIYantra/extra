@@ -873,7 +873,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         if pyproject_file.exists():
             try:
                 subprocess.run(
-                    [sys.executable, "-m", "pip", "install", "--quiet", "-e", str(repo_dir)],
+                    [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "-e", str(repo_dir)],
                     check=True,
                 )
                 print("  [OK] Package editable link verified.")
@@ -881,6 +881,32 @@ def cmd_update(args: argparse.Namespace) -> int:
                 print(f"  [WARN] Failed to install editable package: {ex}")
     else:
         print("\n[Dependency Refresh] Skipped (--skip-deps specified).")
+
+    # Phase 2b: Refresh CLI executable wrappers with updated PYTHONPATH
+    try:
+        bin_dir = Path.home() / ".extra" / "bin"
+        if bin_dir.exists():
+            if platform.system() == "Windows":
+                cmd_wrapper = bin_dir / "extra.cmd"
+                cmd_content = (
+                    f"@echo off\n"
+                    f"set PYTHONPATH={repo_dir}\\src;{repo_dir};%PYTHONPATH%\n"
+                    f'"{sys.executable}" -m extra.cli %*\n'
+                )
+                cmd_wrapper.write_text(cmd_content, encoding="ascii")
+                print("  [OK] Updated Windows CLI wrapper in ~/.extra/bin/extra.cmd.")
+            else:
+                sh_wrapper = bin_dir / "extra"
+                sh_content = (
+                    f"#!/usr/bin/env bash\n"
+                    f'export PYTHONPATH="{repo_dir}/src:{repo_dir}:$PYTHONPATH"\n'
+                    f'exec "{sys.executable}" -m extra.cli "$@"\n'
+                )
+                sh_wrapper.write_text(sh_content, encoding="utf-8")
+                sh_wrapper.chmod(0o755)
+                print("  [OK] Updated Unix CLI wrapper in ~/.extra/bin/extra.")
+    except Exception as ex:
+        print(f"  [WARN] Could not refresh CLI wrapper: {ex}")
 
     # Phase 3: AI Rules & Skills Synchronization
     sync_ai_rules_and_skills(repo_dir)
