@@ -248,6 +248,79 @@ def test_zero_hop_perception_mcp() -> None:
     print("PASSED")
 
 
+def test_virtualized_viewport_clipping() -> None:
+    print("[Test 7] Universal Viewport Clipping & Negative Coordinate Rejection...", end=" ")
+    from extra.core.distiller import UIDistiller
+    from extra.core.platform.base import UIElement
+
+    distiller = UIDistiller()
+    win_rect = (0, 0, 1920, 1080)
+
+    # 1. Scrolled-up virtualized message (e.g. Telegram Desktop Y ≈ -4200)
+    scrolled_up_el = UIElement(
+        element_id=1,
+        name="Old Scrolled Chat Message",
+        control_type="ListItem",
+        automation_id="msg_1",
+        class_name="HistoryItem",
+        bounding_box=(100, -4200, 500, -4150),
+        center=(300, -4175),
+        is_enabled=True,
+        is_offscreen=False,  # Buggy Qt provider falsely claims not offscreen
+    )
+
+    # 2. Scrolled-down out-of-bounds element (Y = 2500)
+    scrolled_down_el = UIElement(
+        element_id=2,
+        name="Offscreen Scrolled Down Item",
+        control_type="ListItem",
+        automation_id="msg_2",
+        class_name="HistoryItem",
+        bounding_box=(100, 2500, 500, 2550),
+        center=(300, 2525),
+        is_enabled=True,
+        is_offscreen=False,
+    )
+
+    # 3. Real visible on-screen message (Y = 850)
+    visible_message_el = UIElement(
+        element_id=3,
+        name="Status update sent successfully",
+        control_type="ListItem",
+        automation_id="msg_3",
+        class_name="HistoryItem",
+        bounding_box=(100, 800, 500, 850),
+        center=(300, 825),
+        is_enabled=True,
+        is_offscreen=False,
+    )
+
+    # 4. Visible message composer (Y = 950)
+    composer_el = UIElement(
+        element_id=4,
+        name="Write a message...",
+        control_type="Edit",
+        automation_id="composer",
+        class_name="TextEdit",
+        bounding_box=(100, 920, 700, 980),
+        center=(400, 950),
+        is_enabled=True,
+        is_offscreen=False,
+    )
+
+    raw_candidates = [scrolled_up_el, scrolled_down_el, visible_message_el, composer_el]
+    pruned = distiller._prune_and_filter(raw_candidates, interactive_only=False, window_rect=win_rect)
+
+    names = [el.name for el in pruned]
+    assert "Old Scrolled Chat Message" not in names, "Negative Y element (-4200) must be clipped"
+    assert "Offscreen Scrolled Down Item" not in names, "Out-of-bounds element must be clipped"
+    assert "Status update sent successfully" in names, "Real visible message must be retained"
+    assert "Write a message..." in names, "Composer must be retained"
+    assert len(pruned) == 2, f"Expected exactly 2 visible elements, got {len(pruned)}"
+
+    print("PASSED")
+
+
 def run_all() -> None:
     print("=" * 65)
     print("  EXTRA PHASE 1: SCREEN UI DISTILLER VALIDATION SUITE")
@@ -260,11 +333,13 @@ def run_all() -> None:
     test_live_window_distillation()
     test_mcp_tool_integration()
     test_zero_hop_perception_mcp()
+    test_virtualized_viewport_clipping()
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     print("=" * 65)
-    print(f"  ALL 6 TESTS PASSED SUCCESSFULLY in {elapsed:.2f}ms")
+    print(f"  ALL 7 TESTS PASSED SUCCESSFULLY in {elapsed:.2f}ms")
     print("=" * 65)
+
 
 
 if __name__ == "__main__":

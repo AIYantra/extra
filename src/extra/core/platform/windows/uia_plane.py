@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 from PIL import Image, ImageDraw, ImageFont
 
 from extra.core.platform.base import AbstractAccessibilityPlane, UIElement
-from extra.core.platform.windows.focus import get_foreground_window, list_windows
+from extra.core.platform.windows.focus import get_foreground_window, get_window_info, list_windows
 from extra.core.platform.windows.geometry import attach_input_desktop, ensure_dpi_aware
 from extra.core.platform.windows.input_engine import mouse_click
 
@@ -196,6 +196,10 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
         elements: List[UIElement] = []
         self._cached_elements.clear()
 
+        # Window Viewport Geometry for strict boundary validation
+        win_info = get_window_info(target_hwnd)
+        win_rect = win_info.rect if (win_info and win_info.rect and win_info.width > 10 and win_info.height > 10) else None
+
         try:
             root_elem = self._automation.ElementFromHandle(target_hwnd)
             if not root_elem:
@@ -239,6 +243,17 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
 
                     # Filter out degenerate or invisible rectangles
                     if w <= 2 or h <= 2:
+                        continue
+
+                    # Universal Viewport Clipping:
+                    # Qt (e.g. Telegram Desktop), Chromium, and virtualized scroll containers frequently report
+                    # CurrentIsOffscreen = False for scrolled-off elements, returning invalid negative or out-of-bounds
+                    # coordinates (e.g. top = -4200). Reject any control whose bounding box is strictly outside the target window.
+                    if win_rect:
+                        w_left, w_top, w_right, w_bottom = win_rect
+                        if bottom <= w_top or top >= w_bottom or right <= w_left or left >= w_right:
+                            continue
+                    elif top < -8000 or left < -8000:
                         continue
 
                     name = str(elem.CurrentName or "").strip()

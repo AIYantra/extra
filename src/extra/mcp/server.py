@@ -522,6 +522,8 @@ def extra_type(
 
     ret = {
         "success": True,
+        "action_dispatched": True,
+        "action_executed": True,
         "length": len(text),
         "duration_ms": round(duration_ms, 2),
         "method": method,
@@ -530,15 +532,22 @@ def extra_type(
     # Auto-Distillation on enter or explicit request
     if auto_distill or press_enter:
         if press_enter:
-            time.sleep(0.08)
+            # Dynamic visual settle: wait for animations/UI commits after enter (e.g. chat send, form submit)
+            try:
+                from extra.core.soul.gateman import wait_until_settled
+                wait_until_settled(timeout_sec=0.4, settle_frames=2, check_interval_ms=50)
+            except Exception:
+                time.sleep(0.18)
         try:
             d_res = distill_screen(format="compact", max_elements=25)
             ret["distilled_ui"] = d_res.content
+            ret["perception_succeeded"] = True
             fg = get_foreground_window()
             if fg:
                 ret["active_window_title"] = fg.title
         except Exception as ex:
             logger.debug("Auto-distill in extra_type failed: %s", ex)
+            ret["perception_succeeded"] = False
 
     record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard, "auto_distill": auto_distill}, duration_ms)
     b_warn = _track_active_blueprint_turn()

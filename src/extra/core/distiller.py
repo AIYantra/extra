@@ -212,8 +212,9 @@ class UIDistiller:
             max_elements=max(max_elements * 4, 150),
         )
 
-        # 3. Filter, Prune, and Classify
-        filtered_elements = self._prune_and_filter(raw_elements, interactive_only=interactive_only)
+        # 3. Filter, Prune, and Classify (with strict window viewport boundary enforcement)
+        win_rect = win_info.rect if (win_info and win_info.rect and win_info.width > 10 and win_info.height > 10) else None
+        filtered_elements = self._prune_and_filter(raw_elements, interactive_only=interactive_only, window_rect=win_rect)
 
         # Determine default source
         plat_src = "uia_tier0"
@@ -357,12 +358,25 @@ class UIDistiller:
         self,
         elements: List[UIElement],
         interactive_only: bool = False,
+        window_rect: Optional[Tuple[int, int, int, int]] = None,
     ) -> List[UIElement]:
         """Prunes noisy container nodes, deduplicates overlapping elements, and drops offscreen items."""
         pruned: List[UIElement] = []
         seen_keys: Set[Tuple[int, int, str]] = set()
 
         for el in elements:
+            # Universal Viewport Boundary Check:
+            # Discard any element whose bounding box is strictly outside the target window viewport
+            if window_rect:
+                w_left, w_top, w_right, w_bottom = window_rect
+                b_left, b_top, b_right, b_bottom = el.bounding_box
+                if b_bottom <= w_top or b_top >= w_bottom or b_right <= w_left or b_left >= w_right:
+                    continue
+
+            # Fallback: Reject extreme negative-Y/X coordinates from virtualized Qt/Chromium containers
+            if el.bounding_box[1] < -8000 or el.bounding_box[0] < -8000:
+                continue
+
             c_type = el.control_type or "Unknown"
             name = (el.name or "").strip()
             auto_id = (el.automation_id or "").strip()
