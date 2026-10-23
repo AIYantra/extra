@@ -270,141 +270,363 @@ export default {
         });
       }
 
-      // GET: Render polished YantraOS device consent & pairing UI
+      // GET: Render clean, luminous consent & pairing UI matching extra.yantraos.com
+      const cancelHref = redirectUri
+        ? `${redirectUri}${redirectUri.includes('?') ? '&' : '?'}error=access_denied&error_description=User+cancelled+authorization${state ? '&state=' + encodeURIComponent(state) : ''}`
+        : '#';
+
       const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Connect Extra to Google Gemini</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/icon.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg-canvas: #f8fafc;
+      --card-bg: rgba(255, 255, 255, 0.94);
+      --card-border: rgba(223, 228, 235, 0.95);
+      --text-main: #0f172a;
+      --text-muted: #5e6573;
+      --text-subtle: #8a92a3;
+      --brand-blue: #0284c7;
+      --stroke-light: #e2e8f0;
+      --btn-dark: #0f172a;
+      --btn-dark-hover: #1e293b;
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background-color: #0c0d12;
-      color: #e2e8f0;
+      font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-canvas);
+      background-image: 
+        radial-gradient(at 50% 0%, #e0edfd 0px, transparent 65%),
+        radial-gradient(at 100% 100%, #f0f7ff 0px, transparent 55%),
+        linear-gradient(to right, rgba(2, 132, 199, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(2, 132, 199, 0.04) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+      color: var(--text-main);
       display: flex;
       justify-content: center;
       align-items: center;
       min-height: 100vh;
       padding: 1.5rem;
+      -webkit-font-smoothing: antialiased;
     }
+
     .card {
-      background: #141721;
-      border: 1px solid #232838;
-      border-radius: 16px;
-      padding: 2.5rem;
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 2.25rem;
       width: 100%;
-      max-width: 480px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      max-width: 460px;
+      box-shadow: 0 24px 50px -12px rgba(15, 23, 42, 0.09), 0 1px 3px rgba(15, 23, 42, 0.04);
     }
-    .badge {
-      display: inline-block;
-      background: rgba(56, 189, 248, 0.12);
-      color: #38bdf8;
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.35rem 0.75rem;
-      border-radius: 9999px;
+
+    .pair-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
       margin-bottom: 1.25rem;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
     }
-    h1 {
-      font-size: 1.5rem;
+
+    .avatar-box {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: #ffffff;
+      border: 1px solid var(--stroke-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+      padding: 8px;
+    }
+
+    .avatar-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .bridge-connector {
+      display: flex;
+      align-items: center;
+      position: relative;
+      width: 54px;
+      justify-content: center;
+    }
+
+    .bridge-line {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #e2e8f0;
+      transform: translateY(-50%);
+    }
+
+    .bridge-pill {
+      position: relative;
+      background: #f0f7ff;
+      border: 1px solid #bae0ff;
+      color: #0284c7;
+      font-size: 0.6875rem;
       font-weight: 700;
-      color: #ffffff;
-      margin-bottom: 0.75rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 9999px;
+      letter-spacing: 0.04em;
     }
-    p {
-      color: #94a3b8;
-      font-size: 0.9rem;
+
+    .title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-main);
+      text-align: center;
+      margin-bottom: 0.35rem;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.875rem;
       line-height: 1.5;
+      text-align: center;
       margin-bottom: 1.75rem;
     }
+
     .form-group {
-      margin-bottom: 1.5rem;
+      margin-bottom: 1.25rem;
     }
-    label {
+
+    .field-label {
       display: block;
-      font-size: 0.825rem;
+      font-size: 0.8125rem;
       font-weight: 600;
-      color: #cbd5e1;
-      margin-bottom: 0.5rem;
+      color: #334155;
+      margin-bottom: 0.45rem;
     }
+
+    .input-wrapper {
+      position: relative;
+    }
+
     input[type="text"] {
       width: 100%;
-      background: #0f111a;
-      border: 1px solid #2d3348;
-      border-radius: 10px;
-      padding: 0.85rem 1rem;
-      color: #ffffff;
-      font-size: 0.95rem;
-      font-family: monospace;
+      background: #f8fafc;
+      border: 1.5px solid #d7dde5;
+      border-radius: 12px;
+      padding: 0.8rem 1rem;
+      color: #0f172a;
+      font-family: 'IBM Plex Mono', Menlo, Consolas, monospace;
+      font-size: 0.875rem;
       outline: none;
-      transition: border-color 0.15s;
+      transition: all 0.15s ease;
     }
+
     input[type="text"]:focus {
-      border-color: #38bdf8;
-      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+      background: #ffffff;
+      border-color: var(--brand-blue);
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
     }
+
     .hint {
       display: block;
       font-size: 0.75rem;
+      color: var(--text-subtle);
+      margin-top: 0.45rem;
+    }
+
+    .code-chip {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      color: #0f172a;
+      font-family: 'IBM Plex Mono', monospace;
+      padding: 0.12rem 0.35rem;
+      border-radius: 5px;
+      font-size: 0.72rem;
+    }
+
+    .scope-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 1rem 1.15rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .scope-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
       color: #64748b;
-      margin-top: 0.4rem;
+      margin-bottom: 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
     }
-    .permissions {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid #1e293b;
-      border-radius: 10px;
-      padding: 1rem;
-      margin-bottom: 1.75rem;
-      font-size: 0.8rem;
-      color: #94a3b8;
+
+    .scope-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
     }
-    .permissions strong { color: #f1f5f9; display: block; margin-bottom: 0.25rem; }
-    button {
+
+    .scope-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-size: 0.8125rem;
+      color: #334155;
+      line-height: 1.4;
+    }
+
+    .check-icon {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: #0284c7;
+      margin-top: 1px;
+    }
+
+    .security-note {
+      font-size: 0.72rem;
+      color: #64748b;
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid #edf2f7;
+    }
+
+    .btn-submit {
       width: 100%;
-      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      background: var(--btn-dark);
       color: #ffffff;
       border: none;
-      border-radius: 10px;
-      padding: 0.95rem;
-      font-size: 1rem;
+      border-radius: 12px;
+      padding: 0.85rem;
+      font-size: 0.9375rem;
       font-weight: 600;
       cursor: pointer;
-      transition: opacity 0.15s, transform 0.05s;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
+      transition: all 0.15s ease;
     }
-    button:hover { opacity: 0.95; }
-    button:active { transform: scale(0.99); }
+
+    .btn-submit:hover {
+      background: var(--btn-dark-hover);
+      box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18);
+      transform: translateY(-1px);
+    }
+
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+
+    .cancel-row {
+      text-align: center;
+      margin-top: 0.85rem;
+    }
+
+    .cancel-link {
+      color: var(--text-subtle);
+      font-size: 0.8125rem;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .cancel-link:hover {
+      color: #334155;
+      text-decoration: underline;
+    }
+
+    .card-footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid #f1f5f9;
+      font-size: 0.72rem;
+      color: var(--text-subtle);
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <span class="badge">Model Context Protocol</span>
-    <h1>Connect Extra to Google Gemini</h1>
-    <p>Authorize Google Gemini Web (gemini.google.com) to pilot this workstation using your secure Extra device tunnel.</p>
+    <div class="pair-row">
+      <div class="avatar-box" title="Extra Computer Use Protocol">
+        <img src="/icon.png" alt="Extra">
+      </div>
+      <div class="bridge-connector">
+        <div class="bridge-line"></div>
+        <span class="bridge-pill">MCP</span>
+      </div>
+      <div class="avatar-box" title="Google Gemini">
+        <img src="/logos/gemini.svg" alt="Gemini">
+      </div>
+    </div>
+
+    <h1 class="title">Connect to Google Gemini</h1>
+    <p class="subtitle">Pair your desktop workstation with Gemini Web to inspect windows, click buttons, and run local tools.</p>
+
     <form method="POST" action="/oauth/authorize">
       <input type="hidden" name="client_id" value="${clientId}">
       <input type="hidden" name="redirect_uri" value="${redirectUri}">
       <input type="hidden" name="state" value="${state}">
       <input type="hidden" name="code_challenge" value="${codeChallenge}">
       <input type="hidden" name="code_challenge_method" value="${codeChallengeMethod}">
+
       <div class="form-group">
-        <label for="relay_key">Desktop Setup Key</label>
-        <input type="text" id="relay_key" name="relay_key" value="${savedKey}" placeholder="extra_rel_..." required autofocus>
-        <span class="hint">Obtain this key by running <code>extra connect</code> in your local terminal.</span>
+        <label for="relay_key" class="field-label">Workstation Setup Key</label>
+        <div class="input-wrapper">
+          <input type="text" id="relay_key" name="relay_key" value="${savedKey}" placeholder="extra_rel_..." required autofocus spellcheck="false" autocomplete="off">
+        </div>
+        <span class="hint">Find your key by running <code class="code-chip">extra connect</code> in your terminal.</span>
       </div>
-      <div class="permissions">
-        <strong>Granted Scope:</strong>
-        Full local desktop automation (mouse clicks, Unicode typing, visual screen inspection, and batch execution).
+
+      <div class="scope-box">
+        <div class="scope-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Workstation Permissions
+        </div>
+        <ul class="scope-list">
+          <li class="scope-item">
+            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            <span><strong>Desktop control:</strong> Mouse clicks, keyboard typing, and window navigation</span>
+          </li>
+          <li class="scope-item">
+            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            <span><strong>Screen inspection:</strong> Window titles, focused controls, and frames</span>
+          </li>
+          <li class="scope-item">
+            <svg class="check-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+            <span><strong>Local execution:</strong> Run tools configured in your Extra engine</span>
+          </li>
+        </ul>
+        <div class="security-note">
+          Local-first execution. Actions run only on your machine through your authenticated key.
+        </div>
       </div>
-      <button type="submit">Authorize & Pair Device</button>
+
+      <button type="submit" class="btn-submit">Allow Connection</button>
+      
+      <div class="cancel-row">
+        <a href="${cancelHref}" class="cancel-link">Cancel</a>
+      </div>
     </form>
+
+    <div class="card-footer">
+      Extra • Sovereign Computer Use Protocol
+    </div>
   </div>
 </body>
 </html>`;
