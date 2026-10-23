@@ -434,6 +434,9 @@ def extra_click(
 
     ret = {
         "success": outcome.status != StallStatus.STALLED,
+        "action_dispatched": True,
+        "action_executed": True,
+        "verification_status": "verified" if outcome.status == StallStatus.NORMAL else "unconfirmed",
         "phys_x": phys_x,
         "phys_y": phys_y,
         "button": button,
@@ -462,8 +465,10 @@ def extra_click(
         try:
             d_res = distill_screen(format="compact", max_elements=25)
             ret["distilled_ui"] = d_res.content
+            ret["perception_succeeded"] = True
         except Exception as ex:
             logger.debug("Auto-distill in extra_click failed: %s", ex)
+            ret["perception_succeeded"] = False
 
     b_warn = _track_active_blueprint_turn()
     if b_warn:
@@ -549,6 +554,7 @@ def extra_type(
             logger.debug("Auto-distill in extra_type failed: %s", ex)
             ret["perception_succeeded"] = False
 
+    ret["verification_status"] = "unconfirmed" if press_enter else "skipped"
     record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard, "auto_distill": auto_distill}, duration_ms)
     b_warn = _track_active_blueprint_turn()
     if b_warn:
@@ -577,6 +583,9 @@ def extra_hotkey(keys: List[str]) -> Dict[str, Any]:
     record_action_step("extra_hotkey", {"keys": keys}, duration_ms)
     ret = {
         "success": True,
+        "action_dispatched": True,
+        "action_executed": True,
+        "verification_status": "unconfirmed" if any(str(k).lower() in ("enter", "return") for k in keys) else "skipped",
         "keys": keys,
         "duration_ms": round(duration_ms, 2),
     }
@@ -758,6 +767,9 @@ def extra_click_element(
 
     result: Dict[str, Any] = {
         "success": success,
+        "action_dispatched": success,
+        "action_executed": success,
+        "verification_status": "unconfirmed" if success else "failed",
         "element_id": element_id,
         "duration_ms": round(duration_ms, 2),
     }
@@ -981,7 +993,15 @@ def extra_drag(
     duration_ms = (time.perf_counter() - t0) * 1000.0
 
     record_action_step("extra_drag", {"start": [sx, sy], "end": [ex, ey], "human_like": human_like}, duration_ms)
-    return {"success": True, "start": [sx, sy], "end": [ex, ey], "duration_ms": round(duration_ms, 2)}
+    return {
+        "success": True,
+        "action_dispatched": True,
+        "action_executed": True,
+        "verification_status": "unconfirmed",
+        "start": [sx, sy],
+        "end": [ex, ey],
+        "duration_ms": round(duration_ms, 2),
+    }
 
 
 @server.tool()
@@ -1292,6 +1312,8 @@ def extra_batch_actions(
 
     res = execute_batch_actions(actions, auto_settle=auto_settle, auto_distill=auto_distill)
     _stall_breaker.reset()
+    res["action_dispatched"] = True
+    res["action_executed"] = not res.get("partial_execution", False)
     total_dur = res.get("total_duration_ms", 0)
 
     if scaled:
@@ -1383,6 +1405,7 @@ def extra_batch_actions(
         try:
             d_res = distill_screen(format="compact", max_elements=30)
             res["distilled_ui"] = d_res.content
+            res["perception_succeeded"] = True
             fg_win = get_foreground_window()
             if fg_win:
                 res["active_window"] = {
@@ -1392,6 +1415,12 @@ def extra_batch_actions(
                 }
         except Exception as ex:
             logger.debug("Auto-distill in extra_batch_actions failed: %s", ex)
+            res["perception_succeeded"] = False
+    elif "distilled_ui" in res:
+        res["perception_succeeded"] = True
+
+    if "verification_status" not in res:
+        res["verification_status"] = "verified" if res.get("ink_detected", False) or res.get("pixels_changed", 0) > 0 else "unconfirmed"
 
     b_warn = _track_active_blueprint_turn()
     if b_warn:

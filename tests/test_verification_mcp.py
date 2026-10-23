@@ -128,3 +128,55 @@ def test_extra_verify_lineage_workspace_path_mcp(tmp_path: Path):
     assert res["valid"] is True
     assert res["detected_origin"] == "manifest_verified"
     assert str(manifest) in res["file_path"]
+
+
+def test_tripartite_actuator_telemetry_contract():
+    """Verify that all actuator tools return decoupled action_dispatched, action_executed, and verification_status."""
+    from extra.mcp.server import extra_click, extra_type, extra_hotkey, extra_drag, extra_batch_actions
+    from PIL import Image
+    from extra.core.platform.base import CaptureResult
+
+    dummy_img = Image.new("RGB", (200, 200), "white")
+    cap = CaptureResult(image=dummy_img, width=200, height=200, monitor_index=0, duration_ms=1.0)
+
+    # 1. extra_type
+    with patch("extra.mcp.server.instant_type"):
+        res_type = extra_type(text="status update", press_enter=True)
+        assert res_type["success"] is True
+        assert res_type["action_dispatched"] is True
+        assert res_type["action_executed"] is True
+        assert res_type["verification_status"] == "unconfirmed"
+
+    # 2. extra_hotkey
+    with patch("extra.mcp.server.send_hotkey"):
+        res_hotkey = extra_hotkey(keys=["enter"])
+        assert res_hotkey["success"] is True
+        assert res_hotkey["action_dispatched"] is True
+        assert res_hotkey["action_executed"] is True
+        assert res_hotkey["verification_status"] == "unconfirmed"
+
+        res_hotkey_copy = extra_hotkey(keys=["ctrl", "c"])
+        assert res_hotkey_copy["verification_status"] == "skipped"
+
+    # 3. extra_drag
+    with patch("extra.mcp.server.mouse_drag"):
+        res_drag = extra_drag(start_x=10, start_y=10, end_x=100, end_y=100)
+        assert res_drag["success"] is True
+        assert res_drag["action_dispatched"] is True
+        assert res_drag["action_executed"] is True
+        assert res_drag["verification_status"] == "unconfirmed"
+
+    # 4. extra_click
+    with patch("extra.mcp.server.capture_screen", return_value=cap), patch("extra.mcp.server.mouse_click"):
+        res_click = extra_click(x=50, y=50)
+        assert res_click["action_dispatched"] is True
+        assert res_click["action_executed"] is True
+        assert "verification_status" in res_click
+
+    # 5. extra_batch_actions
+    with patch("extra.mcp.server.execute_batch_actions", return_value={"total_duration_ms": 10.0}):
+        res_batch = extra_batch_actions(actions=[{"action": "sleep", "ms": 10}])
+        assert res_batch["action_dispatched"] is True
+        assert res_batch["action_executed"] is True
+        assert "verification_status" in res_batch
+
