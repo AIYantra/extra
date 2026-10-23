@@ -418,6 +418,215 @@ export default {
       });
     }
 
+    // Route RFC 6749 & RFC 7636 OAuth 2.0 Token Endpoint (for Google Gemini & Web MCP Connectors)
+    if (url.pathname === "/oauth/token") {
+      if (request.method === "POST") {
+        let grantType = "";
+        let code = "";
+        let redirectUri = "";
+        let clientId = "";
+        let clientSecret = "";
+        let codeVerifier = "";
+        let refreshToken = "";
+
+        const contentType = request.headers.get("content-type") || "";
+        if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+          const formData = await request.formData();
+          grantType = formData.get("grant_type") || "";
+          code = formData.get("code") || "";
+          redirectUri = formData.get("redirect_uri") || "";
+          clientId = formData.get("client_id") || "";
+          clientSecret = formData.get("client_secret") || "";
+          codeVerifier = formData.get("code_verifier") || "";
+          refreshToken = formData.get("refresh_token") || "";
+        } else if (contentType.includes("application/json")) {
+          try {
+            const jsonBody = await request.json();
+            grantType = jsonBody.grant_type || "";
+            code = jsonBody.code || "";
+            redirectUri = jsonBody.redirect_uri || "";
+            clientId = jsonBody.client_id || "";
+            clientSecret = jsonBody.client_secret || "";
+            codeVerifier = jsonBody.code_verifier || "";
+            refreshToken = jsonBody.refresh_token || "";
+          } catch (_) {}
+        }
+
+        const authHeader = request.headers.get("authorization") || "";
+        if (authHeader.startsWith("Basic ")) {
+          try {
+            const creds = atob(authHeader.substring(6)).split(":");
+            if (creds.length >= 2) {
+              clientId = clientId || creds[0];
+              clientSecret = clientSecret || creds[1];
+            }
+          } catch (_) {}
+        }
+
+        // Grant Type 1: authorization_code
+        if (grantType === "authorization_code") {
+          if (!code) {
+            return new Response(JSON.stringify({ error: "invalid_request", error_description: "Missing authorization code" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          let codeRecord = null;
+          if (env && env.TELEMETRY_KV) {
+            try {
+              const raw = await env.TELEMETRY_KV.get(`oauth_code:${code}`);
+              if (raw) {
+                codeRecord = JSON.parse(raw);
+                // Consume code immediately to ensure one-time use
+                await env.TELEMETRY_KV.delete(`oauth_code:${code}`);
+              }
+            } catch (_) {}
+          }
+
+          if (!codeRecord) {
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Authorization code is invalid or expired" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          // PKCE S256 verification if challenge was set
+          if (codeRecord.code_challenge) {
+            if (!codeVerifier) {
+              return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Missing PKCE code_verifier" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+              });
+            }
+
+            if (codeRecord.code_challenge_method === "S256") {
+              const encoder = new TextEncoder();
+              const digest = await crypto.subtle.digest("SHA-256", encoder.encode(codeVerifier));
+              const computedChallenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+                .replace(/\+/g, "-")
+                .replace(/\//g, "_")
+                .replace(/=+$/, "");
+
+              if (computedChallenge !== codeRecord.code_challenge) {
+                return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }), {
+                  status: 400,
+                  headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+                });
+              }
+            } else if (codeVerifier !== codeRecord.code_challenge) {
+              return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE plain verification failed" }), {
+                status: 400,
+                headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+              });
+            }
+          }
+
+          // Issue access token and refresh token
+          const accessToken = "extra_tok_" + crypto.randomUUID().replace(/-/g, "");
+          const newRefreshToken = "extra_ref_" + crypto.randomUUID().replace(/-/g, "");
+
+          const tokenRecord = {
+            relay_key: codeRecord.relay_key,
+            client_id: codeRecord.client_id || clientId,
+            created_at: Date.now(),
+          };
+
+          if (env && env.TELEMETRY_KV) {
+            try {
+              // 30 days access token
+              await env.TELEMETRY_KV.put(`oauth_token:${accessToken}`, JSON.stringify(tokenRecord), { expirationTtl: 86400 * 30 });
+              // 90 days refresh token
+              await env.TELEMETRY_KV.put(`oauth_refresh:${newRefreshToken}`, JSON.stringify(tokenRecord), { expirationTtl: 86400 * 90 });
+            } catch (_) {}
+          }
+
+          return new Response(JSON.stringify({
+            access_token: accessToken,
+            token_type: "Bearer",
+            expires_in: 86400 * 30,
+            refresh_token: newRefreshToken,
+            scope: "mcp offline_access",
+          }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              ...CORS_HEADERS,
+              "Cache-Control": "no-store",
+              "Pragma": "no-cache",
+            },
+          });
+        }
+
+        // Grant Type 2: refresh_token
+        if (grantType === "refresh_token") {
+          if (!refreshToken) {
+            return new Response(JSON.stringify({ error: "invalid_request", error_description: "Missing refresh token" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          let refreshRecord = null;
+          if (env && env.TELEMETRY_KV) {
+            try {
+              const raw = await env.TELEMETRY_KV.get(`oauth_refresh:${refreshToken}`);
+              if (raw) refreshRecord = JSON.parse(raw);
+            } catch (_) {}
+          }
+
+          if (!refreshRecord) {
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Refresh token is invalid or expired" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          const newAccessToken = "extra_tok_" + crypto.randomUUID().replace(/-/g, "");
+          if (env && env.TELEMETRY_KV) {
+            try {
+              await env.TELEMETRY_KV.put(`oauth_token:${newAccessToken}`, JSON.stringify(refreshRecord), { expirationTtl: 86400 * 30 });
+            } catch (_) {}
+          }
+
+          return new Response(JSON.stringify({
+            access_token: newAccessToken,
+            token_type: "Bearer",
+            expires_in: 86400 * 30,
+            refresh_token: refreshToken,
+            scope: "mcp offline_access",
+          }), {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              ...CORS_HEADERS,
+              "Cache-Control": "no-store",
+              "Pragma": "no-cache",
+            },
+          });
+        }
+
+        return new Response(JSON.stringify({ error: "unsupported_grant_type", error_description: `Grant type '${grantType}' not supported` }), {
+          status: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+        });
+      }
+
+      if (request.method === "GET") {
+        return new Response(JSON.stringify({
+          status: "ready",
+          service: "OAuth 2.0 Token Endpoint",
+          spec: "RFC 6749 / RFC 7636",
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            ...CORS_HEADERS,
+          },
+        });
+      }
+    }
+
     // Route 0: Universal CORS Preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
