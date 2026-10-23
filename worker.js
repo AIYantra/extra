@@ -654,6 +654,45 @@ export default {
       url.pathname === "/health"
     ) {
       const targetUrl = new URL(url.pathname + url.search, AWS_MCP_HUB_ORIGIN);
+
+      // Resolve OAuth Bearer access token to user's paired desktop relay key
+      const authHeader = request.headers.get("Authorization") || "";
+      let isBearerAuth = false;
+      if (authHeader.startsWith("Bearer ")) {
+        isBearerAuth = true;
+        const token = authHeader.substring(7).trim();
+        if (token && env && env.TELEMETRY_KV) {
+          try {
+            const rawTokenData = await env.TELEMETRY_KV.get(`oauth_token:${token}`);
+            if (rawTokenData) {
+              const tokenRecord = JSON.parse(rawTokenData);
+              if (tokenRecord && tokenRecord.relay_key) {
+                targetUrl.searchParams.set("key", tokenRecord.relay_key);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+
+      // If client attempted Bearer auth but token could not be resolved and no query key is present, reject with 401
+      if (isBearerAuth && !targetUrl.searchParams.has("key") && (url.pathname === "/mcp" || url.pathname === "/sse")) {
+        return new Response(JSON.stringify({
+          jsonrpc: "2.0",
+          error: {
+            code: -32000,
+            message: "Unauthorized: Invalid or expired Bearer access token. Please re-authenticate."
+          },
+          id: null
+        }), {
+          status: 401,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "WWW-Authenticate": 'Bearer error="invalid_token", error_description="The access token expired or is invalid"',
+            ...CORS_HEADERS,
+          },
+        });
+      }
+
       const reqHeaders = new Headers(request.headers);
       reqHeaders.set("Host", targetUrl.hostname);
       reqHeaders.set("X-Forwarded-Host", url.hostname);
