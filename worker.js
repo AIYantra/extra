@@ -163,6 +163,261 @@ export default {
       }
     }
 
+    // Route RFC 6749 OAuth 2.0 Authorization Endpoint (for Google Gemini & Web MCP Connectors)
+    if (url.pathname === "/oauth/authorize") {
+      const clientId = url.searchParams.get("client_id") || "";
+      const redirectUri = url.searchParams.get("redirect_uri") || "";
+      const state = url.searchParams.get("state") || "";
+      const codeChallenge = url.searchParams.get("code_challenge") || "";
+      const codeChallengeMethod = url.searchParams.get("code_challenge_method") || "S256";
+
+      const cookieHeader = request.headers.get("Cookie") || "";
+      const cookieMatch = cookieHeader.match(/extra_device_key=([^;]+)/);
+      const savedKey = cookieMatch ? decodeURIComponent(cookieMatch[1]) : "";
+      const queryKey = (url.searchParams.get("key") || url.searchParams.get("relay_key") || "").trim();
+
+      // POST: Form submission from the pairing UI
+      if (request.method === "POST") {
+        let submittedKey = "";
+        let postClientId = clientId;
+        let postRedirectUri = redirectUri;
+        let postState = state;
+        let postCodeChallenge = codeChallenge;
+        let postCodeChallengeMethod = codeChallengeMethod;
+
+        try {
+          const contentType = request.headers.get("content-type") || "";
+          if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+            const formData = await request.formData();
+            submittedKey = (formData.get("relay_key") || "").trim();
+            postClientId = formData.get("client_id") || clientId;
+            postRedirectUri = formData.get("redirect_uri") || redirectUri;
+            postState = formData.get("state") || state;
+            postCodeChallenge = formData.get("code_challenge") || codeChallenge;
+            postCodeChallengeMethod = formData.get("code_challenge_method") || codeChallengeMethod;
+          } else if (contentType.includes("application/json")) {
+            const jsonBody = await request.json();
+            submittedKey = (jsonBody.relay_key || "").trim();
+            postClientId = jsonBody.client_id || clientId;
+            postRedirectUri = jsonBody.redirect_uri || redirectUri;
+            postState = jsonBody.state || state;
+            postCodeChallenge = jsonBody.code_challenge || codeChallenge;
+            postCodeChallengeMethod = jsonBody.code_challenge_method || codeChallengeMethod;
+          }
+        } catch (_) {}
+
+        if (!submittedKey) {
+          return new Response("Missing device setup key. Please enter a valid Extra relay key.", { status: 400 });
+        }
+
+        const authCode = "auth_" + crypto.randomUUID().replace(/-/g, "");
+        const codeRecord = {
+          relay_key: submittedKey,
+          client_id: postClientId,
+          redirect_uri: postRedirectUri,
+          code_challenge: postCodeChallenge,
+          code_challenge_method: postCodeChallengeMethod,
+          created_at: Date.now(),
+        };
+
+        if (env && env.TELEMETRY_KV) {
+          try {
+            await env.TELEMETRY_KV.put(`oauth_code:${authCode}`, JSON.stringify(codeRecord), { expirationTtl: 600 });
+          } catch (_) {}
+        }
+
+        const target = new URL(postRedirectUri || "https://vertexaisearch.cloud.google.com/oauth-redirect");
+        target.searchParams.set("code", authCode);
+        if (postState) target.searchParams.set("state", postState);
+
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "Location": target.toString(),
+            "Set-Cookie": `extra_device_key=${encodeURIComponent(submittedKey)}; Path=/; Max-Age=2592000; Secure; SameSite=Lax`,
+          },
+        });
+      }
+
+      // GET: Instant auto-approve if key is present in query string
+      if (queryKey && redirectUri) {
+        const authCode = "auth_" + crypto.randomUUID().replace(/-/g, "");
+        const codeRecord = {
+          relay_key: queryKey,
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          code_challenge: codeChallenge,
+          code_challenge_method: codeChallengeMethod,
+          created_at: Date.now(),
+        };
+
+        if (env && env.TELEMETRY_KV) {
+          try {
+            await env.TELEMETRY_KV.put(`oauth_code:${authCode}`, JSON.stringify(codeRecord), { expirationTtl: 600 });
+          } catch (_) {}
+        }
+
+        const target = new URL(redirectUri);
+        target.searchParams.set("code", authCode);
+        if (state) target.searchParams.set("state", state);
+
+        return new Response(null, {
+          status: 302,
+          headers: {
+            "Location": target.toString(),
+            "Set-Cookie": `extra_device_key=${encodeURIComponent(queryKey)}; Path=/; Max-Age=2592000; Secure; SameSite=Lax`,
+          },
+        });
+      }
+
+      // GET: Render polished YantraOS device consent & pairing UI
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Connect Extra to Google Gemini</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #0c0d12;
+      color: #e2e8f0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    .card {
+      background: #141721;
+      border: 1px solid #232838;
+      border-radius: 16px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.35rem 0.75rem;
+      border-radius: 9999px;
+      margin-bottom: 1.25rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      color: #94a3b8;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      margin-bottom: 1.75rem;
+    }
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    label {
+      display: block;
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 0.5rem;
+    }
+    input[type="text"] {
+      width: 100%;
+      background: #0f111a;
+      border: 1px solid #2d3348;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      color: #ffffff;
+      font-size: 0.95rem;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input[type="text"]:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+    .hint {
+      display: block;
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 0.4rem;
+    }
+    .permissions {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1.75rem;
+      font-size: 0.8rem;
+      color: #94a3b8;
+    }
+    .permissions strong { color: #f1f5f9; display: block; margin-bottom: 0.25rem; }
+    button {
+      width: 100%;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      padding: 0.95rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.05s;
+    }
+    button:hover { opacity: 0.95; }
+    button:active { transform: scale(0.99); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">Model Context Protocol</span>
+    <h1>Connect Extra to Google Gemini</h1>
+    <p>Authorize Google Gemini Web (gemini.google.com) to pilot this workstation using your secure Extra device tunnel.</p>
+    <form method="POST" action="/oauth/authorize">
+      <input type="hidden" name="client_id" value="${clientId}">
+      <input type="hidden" name="redirect_uri" value="${redirectUri}">
+      <input type="hidden" name="state" value="${state}">
+      <input type="hidden" name="code_challenge" value="${codeChallenge}">
+      <input type="hidden" name="code_challenge_method" value="${codeChallengeMethod}">
+      <div class="form-group">
+        <label for="relay_key">Desktop Setup Key</label>
+        <input type="text" id="relay_key" name="relay_key" value="${savedKey}" placeholder="extra_rel_..." required autofocus>
+        <span class="hint">Obtain this key by running <code>extra connect</code> in your local terminal.</span>
+      </div>
+      <div class="permissions">
+        <strong>Granted Scope:</strong>
+        Full local desktop automation (mouse clicks, Unicode typing, visual screen inspection, and batch execution).
+      </div>
+      <button type="submit">Authorize & Pair Device</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+      return new Response(html, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          ...CORS_HEADERS,
+        },
+      });
+    }
+
     // Route 0: Universal CORS Preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
