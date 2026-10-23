@@ -68,6 +68,7 @@ export default {
         issuer: "https://extra.yantraos.com",
         authorization_endpoint: "https://extra.yantraos.com/oauth/authorize",
         token_endpoint: "https://extra.yantraos.com/oauth/token",
+        registration_endpoint: "https://extra.yantraos.com/oauth/register",
         token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
@@ -97,6 +98,69 @@ export default {
           "Cache-Control": "public, max-age=3600",
         },
       });
+    }
+
+    // Route RFC 7591 Dynamic Client Registration (for Google Gemini & OAuth 2.1 Clients)
+    if (url.pathname === "/oauth/register") {
+      if (request.method === "POST") {
+        let clientMeta = {};
+        try {
+          clientMeta = await request.json();
+        } catch (_) {
+          clientMeta = {};
+        }
+
+        const clientId = "gemini_" + crypto.randomUUID().replace(/-/g, "").substring(0, 16);
+        const clientSecret = "sec_" + crypto.randomUUID().replace(/-/g, "");
+        const issuedAt = Math.floor(Date.now() / 1000);
+
+        const redirectUris = Array.isArray(clientMeta.redirect_uris) && clientMeta.redirect_uris.length > 0
+          ? clientMeta.redirect_uris
+          : ["https://vertexaisearch.cloud.google.com/oauth-redirect"];
+
+        const regRecord = {
+          client_id: clientId,
+          client_secret: clientSecret,
+          client_id_issued_at: issuedAt,
+          client_secret_expires_at: 0,
+          client_name: clientMeta.client_name || "Google Gemini Connector",
+          redirect_uris: redirectUris,
+          grant_types: clientMeta.grant_types || ["authorization_code", "refresh_token"],
+          response_types: clientMeta.response_types || ["code"],
+          token_endpoint_auth_method: clientMeta.token_endpoint_auth_method || "client_secret_post",
+          scope: "mcp offline_access"
+        };
+
+        if (env && env.TELEMETRY_KV) {
+          try {
+            await env.TELEMETRY_KV.put(`oauth_client:${clientId}`, JSON.stringify(regRecord), { expirationTtl: 86400 * 90 });
+          } catch (_) {}
+        }
+
+        return new Response(JSON.stringify(regRecord), {
+          status: 201,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            ...CORS_HEADERS,
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+          },
+        });
+      }
+
+      if (request.method === "GET") {
+        return new Response(JSON.stringify({
+          status: "ready",
+          service: "OAuth 2.0 Dynamic Client Registration",
+          spec: "RFC 7591",
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            ...CORS_HEADERS,
+          },
+        });
+      }
     }
 
     // Route 0: Universal CORS Preflight
