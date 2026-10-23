@@ -130,5 +130,119 @@ class TestCognitiveStallBreaker(unittest.TestCase):
         self.assertEqual(self.breaker._last_cognitive_state, "NORMAL_PROGRESS")
 
 
+    def test_duplicate_action_guard_blocks_unconfirmed_repeat(self):
+        """Unconfirmed consequential actions are blocked from rapid repeat without force=True."""
+        self.breaker.record_consequential_action(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            verification_status="unconfirmed",
+            timestamp=100.0,
+        )
+
+        # 1.0s later: identical action on same target is blocked
+        guard_msg = self.breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            force=False,
+            current_time=101.0,
+        )
+        self.assertIsNotNone(guard_msg)
+        self.assertIn("Duplicate Action Guard", guard_msg)
+        self.assertIn("type_enter", guard_msg)
+        self.assertIn("unconfirmed", guard_msg)
+
+        # Bypassed when force=True
+        guard_force = self.breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            force=True,
+            current_time=101.0,
+        )
+        self.assertIsNone(guard_force)
+
+        # Different target text is NOT blocked
+        guard_diff_target = self.breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key="Different message",
+            force=False,
+            current_time=101.0,
+        )
+        self.assertIsNone(guard_diff_target)
+
+        # Different action is NOT blocked
+        guard_diff_action = self.breaker.check_duplicate_action_guard(
+            action_name="click_submit",
+            target_key="Hello Telegram",
+            force=False,
+            current_time=101.0,
+        )
+        self.assertIsNone(guard_diff_action)
+
+    def test_duplicate_action_guard_allows_after_window_expires(self):
+        """Consequential action is allowed once rolling window (2.5s) has elapsed."""
+        self.breaker.record_consequential_action(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            verification_status="unconfirmed",
+            timestamp=100.0,
+        )
+
+        # 3.0s later (> 2.5s window), repeat is allowed
+        guard_msg = self.breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            force=False,
+            current_time=103.0,
+        )
+        self.assertIsNone(guard_msg)
+
+    def test_duplicate_action_guard_allows_when_verified(self):
+        """When prior action status is 'verified', subsequent repeats are allowed."""
+        self.breaker.record_consequential_action(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            verification_status="unconfirmed",
+            timestamp=100.0,
+        )
+
+        # Confirm the action
+        self.breaker.confirm_consequential_action("type_enter", "Hello Telegram")
+
+        # Now within window, repeat is permitted
+        guard_msg = self.breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            force=False,
+            current_time=100.5,
+        )
+        self.assertIsNone(guard_msg)
+
+    def test_duplicate_action_guard_confirmed_on_visual_change(self):
+        """Visual delta during evaluate_action automatically confirms pending unconfirmed actions."""
+        self.breaker.record_consequential_action(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            verification_status="unconfirmed",
+            timestamp=100.0,
+        )
+
+        # evaluate_action with real visual delta (black -> white)
+        outcome = self.breaker.evaluate_action(
+            before_image=self.img_black,
+            after_image=self.img_white,
+            action_name="type_enter",
+        )
+        self.assertEqual(outcome.status, StallStatus.NORMAL)
+
+        # Guard should now allow repeat because visual change confirmed prior action
+        guard_msg = self.breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key="Hello Telegram",
+            force=False,
+            current_time=100.5,
+        )
+        self.assertIsNone(guard_msg)
+
+
 if __name__ == "__main__":
     unittest.main()

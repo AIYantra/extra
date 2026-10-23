@@ -180,3 +180,37 @@ def test_tripartite_actuator_telemetry_contract():
         assert res_batch["action_executed"] is True
         assert "verification_status" in res_batch
 
+
+
+def test_duplicate_action_guard_mcp_enforcement():
+    """Validates that MCP actuator tools reject duplicate unconfirmed actions unless force=True."""
+    from extra.mcp.server import _stall_breaker, extra_type, extra_hotkey, extra_task_complete
+    from unittest.mock import patch
+
+    _stall_breaker.clear_consequential_history()
+
+    # 1. First type with press_enter succeeds
+    with patch("extra.mcp.server.instant_type"):
+        res1 = extra_type(text="Send confidential wire", press_enter=True)
+        assert res1["success"] is True
+        assert res1["action_dispatched"] is True
+        assert res1["verification_status"] == "unconfirmed"
+
+        # 2. Immediate repeat of identical text with press_enter is blocked by guard
+        res2 = extra_type(text="Send confidential wire", press_enter=True)
+        assert res2["success"] is False
+        assert res2["action_dispatched"] is False
+        assert res2["action_executed"] is False
+        assert res2["verification_status"] == "blocked"
+        assert res2["guard_triggered"] == "duplicate_action_guard"
+        assert "Duplicate Action Guard" in res2["error"]
+
+        # 3. With force=True, duplicate is allowed to proceed
+        res3 = extra_type(text="Send confidential wire", press_enter=True, force=True)
+        assert res3["success"] is True
+        assert res3["action_dispatched"] is True
+
+    # 4. extra_task_complete clears history
+    with patch("extra.mcp.server.get_indicator_controller"):
+        extra_task_complete(summary="Done", auto_screenshot=False, play_chime=False)
+        assert len(_stall_breaker._consequential_history) == 0

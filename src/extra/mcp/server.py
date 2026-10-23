@@ -309,6 +309,7 @@ def extra_click(
     human_like: bool = True,
     speed: str = "normal",
     auto_distill: bool = True,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """
     Executes a hardware-level mouse click with PerMonitorV2 DPI compensation and closed-loop stall checking.
@@ -332,6 +333,24 @@ def extra_click(
     ensure_dpi_aware()
     attach_input_desktop()
     _stall_breaker.check_safety_abort()
+
+    is_consequential_click = bool(target and any(kw in target.lower() for kw in ("send", "submit", "post", "confirm", "checkout", "place order")))
+    if is_consequential_click:
+        guard_advisory = _stall_breaker.check_duplicate_action_guard(
+            action_name="click_submit",
+            target_key=target.strip(),
+            force=force,
+        )
+        if guard_advisory:
+            return {
+                "success": False,
+                "action_dispatched": False,
+                "action_executed": False,
+                "perception_succeeded": False,
+                "verification_status": "blocked",
+                "error": guard_advisory,
+                "guard_triggered": "duplicate_action_guard",
+            }
 
     grounding_meta = None
     if target and (x is None or y is None):
@@ -460,6 +479,13 @@ def extra_click(
     if grounding_meta:
         ret["grounding"] = grounding_meta
 
+    if is_consequential_click:
+        _stall_breaker.record_consequential_action(
+            action_name="click_submit",
+            target_key=target.strip(),
+            verification_status=ret.get("verification_status", "unconfirmed"),
+        )
+
     # Auto-Distillation: Zero-Hop Perception
     if auto_distill:
         try:
@@ -485,6 +511,7 @@ def extra_type(
     use_clipboard: bool = False,
     auto_distill: bool = False,
     html: Optional[str] = None,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """
     Injects Unicode text with sub-millisecond latency into the active focused window.
@@ -506,6 +533,23 @@ def extra_type(
     ensure_dpi_aware()
     attach_input_desktop()
     _stall_breaker.check_safety_abort()
+
+    if press_enter:
+        guard_advisory = _stall_breaker.check_duplicate_action_guard(
+            action_name="type_enter",
+            target_key=text.strip(),
+            force=force,
+        )
+        if guard_advisory:
+            return {
+                "success": False,
+                "action_dispatched": False,
+                "action_executed": False,
+                "perception_succeeded": False,
+                "verification_status": "blocked",
+                "error": guard_advisory,
+                "guard_triggered": "duplicate_action_guard",
+            }
 
     t0 = time.perf_counter()
     # Universal Lossless Input Routing:
@@ -555,6 +599,12 @@ def extra_type(
             ret["perception_succeeded"] = False
 
     ret["verification_status"] = "unconfirmed" if press_enter else "skipped"
+    if press_enter:
+        _stall_breaker.record_consequential_action(
+            action_name="type_enter",
+            target_key=text.strip(),
+            verification_status=ret.get("verification_status", "unconfirmed"),
+        )
     record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard, "auto_distill": auto_distill}, duration_ms)
     b_warn = _track_active_blueprint_turn()
     if b_warn:
@@ -563,7 +613,7 @@ def extra_type(
 
 
 @server.tool()
-def extra_hotkey(keys: List[str]) -> Dict[str, Any]:
+def extra_hotkey(keys: List[str], force: bool = False) -> Dict[str, Any]:
     """
     Dispatches a synchronized keyboard shortcut sequence.
     Example: ['ctrl', 'c'], ['win', 'r'], ['ctrl', 'shift', 'esc'], ['alt', 'tab'].
@@ -574,6 +624,25 @@ def extra_hotkey(keys: List[str]) -> Dict[str, Any]:
     ensure_dpi_aware()
     attach_input_desktop()
     _stall_breaker.check_safety_abort()
+
+    is_enter = any(str(k).lower() in ("enter", "return") for k in keys)
+    key_combo = "+".join(str(k).lower() for k in keys)
+    if is_enter:
+        guard_advisory = _stall_breaker.check_duplicate_action_guard(
+            action_name="hotkey_enter",
+            target_key=key_combo,
+            force=force,
+        )
+        if guard_advisory:
+            return {
+                "success": False,
+                "action_dispatched": False,
+                "action_executed": False,
+                "perception_succeeded": False,
+                "verification_status": "blocked",
+                "error": guard_advisory,
+                "guard_triggered": "duplicate_action_guard",
+            }
 
     t0 = time.perf_counter()
     send_hotkey(keys)
@@ -589,6 +658,12 @@ def extra_hotkey(keys: List[str]) -> Dict[str, Any]:
         "keys": keys,
         "duration_ms": round(duration_ms, 2),
     }
+    if is_enter:
+        _stall_breaker.record_consequential_action(
+            action_name="hotkey_enter",
+            target_key=key_combo,
+            verification_status=ret.get("verification_status", "unconfirmed"),
+        )
     b_warn = _track_active_blueprint_turn()
     if b_warn:
         ret["budget_warning"] = b_warn
@@ -723,6 +798,7 @@ def extra_subtask_run(
 def extra_click_element(
     element_id: Optional[int] = None,
     query: Optional[str] = None,
+    force: bool = False,
 ) -> Dict[str, Any]:
     """
     Activates an accessible element or visually grounds and clicks an opaque UI target.
@@ -740,6 +816,24 @@ def extra_click_element(
     ensure_dpi_aware()
     attach_input_desktop()
     _stall_breaker.check_safety_abort()
+
+    is_consequential = bool(query and any(kw in query.lower() for kw in ("send", "submit", "post", "confirm", "checkout", "place order")))
+    if is_consequential:
+        guard_advisory = _stall_breaker.check_duplicate_action_guard(
+            action_name="click_submit",
+            target_key=query.strip(),
+            force=force,
+        )
+        if guard_advisory:
+            return {
+                "success": False,
+                "action_dispatched": False,
+                "action_executed": False,
+                "perception_succeeded": False,
+                "verification_status": "blocked",
+                "error": guard_advisory,
+                "guard_triggered": "duplicate_action_guard",
+            }
 
     t0 = time.perf_counter()
     success = False
@@ -777,6 +871,12 @@ def extra_click_element(
         result["error"] = f"Element query '{query}' could not be invoked via UIA or visually grounded on screen."
     if grounding_meta:
         result["soul_eyes"] = grounding_meta
+    if is_consequential and success:
+        _stall_breaker.record_consequential_action(
+            action_name="click_submit",
+            target_key=query.strip(),
+            verification_status=result.get("verification_status", "unconfirmed"),
+        )
     return result
 
 
@@ -1756,6 +1856,7 @@ def extra_task_complete(
                 "If calling 'extra_evolve_skill', provide ONLY discovered anti-stall guardrails in 'friction_points' and 'solutions_found'."
             )
 
+    _stall_breaker.clear_consequential_history()
     return res
 
 
