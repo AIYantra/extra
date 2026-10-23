@@ -85,6 +85,7 @@ class UIElement:
     is_enabled: bool = True
     is_offscreen: bool = False
     raw_element: Any = None
+    source: str = "uia"
 
     @property
     def width(self) -> int:
@@ -106,6 +107,7 @@ class UIElement:
             "center": list(self.center),
             "is_enabled": self.is_enabled,
             "is_offscreen": self.is_offscreen,
+            "source": self.source,
         }
 
 

@@ -268,6 +268,7 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                         except Exception:
                             pass
 
+                    el_source = "uia"
                     # Universal TextPattern Stream Extraction:
                     # Extracts live terminal buffers (Antigravity IDE, VS Code, PowerShell, Windows Terminal, CMD)
                     # and rich document streams (Word, Notepad, LibreOffice). Even if the container has a static label
@@ -285,8 +286,10 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                                     buffer_tail = " \n ".join(lines[-4:]) if len(lines) > 4 else full_txt
                                     if not name:
                                         name = buffer_tail
+                                        el_source = "text_pattern"
                                     elif len(name) <= 80 and buffer_tail != name and buffer_tail not in name:
                                         name = f"{name} | Buffer: {buffer_tail}"
+                                        el_source = "text_pattern"
                         except Exception:
                             pass
 
@@ -312,6 +315,7 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                         is_enabled=is_enabled,
                         is_offscreen=False,
                         raw_element=elem,
+                        source=el_source,
                     )
                     candidates.append(ui_el)
                     if has_focus:
