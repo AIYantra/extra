@@ -390,8 +390,9 @@ class UIDistiller:
             is_action = c_type in ACTION_CONTROL_TYPES
             is_info = c_type in INFO_CONTROL_TYPES
             is_container = c_type in CONTAINER_CONTROL_TYPES
+            has_stream = " | Buffer:" in name or getattr(el, "source", "") in ("text_pattern", "ocr")
 
-            if interactive_only and not (is_input or is_action):
+            if interactive_only and not (is_input or is_action or has_stream):
                 continue
 
             # Discard unnamed, non-interactive containers with no ID
@@ -504,14 +505,26 @@ class UIDistiller:
 
         return "\n".join(lines)
 
+    def _get_provenance_tag(self, el: UIElement) -> str:
+        """Determines the semantic provenance tag for the given element."""
+        src = str(getattr(el, "source", "uia") or "uia").lower()
+        if "ocr" in src:
+            return "[OCR]"
+        elif "txt" in src or "text_pattern" in src or " | Buffer:" in el.name:
+            return "[TXT]"
+        elif "soul" in src:
+            return "[SOUL]"
+        return "[UIA]"
+
     def _format_element_line(self, el: UIElement, include_coordinates: bool = True) -> str:
-        """Formats a single UI element bullet."""
+        """Formats a single UI element bullet with provenance."""
         name = f"'{el.name}'" if el.name else "(unnamed)"
         coord_str = f" [Center: {el.center[0]}, {el.center[1]}]" if include_coordinates else ""
         auto_id_str = f" (id: {el.automation_id})" if el.automation_id and el.automation_id != el.name else ""
         enabled_str = " (disabled)" if not el.is_enabled else ""
+        tag = self._get_provenance_tag(el)
 
-        return f"- [ID: {el.element_id}] {el.control_type}: {name}{auto_id_str}{enabled_str}{coord_str}"
+        return f"- {tag} [ID: {el.element_id}] {el.control_type}: {name}{auto_id_str}{enabled_str}{coord_str}"
 
     def _format_compact_action_rows(
         self, actions: List[UIElement], include_coordinates: bool = True, row_tolerance: int = 14
@@ -562,6 +575,16 @@ class UIDistiller:
                 f"Size: {work_surface['width']}x{work_surface['height']} | Center: ({work_surface['center'][0]},{work_surface['center'][1]})]"
             )
 
+        # Streams & Buffers (Terminals, Console stdout, Rich Documents, OCR Text)
+        stream_items = []
+        for el in elements:
+            src_tag = self._get_provenance_tag(el)
+            if src_tag in ("[TXT]", "[OCR]") or " | Buffer:" in el.name:
+                coords = f"({el.center[0]},{el.center[1]})" if include_coordinates else ""
+                stream_items.append(f"{src_tag} [{el.element_id}] {el.name}{coords}")
+        if stream_items:
+            parts.append("STREAMS: " + " | ".join(stream_items[:4]))
+
         info_items = [
             f"{el.name}" for el in elements
             if el.control_type in INFO_CONTROL_TYPES and el.name
@@ -610,6 +633,8 @@ class UIDistiller:
                     "id": el.element_id,
                     "type": el.control_type,
                     "name": el.name,
+                    "provenance": self._get_provenance_tag(el),
+                    "source": getattr(el, "source", "uia"),
                     "center": list(el.center) if include_coordinates else None,
                     "enabled": el.is_enabled,
                 }

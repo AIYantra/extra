@@ -394,6 +394,24 @@ def test_terminal_buffer_text_extraction() -> None:
     formatted = distiller._format_element_line(terminal_el, include_coordinates=True)
     assert "Terminal 1, agy | Buffer:" in formatted
     assert "167 passed in 3.4s" in formatted
+    assert "[TXT]" in formatted
+
+    # 3. Verify STREAMS section in Compact representation
+    compact_out = distiller._format_compact([terminal_el], title="Antigravity IDE", proc_name="agy.exe", is_fg=True)
+    assert "STREAMS:" in compact_out
+    assert "[TXT]" in compact_out
+    assert "Terminal 1, agy | Buffer:" in compact_out
+
+    # 4. Verify Multi-Source Provenance Tags
+    ocr_el = UIElement(element_id=11, name="Export", control_type="Button", source="ocr")
+    soul_el = UIElement(element_id=12, name="Canvas Node", control_type="Pane", source="soul_eyes")
+    uia_el = UIElement(element_id=13, name="File", control_type="MenuItem", source="uia")
+
+    assert distiller._get_provenance_tag(ocr_el) == "[OCR]"
+    assert distiller._get_provenance_tag(soul_el) == "[SOUL]"
+    assert distiller._get_provenance_tag(uia_el) == "[UIA]"
+    assert distiller._get_provenance_tag(terminal_el) == "[TXT]"
+    assert ocr_el.to_dict()["source"] == "ocr"
     print("PASSED")
 
 
