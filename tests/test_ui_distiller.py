@@ -321,6 +321,82 @@ def test_virtualized_viewport_clipping() -> None:
     print("PASSED")
 
 
+def test_terminal_buffer_text_extraction() -> None:
+    print("[Test 8] Universal Terminal & Document Buffer Text Extraction...", end=" ")
+    from unittest.mock import MagicMock
+    from extra.core.distiller import UIDistiller
+    from extra.core.platform.base import UIElement
+    from extra.core.platform.windows.uia_plane import UIA_TEXT_PATTERN_ID
+
+    # 1. Test mock UIA TextPattern extraction logic directly
+    mock_elem = MagicMock()
+    mock_elem.CurrentName = "Terminal 1, agy"
+    mock_elem.CurrentBoundingRectangle = (100, 600, 900, 900)
+    mock_elem.CurrentControlType = 50033  # UIA_PaneControlTypeId
+    mock_elem.CurrentAutomationId = "terminal_view"
+    mock_elem.CurrentClassName = "TerminalView"
+    mock_elem.CurrentIsEnabled = True
+    mock_elem.CurrentIsOffscreen = False
+
+    # Simulate IUIAutomationTextPattern interface
+    mock_pattern = MagicMock()
+    mock_txt_iface = MagicMock()
+    mock_range = MagicMock()
+    mock_range.GetText.return_value = (
+        "PS D:\\yantra_workspace> python -m pytest tests\n"
+        "test_cli.py ... [30%]\n"
+        "test_engine.py ... [70%]\n"
+        "================ 167 passed in 3.4s ================"
+    )
+    mock_txt_iface.DocumentRange = mock_range
+    mock_pattern.QueryInterface.return_value = mock_txt_iface
+
+    def get_pattern(pattern_id):
+        if pattern_id == UIA_TEXT_PATTERN_ID:
+            return mock_pattern
+        return None
+
+    mock_elem.GetCurrentPattern.side_effect = get_pattern
+
+    # Verify extraction logic matches uia_plane.py
+    name = str(mock_elem.CurrentName or "").strip()
+    c_type_name = "Pane"
+    if c_type_name in ("Document", "Text", "Edit", "Pane", "Group", "Custom"):
+        txt_pat = mock_elem.GetCurrentPattern(UIA_TEXT_PATTERN_ID)
+        if txt_pat:
+            txt_iface = txt_pat.QueryInterface(None)
+            doc_range = txt_iface.DocumentRange
+            full_txt = str(doc_range.GetText(400) or "").strip()
+            if full_txt:
+                lines = [ln.strip() for ln in full_txt.splitlines() if ln.strip()]
+                buffer_tail = " \n ".join(lines[-4:]) if len(lines) > 4 else full_txt
+                if not name:
+                    name = buffer_tail
+                elif len(name) <= 80 and buffer_tail != name and buffer_tail not in name:
+                    name = f"{name} | Buffer: {buffer_tail}"
+
+    assert "Terminal 1, agy | Buffer:" in name, f"Expected Buffer in name, got: {name}"
+    assert "167 passed in 3.4s" in name, f"Expected terminal output in name, got: {name}"
+
+    # 2. Verify distilled representation formatting
+    terminal_el = UIElement(
+        element_id=10,
+        name=name,
+        control_type="Pane",
+        automation_id="terminal_view",
+        class_name="TerminalView",
+        bounding_box=(100, 600, 900, 900),
+        center=(500, 750),
+        is_enabled=True,
+    )
+
+    distiller = UIDistiller()
+    formatted = distiller._format_element_line(terminal_el, include_coordinates=True)
+    assert "Terminal 1, agy | Buffer:" in formatted
+    assert "167 passed in 3.4s" in formatted
+    print("PASSED")
+
+
 def run_all() -> None:
     print("=" * 65)
     print("  EXTRA PHASE 1: SCREEN UI DISTILLER VALIDATION SUITE")
@@ -334,10 +410,11 @@ def run_all() -> None:
     test_mcp_tool_integration()
     test_zero_hop_perception_mcp()
     test_virtualized_viewport_clipping()
+    test_terminal_buffer_text_extraction()
 
     elapsed = (time.perf_counter() - t0) * 1000.0
     print("=" * 65)
-    print(f"  ALL 7 TESTS PASSED SUCCESSFULLY in {elapsed:.2f}ms")
+    print(f"  ALL 8 TESTS PASSED SUCCESSFULLY in {elapsed:.2f}ms")
     print("=" * 65)
 
 

@@ -268,17 +268,25 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                         except Exception:
                             pass
 
-                    # Fallback B: TextPattern (for Terminal buffers, PowerShell console, and rich text documents)
-                    if not name and c_type_name in ("Document", "Text", "Edit"):
+                    # Universal TextPattern Stream Extraction:
+                    # Extracts live terminal buffers (Antigravity IDE, VS Code, PowerShell, Windows Terminal, CMD)
+                    # and rich document streams (Word, Notepad, LibreOffice). Even if the container has a static label
+                    # (e.g. "Terminal 1, agy" or "Untitled - Notepad"), we extract the trailing buffer lines to give the
+                    # agent true observability over live command outputs and text content without requiring OCR.
+                    if c_type_name in ("Document", "Text", "Edit", "Pane", "Group", "Custom"):
                         try:
                             txt_pat = elem.GetCurrentPattern(UIA_TEXT_PATTERN_ID)
                             if txt_pat:
                                 txt_iface = txt_pat.QueryInterface(self._mod.IUIAutomationTextPattern)
                                 doc_range = txt_iface.DocumentRange
-                                full_txt = str(doc_range.GetText(300) or "").strip()
+                                full_txt = str(doc_range.GetText(400) or "").strip()
                                 if full_txt:
                                     lines = [ln.strip() for ln in full_txt.splitlines() if ln.strip()]
-                                    name = " \n ".join(lines[-3:]) if len(lines) > 3 else full_txt
+                                    buffer_tail = " \n ".join(lines[-4:]) if len(lines) > 4 else full_txt
+                                    if not name:
+                                        name = buffer_tail
+                                    elif len(name) <= 80 and buffer_tail != name and buffer_tail not in name:
+                                        name = f"{name} | Buffer: {buffer_tail}"
                         except Exception:
                             pass
 
