@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from enum import Enum
 import os
 import sys
+import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import imagehash
@@ -47,6 +48,15 @@ class StallStatus(str, Enum):
 class EmergencyAbortError(Exception):
     """Raised immediately when emergency fail-safe corner (0,0) or kill hotkey is triggered."""
     pass
+
+
+@dataclass
+class ConsequentialActionRecord:
+    """Record of a non-idempotent consequential action to guard against blind retries."""
+    action_name: str
+    target_key: str
+    timestamp: float
+    verification_status: str = "unconfirmed"
 
 
 @dataclass
@@ -88,6 +98,7 @@ class StallBreaker:
         self._recent_diffs: List[int] = []
         self._recent_clicks: List[Tuple[int, int, str]] = []
         self._last_cognitive_state: str = "NORMAL_PROGRESS"
+        self._consequential_history: List[ConsequentialActionRecord] = []
 
     @property
     def current_strikes(self) -> int:
@@ -365,7 +376,8 @@ class StallBreaker:
             )
 
         if has_state_change:
-            # Action had visible effect: reset strikes
+            # Action had visible effect: reset strikes and confirm unconfirmed actions
+            self.confirm_consequential_action()
             self._current_strikes = 0
             self._last_hash = h_after
             self._last_hwnd = after_hwnd
@@ -437,7 +449,96 @@ class StallBreaker:
                 is_modal_blocked=is_modal,
             )
 
-    def reset(self) -> None:
+    def record_consequential_action(
+        self,
+        action_name: str,
+        target_key: str = "",
+        verification_status: str = "unconfirmed",
+        timestamp: Optional[float] = None,
+    ) -> None:
+        """
+        Records a consequential action (e.g. submit click, enter key) with its verification status.
+        Prunes entries older than 15 seconds.
+        """
+        t = timestamp if timestamp is not None else time.time()
+        self._consequential_history = [
+            rec for rec in self._consequential_history
+            if (t - rec.timestamp) <= 15.0
+        ]
+        self._consequential_history.append(
+            ConsequentialActionRecord(
+                action_name=action_name,
+                target_key=target_key.strip(),
+                timestamp=t,
+                verification_status=verification_status,
+            )
+        )
+
+    def check_duplicate_action_guard(
+        self,
+        action_name: str,
+        target_key: str = "",
+        force: bool = False,
+        window_seconds: float = 2.5,
+        current_time: Optional[float] = None,
+    ) -> Optional[str]:
+        """
+        Non-Idempotent Duplicate Action Guard:
+        Prevents rapid repeated execution of unconfirmed consequential actions (e.g. duplicate
+        message sends, double form submissions) within a rolling time window.
+
+        Args:
+            action_name: Semantic category of action (e.g. 'type_enter', 'hotkey_enter', 'click_submit').
+            target_key: Identifier of the target input or control (e.g. typed text, button name).
+            force: If True, bypasses the duplicate check.
+            window_seconds: Rolling time window in seconds (default: 2.5s).
+            current_time: Optional explicit timestamp for deterministic testing.
+
+        Returns:
+            Advisory warning string if action is duplicate-blocked, None if allowed.
+        """
+        if force:
+            return None
+
+        t = current_time if current_time is not None else time.time()
+        norm_target = target_key.strip().lower()
+
+        for rec in reversed(self._consequential_history):
+            if (t - rec.timestamp) > window_seconds:
+                continue
+            if rec.action_name == action_name and rec.target_key.strip().lower() == norm_target:
+                if rec.verification_status == "unconfirmed":
+                    elapsed = max(0.0, t - rec.timestamp)
+                    return (
+                        f"Duplicate Action Guard: Prior action '{action_name}' on target '{target_key}' "
+                        f"was executed {elapsed:.1f}s ago but verification status is 'unconfirmed'. "
+                        f"Please verify current UI before repeating, or pass force=True to proceed."
+                    )
+        return None
+
+    def confirm_consequential_action(
+        self,
+        action_name: Optional[str] = None,
+        target_key: Optional[str] = None,
+    ) -> None:
+        """
+        Marks unconfirmed consequential actions as verified when perceptual feedback confirms visual change.
+        """
+        norm_target = target_key.strip().lower() if target_key else None
+        for rec in reversed(self._consequential_history):
+            if rec.verification_status == "unconfirmed":
+                match_name = (action_name is None or rec.action_name == action_name)
+                match_target = (norm_target is None or rec.target_key.strip().lower() == norm_target)
+                if match_name and match_target:
+                    rec.verification_status = "verified"
+                    if action_name is not None or target_key is not None:
+                        break
+
+    def clear_consequential_history(self) -> None:
+        """Clears the history of consequential actions."""
+        self._consequential_history.clear()
+
+    def reset(self, clear_consequential: bool = False) -> None:
         """Resets the strike counter to zero."""
         self._current_strikes = 0
         self._last_hash = None
@@ -446,4 +547,6 @@ class StallBreaker:
         self._recent_diffs.clear()
         self._recent_clicks.clear()
         self._last_cognitive_state = "NORMAL_PROGRESS"
+        if clear_consequential:
+            self._consequential_history.clear()
 
