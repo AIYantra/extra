@@ -880,19 +880,44 @@ export default {
       // Resolve OAuth Bearer access token to user's paired desktop relay key
       const authHeader = request.headers.get("Authorization") || "";
       let isBearerAuth = false;
+      let effectiveRelayKey = null;
+
       if (authHeader.startsWith("Bearer ")) {
         isBearerAuth = true;
         const token = authHeader.substring(7).trim();
-        if (token && env && env.TELEMETRY_KV) {
-          try {
-            const rawTokenData = await env.TELEMETRY_KV.get(`oauth_token:${token}`);
-            if (rawTokenData) {
-              const tokenRecord = JSON.parse(rawTokenData);
-              if (tokenRecord && tokenRecord.relay_key) {
-                targetUrl.searchParams.set("key", tokenRecord.relay_key);
+
+        if (token.startsWith("extra_rel_") || token.startsWith("extra_usr_")) {
+          // Direct relay key or user token passed as Bearer
+          effectiveRelayKey = token;
+          targetUrl.searchParams.set("key", token);
+        } else if (token.startsWith("extra_tok_")) {
+          // OAuth 2.0 dynamic access token issued to Google Gemini or ChatGPT
+          if (env && env.TELEMETRY_KV) {
+            try {
+              const rawTokenData = await env.TELEMETRY_KV.get(`oauth_token:${token}`);
+              if (rawTokenData) {
+                const tokenRecord = JSON.parse(rawTokenData);
+                if (tokenRecord && tokenRecord.relay_key) {
+                  effectiveRelayKey = tokenRecord.relay_key;
+                  targetUrl.searchParams.set("key", tokenRecord.relay_key);
+                }
               }
-            }
-          } catch (_) {}
+            } catch (_) {}
+          }
+        } else if (token) {
+          // Other tokens (e.g. JWT or custom credentials), check KV first
+          if (env && env.TELEMETRY_KV) {
+            try {
+              const rawTokenData = await env.TELEMETRY_KV.get(`oauth_token:${token}`);
+              if (rawTokenData) {
+                const tokenRecord = JSON.parse(rawTokenData);
+                if (tokenRecord && tokenRecord.relay_key) {
+                  effectiveRelayKey = tokenRecord.relay_key;
+                  targetUrl.searchParams.set("key", tokenRecord.relay_key);
+                }
+              }
+            } catch (_) {}
+          }
         }
       }
 
@@ -919,6 +944,14 @@ export default {
       reqHeaders.set("Host", targetUrl.hostname);
       reqHeaders.set("X-Forwarded-Host", url.hostname);
       reqHeaders.set("X-Forwarded-Proto", "https");
+
+      // CRITICAL: Rewrite the forwarded Authorization header to the resolved relay key!
+      // Upstream AWS Lambda prioritizes Authorization: Bearer <key> over the ?key= query param.
+      // If we leave the external extra_tok_... in the Authorization header, Lambda uses extra_tok_...
+      // as the lookup key and fails to find the user's active extra_rel_... connection!
+      if (effectiveRelayKey) {
+        reqHeaders.set("Authorization", `Bearer ${effectiveRelayKey}`);
+      }
 
       const backendRes = await fetch(targetUrl.toString(), {
         method: request.method,
