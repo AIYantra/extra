@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use Extra in your research, benchmarks, or software implementations, please cite it using the metadata below."
+title: "EXTRA: Open-Source Computer Use Protocol & High-Speed Desktop Automation Engine"
+authors:
+  - name: "AIYantra Engineering Team"
+    email: "engineering@yantraos.com"
+    affiliation: "yantraOS / Euryale Ferox Private Limited"
+url: "https://extra.yantraos.com"
+repository-code: "https://github.com/AIYantra/extra"
+license: "MIT"
+version: "0.3.3"
+date-released: "2026-10-22"
+keywords:
+  - "computer-use"
+  - "model-context-protocol"
+  - "mcp"
+  - "desktop-automation"
+  - "ai-agents"
+  - "accessibility-tree"
+  - "sovereign-ai"
+abstract: >-
+  Extra is a flashless, token-efficient, open-source Computer Use AI protocol
+  and Model Context Protocol (MCP) server that connects large language models
+  (ChatGPT, Claude, Gemini, Cursor) to physical desktop operating systems
+  across Linux (Wayland/X11), macOS, and Windows. It replaces screenshot polling
+  with native accessibility trees (AT-SPI2, UIA, AXUIElement) and direct GPU
+  frame capture, achieving sub-3ms action dispatch and up to 225x lower token costs.
