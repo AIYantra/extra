@@ -312,6 +312,18 @@ def get_desktop_indexer() -> XDGDesktopIndexer:
 # ── Built-in Application Fallbacks & Semantic Registry ────────────────────────
 
 BUILTIN_APP_FALLBACKS: Dict[str, Dict[str, Any]] = {
+    # Clock & Timer
+    "clock": {
+        "candidates": ["gnome-clocks", "kclock", "alarm-clock-applet"],
+        "type": "bin",
+        "proc": "clocks",
+    },
+    "timer": {
+        "candidates": ["gnome-clocks", "kclock", "alarm-clock-applet"],
+        "type": "bin",
+        "proc": "clocks",
+    },
+
     # Calculator
     "calc": {
         "candidates": ["kcalc", "gnome-calculator", "galculator", "xcalc", "speedcrunch", "qalculate-gtk", "bc"],

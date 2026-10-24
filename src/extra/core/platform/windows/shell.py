@@ -63,6 +63,14 @@ BUILTIN_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "mspaint": {"target": "mspaint.exe", "type": "exe", "proc": "mspaint.exe"},
     "photos": {"target": "ms-photos:", "type": "uri", "proc": "Photos.exe"},
     "store": {"target": "ms-windows-store:", "type": "uri", "proc": "WinStore.App.exe"},
+    "clock": {"target": "ms-clock:", "type": "uri", "proc": "ApplicationFrameHost.exe"},
+    "alarms": {"target": "ms-clock:", "type": "uri", "proc": "ApplicationFrameHost.exe"},
+    "timer": {"target": "ms-clock:", "type": "uri", "proc": "ApplicationFrameHost.exe"},
+    "stopwatch": {"target": "ms-clock:", "type": "uri", "proc": "ApplicationFrameHost.exe"},
+    "mail": {"target": "outlookmail:", "type": "uri", "proc": "HxOutlook.exe"},
+    "calendar": {"target": "outlookcal:", "type": "uri", "proc": "HxCalendar.exe"},
+    "camera": {"target": "microsoft.windows.camera:", "type": "uri", "proc": "WindowsCamera.exe"},
+    "weather": {"target": "msnweather:", "type": "uri", "proc": "Weather.exe"},
     "vlc": {"target": "vlc.exe", "type": "exe", "proc": "vlc.exe"},
     "blender": {"target": "blender.exe", "type": "exe", "proc": "blender.exe"},
     "canva": {"target": "canva.exe", "type": "exe", "proc": "canva.exe"},
@@ -538,9 +546,14 @@ def launch_app(
                     matched_pid = win.process_id
                     break
                 # Or matches process name (including WindowsTerminal hosting console apps in Win11)
+                is_uwp_host = bool(expected_proc and expected_proc.lower() == "applicationframehost.exe")
+                proc_matches = bool(expected_proc and win.process_name.lower() == expected_proc.lower())
+                title_matches = bool(clean_app in win_title or (clean_app in ("clock", "timer", "alarms", "stopwatch") and "clock" in win_title))
+
                 if (
-                    (expected_proc and win.process_name.lower() == expected_proc.lower())
+                    (proc_matches and (not is_uwp_host or title_matches))
                     or (clean_app in ("powershell", "cmd", "terminal") and "terminal" in win.process_name.lower())
+                    or (title_matches and win_title not in EXCLUDED_SHELL_TITLES)
                 ):
                     matched_hwnd = win.hwnd
                     matched_title = win.title

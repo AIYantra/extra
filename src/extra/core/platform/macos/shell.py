@@ -44,6 +44,10 @@ BUILTIN_MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "vlc": {"target": "VLC", "bundle": "/Applications/VLC.app", "proc": "VLC", "type": "app"},
     "blender": {"target": "Blender", "bundle": "/Applications/Blender.app", "proc": "Blender", "type": "app"},
     "canva": {"target": "Canva", "bundle": "/Applications/Canva.app", "proc": "Canva", "type": "app"},
+    "clock": {"target": "Clock", "bundle": "/System/Applications/Clock.app", "proc": "Clock", "type": "app"},
+    "timer": {"target": "Clock", "bundle": "/System/Applications/Clock.app", "proc": "Clock", "type": "app"},
+    "calendar": {"target": "Calendar", "bundle": "/System/Applications/Calendar.app", "proc": "Calendar", "type": "app"},
+    "mail": {"target": "Mail", "bundle": "/System/Applications/Mail.app", "proc": "Mail", "type": "app"},
 }
 
 MAC_APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_MAC_APP_REGISTRY)
