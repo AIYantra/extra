@@ -96,7 +96,24 @@ MODE_PROFILES: Dict[ExecutionMode, ModeConfig] = {
     ),
 }
 
-_active_mode: ExecutionMode = ExecutionMode.from_string(os.environ.get("EXTRA_SPEED_MODE", "balanced"))
+def _load_initial_mode() -> ExecutionMode:
+    """Loads default mode from EXTRA_SPEED_MODE env var or persistent ~/.extra/config.json."""
+    env_val = os.environ.get("EXTRA_SPEED_MODE")
+    if env_val:
+        return ExecutionMode.from_string(env_val)
+    try:
+        cfg_path = Path.home() / ".extra" / "config.json"
+        if cfg_path.exists():
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict) and "speed_mode" in data:
+                    return ExecutionMode.from_string(data["speed_mode"])
+    except Exception:
+        pass
+    return ExecutionMode.BALANCED
+
+
+_active_mode: ExecutionMode = _load_initial_mode()
 
 
 def get_execution_mode() -> ExecutionMode:
@@ -104,8 +121,8 @@ def get_execution_mode() -> ExecutionMode:
     return _active_mode
 
 
-def set_execution_mode(mode: Union[str, ExecutionMode], persist: bool = False) -> ModeConfig:
-    """Sets active ExecutionMode and optionally persists to ~/.extra/config.json."""
+def set_execution_mode(mode: Union[str, ExecutionMode], persist: bool = True) -> ModeConfig:
+    """Sets active ExecutionMode and persists to ~/.extra/config.json by default."""
     global _active_mode
     _active_mode = ExecutionMode.from_string(mode)
     os.environ["EXTRA_SPEED_MODE"] = _active_mode.value

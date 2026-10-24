@@ -1058,6 +1058,53 @@ def cmd_audit(args) -> int:
         return 1
 
 
+def cmd_mode(args: argparse.Namespace) -> int:
+    """View or change the Extra automation execution speed mode."""
+    from extra.core.mode import (
+        ExecutionMode,
+        get_execution_mode,
+        set_execution_mode,
+        get_mode_config,
+    )
+
+    target_mode = getattr(args, "mode", None)
+    if not target_mode:
+        curr = get_execution_mode()
+        cfg = get_mode_config(curr)
+        print("\n" + "=" * 60)
+        print(f"  [Extra] EXECUTION MODE: {curr.value.upper()}")
+        print("=" * 60)
+        print(f"  * Active Profile          : {cfg.mode.value}")
+        print(f"  * Settle Delay Timeout    : {cfg.settle_timeout_sec}s")
+        print(f"  * Max Inspected Elements  : {cfg.max_inspect_elements}")
+        print(f"  * Compact UI Serialization: {cfg.compact_ui}")
+        print(f"  * Sleep Scale Factor      : {cfg.sleep_scale}x (max {cfg.max_sleep_ms}ms)")
+        print(f"  * Proactive Memory Recall : {cfg.proactive_memory_recall}")
+        print(f"  * Dual-Plane Verification : {cfg.dual_plane_verification}")
+        print("-" * 60)
+        print("  Available Modes:")
+        print("    - turbo    (low, fast)      : Sub-50ms dispatch, 0ms settle, <800B UI")
+        print("    - balanced (medium, default): ~15ms settle, balanced UI & safety gates")
+        print("    - smart    (high, verify)   : Full SOUL visual critic & memory recall")
+        print("-" * 60)
+        print("  Usage: extra mode <turbo|balanced|smart> or extra modeset <mode>\n")
+        return 0
+
+    try:
+        resolved = ExecutionMode.from_string(target_mode)
+    except Exception as e:
+        print(f"Error: Invalid mode '{target_mode}': {e}", file=sys.stderr)
+        return 1
+
+    cfg = set_execution_mode(resolved, persist=True)
+    print(f"\n[Extra] Execution mode set to: {resolved.value.upper()} (saved to ~/.extra/config.json)")
+    print(f"  * Settle Timeout   : {cfg.settle_timeout_sec}s")
+    print(f"  * Sleep Scale      : {cfg.sleep_scale}x")
+    print(f"  * Compact UI       : {cfg.compact_ui}")
+    print(f"  * Proactive Recall : {cfg.proactive_memory_recall}\n")
+    return 0
+
+
 def check_first_run_consent() -> None:
     """Checks and prompts for first-run interactive telemetry consent."""
     from extra.core.metrics.config import (
@@ -1108,6 +1155,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--version", "-v", action="version", version=f"extra {__version__}"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # mode / modeset
+    mode_parser = subparsers.add_parser("mode", help="View or set the Extra automation speed mode (turbo, balanced, smart)")
+    mode_parser.add_argument("mode", nargs="?", default=None, help="Speed mode to activate: turbo (low/fast), balanced (medium/default), smart (high/deliberate)")
+
+    modeset_parser = subparsers.add_parser("modeset", help="Set the Extra automation speed mode (alias for 'extra mode')")
+    modeset_parser.add_argument("mode", nargs="?", default=None, help="Speed mode to activate: turbo (low/fast), balanced (medium/default), smart (high/deliberate)")
 
     # doctor
     doctor_parser = subparsers.add_parser("doctor", help="Run system health and capability diagnostics")
@@ -1261,7 +1315,9 @@ def main() -> None:
     except Exception:
         pass
 
-    if args.command == "stats":
+    if args.command in ("mode", "modeset"):
+        sys.exit(cmd_mode(args))
+    elif args.command == "stats":
         sys.exit(cmd_stats(args))
     elif args.command == "dashboard":
         sys.exit(cmd_dashboard(args))
