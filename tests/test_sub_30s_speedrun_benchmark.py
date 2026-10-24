@@ -88,8 +88,11 @@ class TestSub30sSpeedrunBenchmark(unittest.TestCase):
         report_text = nasdaq_file.read_text(encoding="utf-8")
         self.assertIn("Top 5 NASDAQ Gainers", report_text)
 
-        # Step 3: Snap Clock and Calculator Side-by-Side
+        # Step 3: Snap Clock and Notepad (or open Calculator if Notepad not active)
         t0 = time.perf_counter()
+        # Ensure Calculator or Notepad is present
+        from extra.mcp.server import extra_launch
+        extra_launch(app_name="calc")
         step3 = extra_snap_layout(layout="side_by_side", left_window="Clock", right_window="Calculator")
         timings["step3_snap_layout"] = (time.perf_counter() - t0) * 1000.0
         self.assertTrue(step3.get("success", False), f"Step 3 failed: {step3.get('error')}")
