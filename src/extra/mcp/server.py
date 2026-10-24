@@ -68,6 +68,14 @@ from extra.core.stall_breaker import EmergencyAbortError, StallBreaker, StallSta
 from extra.core.uia_plane import SetOfMarkAnnotator, UIAutomationPlane
 from extra.core.distiller import distill_screen
 from extra.core.subtask import run_subtask
+from extra.core.mode import (
+    ExecutionMode,
+    ModeConfig,
+    MODE_PROFILES,
+    get_execution_mode,
+    get_mode_config,
+    set_execution_mode,
+)
 from extra.fastpath.browser import execute_browser_action
 from extra.fastpath.fs import execute_fs_batch
 from extra.fastpath.shell import launch_app, open_uri, resolve_executable
@@ -671,16 +679,45 @@ def extra_hotkey(keys: List[str], force: bool = False) -> Dict[str, Any]:
 
 
 @server.tool()
+def extra_set_mode(
+    mode: str,
+) -> Dict[str, Any]:
+    """
+    Sets the Extra automation speed mode dynamically.
+    Modes:
+      - 'turbo' (low): Sub-50ms dispatch, 0ms settle, 0-hop execution, memory query disabled. Ideal for sub-30s speed runs.
+      - 'balanced' (medium): Default balanced mode (~15ms settle, balanced UI inspection).
+      - 'smart' (high): Maximum grounding with Project SOUL, visual critics, full memory recall.
+    """
+    cfg = set_execution_mode(mode)
+    return {
+        "success": True,
+        "mode": cfg.name.value,
+        "config": {
+            "auto_settle": cfg.auto_settle,
+            "max_inspect_elements": cfg.max_inspect_elements,
+            "compact_ui": cfg.compact_ui,
+            "sleep_scale": cfg.sleep_scale,
+            "max_sleep_ms": cfg.max_sleep_ms,
+            "proactive_memory_recall": cfg.proactive_memory_recall,
+        },
+        "description": f"Extra execution mode set to {cfg.name.value.upper()}.",
+    }
+
+
+@server.tool()
 def extra_inspect_ui(
     window_title: Optional[str] = None,
     hwnd: Optional[int] = None,
     interactive_only: bool = True,
     max_elements: int = 50,
+    mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Queries Microsoft UI Automation Core v3 to return accessible controls with exact bounding boxes.
     Allows zero-token semantic targeting without vision hallucinations.
-    
+    Formatted to prevent LLM context bloat and tool output truncation.
+
     NOTE: For Calculator calculations, do NOT use this to inspect individual digit buttons;
     use extra_type to inject the entire formula directly.
 
@@ -689,11 +726,16 @@ def extra_inspect_ui(
         hwnd: Optional explicit window handle.
         interactive_only: If True, returns only interactive buttons, edits, links, tabs.
         max_elements: Maximum elements to return (default 50).
+        mode: Optional runtime speed mode ('turbo', 'balanced', 'smart').
     """
     ensure_dpi_aware()
     attach_input_desktop()
 
+    mode_cfg = get_mode_config(mode)
+    effective_max = min(max_elements, mode_cfg.max_inspect_elements) if mode_cfg.compact_ui else max_elements
+
     target_hwnd = hwnd
+    win = None
     if not target_hwnd and window_title:
         win = find_window_by_title(window_title)
         if win:
@@ -701,15 +743,40 @@ def extra_inspect_ui(
 
     t0 = time.perf_counter()
     elements = _uia_plane.inspect_window(
-        hwnd=target_hwnd, interactive_only=interactive_only, max_elements=max_elements
+        hwnd=target_hwnd, interactive_only=interactive_only, max_elements=effective_max
     )
     duration_ms = (time.perf_counter() - t0) * 1000.0
 
+    raw_dicts = [el.to_dict() for el in elements[:effective_max]]
+    formatted_elements = []
+    summary_lines = [f"[UI Controls - {len(raw_dicts)} items]"]
+    for el in raw_dicts:
+        el_id = el.get("element_id")
+        el_name = el.get("name", "")
+        el_type = el.get("control_type", "")
+        center = el.get("center", [])
+        summary_lines.append(f"• ID {el_id} | {el_type} '{el_name}' @ center {center}")
+
+        if mode_cfg.strip_heavy_attributes:
+            formatted_elements.append({
+                "element_id": el_id,
+                "name": el_name,
+                "control_type": el_type,
+                "center": center,
+                "bounding_box": el.get("bounding_box", []),
+                "is_keyboard_focusable": el.get("is_keyboard_focusable", True),
+                "is_enabled": el.get("is_enabled", True),
+            })
+        else:
+            formatted_elements.append(el)
+
     return {
         "success": True,
-        "count": len(elements),
+        "count": len(formatted_elements),
         "duration_ms": round(duration_ms, 2),
-        "elements": [el.to_dict() for el in elements],
+        "mode": mode_cfg.name.value,
+        "ui_summary": "\n".join(summary_lines),
+        "elements": formatted_elements,
     }
 
 
@@ -1345,6 +1412,7 @@ def extra_batch_actions(
     auto_settle: bool = True,
     strict_ink: bool = False,
     auto_distill: bool = True,
+    mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Executes an atomic list of hardware actions sequentially with sub-millisecond dispatch.
@@ -1379,6 +1447,21 @@ def extra_batch_actions(
     """
     ensure_dpi_aware()
     attach_input_desktop()
+    mode_cfg = get_mode_config(mode)
+    effective_settle = auto_settle and mode_cfg.auto_settle
+
+    # Scale down sleep actions in turbo mode
+    if actions and mode_cfg.sleep_scale < 1.0:
+        for a in actions:
+            if isinstance(a, dict) and str(a.get("action", a.get("type", ""))).lower().strip() == "sleep":
+                if "ms" in a:
+                    a["ms"] = mode_cfg.scale_sleep(a["ms"])
+                elif "duration_ms" in a:
+                    a["duration_ms"] = mode_cfg.scale_sleep(a["duration_ms"])
+                elif "seconds" in a:
+                    a["seconds"] = mode_cfg.scale_sleep(a["seconds"] * 1000.0) / 1000.0
+                elif "delay" in a:
+                    a["delay"] = mode_cfg.scale_sleep(a["delay"] * 1000.0) / 1000.0
 
     if actions is None and actions_file:
         from pathlib import Path
@@ -1410,9 +1493,10 @@ def extra_batch_actions(
         except Exception:
             pass
 
-    res = execute_batch_actions(actions, auto_settle=auto_settle, auto_distill=auto_distill)
+    res = execute_batch_actions(actions, auto_settle=effective_settle, auto_distill=auto_distill)
     _stall_breaker.reset()
     res["action_dispatched"] = True
+    res["mode"] = mode_cfg.name.value
     res["action_executed"] = not res.get("partial_execution", False)
     total_dur = res.get("total_duration_ms", 0)
 
@@ -1610,6 +1694,7 @@ def extra_task_start(
     task_name: Optional[str] = None,
     task_objective: Optional[str] = None,
     monitor_index: int = 0,
+    mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Signals the start of an autonomous computer use task.
@@ -1625,14 +1710,17 @@ def extra_task_start(
     """
     ensure_dpi_aware()
     attach_input_desktop()
+    if mode:
+        set_execution_mode(mode)
+    mode_cfg = get_mode_config()
     ctrl = get_indicator_controller()
     ctrl.task_start(task_name=task_name, monitor_index=monitor_index)
     start_memory_recording(task_name=task_name or "Autonomous Task", goal=task_objective)
     _stall_breaker.reset()
-    res: Dict[str, Any] = {"success": True, "task_name": task_name, "status": "active"}
+    res: Dict[str, Any] = {"success": True, "task_name": task_name, "status": "active", "mode": mode_cfg.name.value}
 
     # Proactive Memory Recall: surface known app quirks, workarounds, and evolved playbooks
-    if task_name or task_objective:
+    if mode_cfg.proactive_memory_recall and (task_name or task_objective):
         try:
             from extra.core.memory.recall import recall_memory
             query_str = f"{task_name or ''} {task_objective or ''}".strip()
