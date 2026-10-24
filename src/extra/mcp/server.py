@@ -889,7 +889,7 @@ def extra_launch(
 ) -> Dict[str, Any]:
     """
     Deterministically launches standard Windows applications and tools.
-    Supported shortcuts: 'calc', 'notepad', 'explorer', 'settings', 'cmd', 'terminal', 'edge', 'chrome', 'brave'.
+    Supported shortcuts: 'calc', 'notepad', 'clock', 'timer', 'alarms', 'mail', 'calendar', 'explorer', 'settings', 'cmd', 'terminal', 'edge', 'chrome', 'brave', 'paint'.
     
     Args:
         app_name: Tool name or executable (e.g. 'calc', 'notepad', 'explorer', 'settings', 'chrome', 'edge').

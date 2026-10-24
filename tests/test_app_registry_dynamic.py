@@ -52,7 +52,33 @@ class TestAppRegistryDynamic(unittest.TestCase):
         self.assertIn("notepad", BUILTIN_APP_REGISTRY)
         self.assertIn("explorer", BUILTIN_APP_REGISTRY)
         self.assertIn("settings", BUILTIN_APP_REGISTRY)
+        self.assertIn("clock", BUILTIN_APP_REGISTRY)
+        self.assertIn("timer", BUILTIN_APP_REGISTRY)
+        self.assertIn("alarms", BUILTIN_APP_REGISTRY)
+        self.assertIn("mail", BUILTIN_APP_REGISTRY)
+        self.assertIn("calendar", BUILTIN_APP_REGISTRY)
         self.assertIn("calc", APP_REGISTRY)
+        self.assertIn("clock", APP_REGISTRY)
+
+    def test_clock_and_uri_resolution(self):
+        """Modern Windows UWP applications must resolve to standard URI protocols."""
+        self.assertEqual(resolve_executable("clock"), "ms-clock:")
+        self.assertEqual(resolve_executable("timer"), "ms-clock:")
+        self.assertEqual(resolve_executable("alarms"), "ms-clock:")
+        self.assertEqual(resolve_executable("stopwatch"), "ms-clock:")
+        self.assertEqual(resolve_executable("mail"), "outlookmail:")
+        self.assertEqual(resolve_executable("calendar"), "outlookcal:")
+
+    def test_cross_platform_builtin_coverage(self):
+        """macOS and Linux registries must cover clock, timer, and standard productivity apps."""
+        self.assertIn("clock", BUILTIN_MAC_APP_REGISTRY)
+        self.assertIn("timer", BUILTIN_MAC_APP_REGISTRY)
+        self.assertIn("calendar", BUILTIN_MAC_APP_REGISTRY)
+        self.assertIn("mail", BUILTIN_MAC_APP_REGISTRY)
+
+        from extra.core.platform.linux.shell import BUILTIN_APP_FALLBACKS
+        self.assertIn("clock", BUILTIN_APP_FALLBACKS)
+        self.assertIn("timer", BUILTIN_APP_FALLBACKS)
 
     def test_register_app_in_memory(self):
         """register_app must update in-memory APP_REGISTRY immediately."""
