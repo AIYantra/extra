@@ -826,6 +826,7 @@ def extra_subtask_run(
     expected_elements: Optional[List[str]] = None,
     unwanted_elements: Optional[List[str]] = None,
     timeout_sec: float = 8.0,
+    mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Executes a multi-step desktop micro-routine autonomously in a closed loop.
@@ -850,6 +851,7 @@ def extra_subtask_run(
         expected_elements=expected_elements,
         unwanted_elements=unwanted_elements,
         timeout_sec=timeout_sec,
+        mode=mode,
     )
     _stall_breaker.reset()
 
