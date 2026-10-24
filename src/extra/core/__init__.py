@@ -74,6 +74,13 @@ from extra.core.subtask import (
     SubtaskRunner,
     run_subtask,
 )
+from extra.core.mode import (
+    ExecutionMode,
+    ModeConfig,
+    get_execution_mode,
+    set_execution_mode,
+    get_mode_config,
+)
 from extra.core.soul import (
     DecisionType,
     SoulDecision,
@@ -156,4 +163,10 @@ __all__ = [
     "SubtaskResult",
     "SubtaskRunner",
     "run_subtask",
+    # Sovereign Execution Mode Controller
+    "ExecutionMode",
+    "ModeConfig",
+    "get_execution_mode",
+    "set_execution_mode",
+    "get_mode_config",
 ]
