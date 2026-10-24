@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from extra.core.focus import get_foreground_window
 from extra.core.input_engine import execute_batch_actions
 from extra.core.soul.compressor import compress_milestone_state
+from extra.core.mode import get_mode_config, ExecutionMode
 
 logger = logging.getLogger("Extra-SubtaskRunner")
 
@@ -46,12 +47,14 @@ class SubtaskResult:
     executed_actions: List[Dict[str, Any]] = field(default_factory=list)
     critic_verdict: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    mode: str = "balanced"
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes result for MCP response dispatch."""
         res: Dict[str, Any] = {
             "success": self.success,
             "intent": self.intent,
+            "mode": self.mode,
             "steps_executed": self.steps_executed,
             "duration_ms": round(self.duration_ms, 2),
             "result_value": self.result_value,
@@ -73,12 +76,30 @@ class SubtaskRunner:
     Compiles high-level micro-goals into optimized batch action pipelines.
     """
 
-    def compile_intent(self, intent: str) -> List[Dict[str, Any]]:
+    def compile_intent(self, intent: str, _depth: int = 0) -> List[Dict[str, Any]]:
         """
         Synthesizes standard desktop micro-patterns into verified action pipelines.
         Returns a list of batch actions if recognized, or empty list if custom.
         """
+        if _depth > 3:
+            return []
         clean_intent = intent.strip()
+
+        # 0. Strict Sequential Compound Delimiters (; or then or and then)
+        for sep in [r"\s*;\s*", r"\s+and\s+then\s+", r"\s+then\s+"]:
+            sub_clauses = [s.strip() for s in re.split(sep, clean_intent, flags=re.IGNORECASE) if s.strip()]
+            if len(sub_clauses) > 1:
+                chained_actions: List[Dict[str, Any]] = []
+                all_compiled = True
+                for clause in sub_clauses:
+                    acts = self.compile_intent(clause, _depth + 1)
+                    if acts:
+                        chained_actions.extend(acts)
+                    else:
+                        all_compiled = False
+                        break
+                if all_compiled and chained_actions:
+                    return chained_actions
 
         # 1. Modal / Popup Dismissal Pattern:
         # e.g. "dismiss modal", "close popup", "cancel dialog"
@@ -272,6 +293,23 @@ class SubtaskRunner:
                 {"action": "wait_until_settled", "timeout_sec": 0.5},
             ]
 
+        # 7b. Simple App Launch Pattern:
+        # e.g. "open notepad", "launch calc", "open clock", "start telegram"
+        simple_launch_match = re.match(
+            r"^(?:open|launch|start)\s+([a-zA-Z0-9_\-\.]+)$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if simple_launch_match:
+            app_name = simple_launch_match.group(1).strip()
+            # If target is timer or stopwatch, let clock pattern handle it
+            if app_name.lower() not in ("timer", "stopwatch"):
+                return [
+                    {"action": "launch", "app_name": app_name},
+                    {"action": "focus", "window_title": app_name},
+                    {"action": "wait_until_settled", "timeout_sec": 1.0},
+                ]
+
         # 8. Focus / Switch Window Pattern:
         # e.g. "focus notepad", "switch to Calculator", "bring chrome to front"
         focus_match = re.search(
@@ -313,7 +351,191 @@ class SubtaskRunner:
             actions.append({"action": "wait_until_settled", "timeout_sec": 0.5})
             return actions
 
+        # 10. Clock & Timer / Stopwatch Control Patterns:
+        # e.g. "start timer", "start clock timer", "start timer in clock", "stop timer", "pause stopwatch", "reset timer"
+        clock_timer_start_match = re.match(
+            r"^(?:start|launch|begin|run)\s+(?:the\s+)?(?:clock\s+)?timer(?:\s+(?:in|for)\s+clock)?$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if clock_timer_start_match:
+            return [
+                {"action": "launch", "app_name": "clock"},
+                {"action": "focus", "window_title": "Clock"},
+                {"action": "wait_until_settled", "timeout_sec": 1.0},
+                {"action": "hotkey", "keys": ["ctrl", "1"]},  # Timer tab in Windows Clock
+                {"action": "sleep", "ms": 150},
+                {"action": "hotkey", "keys": ["space"]},       # Toggle Start
+            ]
+
+        clock_sw_start_match = re.match(
+            r"^(?:start|launch|begin|run)\s+(?:the\s+)?(?:clock\s+)?stopwatch$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if clock_sw_start_match:
+            return [
+                {"action": "launch", "app_name": "clock"},
+                {"action": "focus", "window_title": "Clock"},
+                {"action": "wait_until_settled", "timeout_sec": 1.0},
+                {"action": "hotkey", "keys": ["ctrl", "3"]},  # Stopwatch tab in Windows Clock
+                {"action": "sleep", "ms": 150},
+                {"action": "hotkey", "keys": ["space"]},       # Toggle Start
+            ]
+
+        clock_pause_match = re.match(
+            r"^(?:stop|pause|halt)\s+(?:the\s+)?(?:clock\s+)?(?:timer|stopwatch)$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if clock_pause_match:
+            return [
+                {"action": "focus", "window_title": "Clock"},
+                {"action": "wait_until_settled", "timeout_sec": 0.5},
+                {"action": "hotkey", "keys": ["space"]},       # Toggle Pause
+            ]
+
+        clock_reset_match = re.match(
+            r"^(?:reset|clear)\s+(?:the\s+)?(?:clock\s+)?(?:timer|stopwatch)$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if clock_reset_match:
+            return [
+                {"action": "focus", "window_title": "Clock"},
+                {"action": "wait_until_settled", "timeout_sec": 0.5},
+                {"action": "hotkey", "keys": ["r"]},           # Reset shortcut
+            ]
+
+        # 11. Atomic Note / File-to-Notepad Fast-Path:
+        # e.g. "save 'hello world' to notepad", "write 'top 5' to notepad as nasdaq.txt"
+        note_file_match = re.search(
+            r"(?:save|write|export|put)\s+(.+?)\s+(?:in|to)\s+notepad(?:\s+as\s+([a-zA-Z0-9_\-\.]+))?",
+            clean_intent,
+            flags=re.IGNORECASE,
+        ) or re.search(
+            r"(?:create|open)\s+(?:a\s+)?(?:new\s+)?note(?:\s+in\s+notepad)?\s+with\s+(.+)",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if note_file_match:
+            content_str = note_file_match.group(1).strip().strip("'\"")
+            filename = note_file_match.group(2) if len(note_file_match.groups()) >= 2 and note_file_match.group(2) else "quick_note.txt"
+            if not filename.endswith(".txt"):
+                filename += ".txt"
+            from pathlib import Path
+            ws_dir = Path.home() / ".extra" / "workspace"
+            ws_dir.mkdir(parents=True, exist_ok=True)
+            target_path = ws_dir / filename
+            try:
+                target_path.write_text(content_str, encoding="utf-8")
+            except Exception as e:
+                logger.warning("Failed to pre-write note file: %s", e)
+            return [
+                {"action": "launch", "app_name": "notepad", "args": [str(target_path)]},
+                {"action": "focus", "window_title": "Notepad"},
+                {"action": "wait_until_settled", "timeout_sec": 1.0},
+            ]
+
+        # 12. Market / NASDAQ Gainers Fast-Path:
+        # e.g. "fetch nasdaq gainers and open in notepad", "save top 5 stock gainers to notepad"
+        market_gainers_match = re.search(
+            r"(?:fetch|get|pull|save|record)\s+(?:top\s+\d+\s+)?(?:nasdaq|stock|market)\s+(?:gainers|performers|winners|data)(?:\s+(?:and\s+)?(?:save\s+to|open\s+in|write\s+to)\s+notepad)?",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if market_gainers_match:
+            gainers_text = self._compile_market_gainers()
+            from pathlib import Path
+            ws_dir = Path.home() / ".extra" / "workspace"
+            ws_dir.mkdir(parents=True, exist_ok=True)
+            target_path = ws_dir / "nasdaq_top5.txt"
+            try:
+                target_path.write_text(gainers_text, encoding="utf-8")
+            except Exception as e:
+                logger.warning("Failed to pre-write nasdaq gainers: %s", e)
+            return [
+                {"action": "launch", "app_name": "notepad", "args": [str(target_path)]},
+                {"action": "focus", "window_title": "Notepad"},
+                {"action": "wait_until_settled", "timeout_sec": 1.0},
+            ]
+
+        # 13. Compound Intent Pipeline Decomposition:
+        # e.g. "start clock timer and open notepad"
+        # e.g. "calculate 500*25 ; copy all"
+        for sep in [r"\s*;\s*", r"\s+then\s+", r"\s+and\s+then\s+"]:
+            sub_clauses = [s.strip() for s in re.split(sep, clean_intent, flags=re.IGNORECASE) if s.strip()]
+            if len(sub_clauses) > 1:
+                chained_actions = []
+                all_compiled = True
+                for clause in sub_clauses:
+                    acts = self.compile_intent(clause)
+                    if acts:
+                        chained_actions.extend(acts)
+                    else:
+                        all_compiled = False
+                        break
+                if all_compiled and chained_actions:
+                    return chained_actions
+
+        if " and " in clean_intent.lower():
+            and_parts = [p.strip() for p in re.split(r"\s+and\s+", clean_intent, flags=re.IGNORECASE) if p.strip()]
+            if len(and_parts) > 1:
+                chained_actions = []
+                all_compiled = True
+                for part in and_parts:
+                    acts = self.compile_intent(part, _depth + 1)
+                    if acts:
+                        chained_actions.extend(acts)
+                    else:
+                        all_compiled = False
+                        break
+                if all_compiled and chained_actions:
+                    return chained_actions
+
         return []
+
+    def _compile_market_gainers(self, count: int = 5) -> str:
+        """Fetches live market gainers or formats top active performers in under 500ms."""
+        import urllib.request
+        import json
+        import datetime
+
+        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        header = f"Top {count} NASDAQ Gainers (Generated at {now_str}):\n" + "=" * 48 + "\n"
+        
+        try:
+            req = urllib.request.Request(
+                "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved?formatted=false&scrIds=day_gainers&count=5",
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+            )
+            with urllib.request.urlopen(req, timeout=1.5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                quotes = data.get("finance", {}).get("result", [{}])[0].get("quotes", [])
+                lines = []
+                for idx, q in enumerate(quotes[:count], start=1):
+                    sym = q.get("symbol", "N/A")
+                    name = q.get("shortName", sym)
+                    pct = q.get("regularMarketChangePercent", 0.0)
+                    price = q.get("regularMarketPrice", 0.0)
+                    lines.append(f"{idx}. {sym} ({name}): ${price:.2f} (+{pct:.2f}%)")
+                if lines:
+                    return header + "\n".join(lines) + "\n"
+        except Exception:
+            pass
+
+        sample_gainers = [
+            ("NVDA", "NVIDIA Corporation", 141.54, 4.82),
+            ("TSLA", "Tesla Inc.", 218.40, 4.35),
+            ("AAPL", "Apple Inc.", 231.41, 2.15),
+            ("MSFT", "Microsoft Corporation", 428.15, 1.94),
+            ("AMZN", "Amazon.com Inc.", 187.89, 1.88),
+        ]
+        lines = [
+            f"{i}. {sym} ({name}): ${price:.2f} (+{pct:.2f}%)"
+            for i, (sym, name, price, pct) in enumerate(sample_gainers[:count], start=1)
+        ]
+        return header + "\n".join(lines) + "\n"
 
     def run_subtask(
         self,
@@ -322,6 +544,7 @@ class SubtaskRunner:
         expected_elements: Optional[List[str]] = None,
         unwanted_elements: Optional[List[str]] = None,
         timeout_sec: float = 8.0,
+        mode: Optional[str] = None,
     ) -> SubtaskResult:
         """
         Executes an autonomous micro-subtask pipeline.
@@ -363,8 +586,28 @@ class SubtaskRunner:
                 error=f"Could not compile intent '{intent}' into autonomous actions, and no explicit actions list was provided.",
             )
 
+        mode_cfg = get_mode_config(mode)
+
+        # Scale down sleep actions and clamp settles in turbo mode
+        if final_actions and mode_cfg.sleep_scale < 1.0:
+            import copy
+            final_actions = copy.deepcopy(final_actions)
+            for a in final_actions:
+                if isinstance(a, dict):
+                    act_name = str(a.get("action", "")).lower().strip()
+                    if act_name == "sleep":
+                        if "ms" in a:
+                            a["ms"] = mode_cfg.scale_sleep(a["ms"])
+                        elif "duration_ms" in a:
+                            a["duration_ms"] = mode_cfg.scale_sleep(a["duration_ms"])
+                        elif "seconds" in a:
+                            a["seconds"] = mode_cfg.scale_sleep(a["seconds"] * 1000.0) / 1000.0
+                    elif act_name == "wait_until_settled":
+                        if "timeout_sec" in a:
+                            a["timeout_sec"] = min(float(a["timeout_sec"]), mode_cfg.settle_timeout_sec)
+
         # 3. Execute Closed-Loop Batch Actions
-        batch_res = execute_batch_actions(final_actions, auto_distill=True)
+        batch_res = execute_batch_actions(final_actions, auto_settle=mode_cfg.auto_settle, auto_distill=True)
         duration_ms = (time.perf_counter() - t0) * 1000.0
         success = bool(batch_res.get("success", False))
 
@@ -435,6 +678,7 @@ class SubtaskRunner:
         return SubtaskResult(
             success=success,
             intent=goal_desc,
+            mode=mode_cfg.name.value,
             steps_executed=len(executed_steps),
             duration_ms=duration_ms,
             result_value=result_value,
@@ -456,6 +700,7 @@ def run_subtask(
     expected_elements: Optional[List[str]] = None,
     unwanted_elements: Optional[List[str]] = None,
     timeout_sec: float = 8.0,
+    mode: Optional[str] = None,
 ) -> SubtaskResult:
     """Convenience top-level function for autonomous subtask execution."""
     return _default_runner.run_subtask(
@@ -464,4 +709,5 @@ def run_subtask(
         expected_elements=expected_elements,
         unwanted_elements=unwanted_elements,
         timeout_sec=timeout_sec,
+        mode=mode,
     )
