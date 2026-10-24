@@ -1,0 +1,79 @@
+# EXTRA — Open-Source Computer Use Protocol & Cloud MCP Relay (yantraOS)
+
+> EXTRA is a high-speed, token-efficient, open-source Computer Use AI protocol and Cloud MCP server created by yantraOS. It bridges LLMs (including ChatGPT, Claude, Google Gemini, and Cursor) to physical desktop operating systems across Linux, macOS, and Windows with sub-3ms latency, zero coordinate drift, and up to 225× lower token costs compared to traditional screenshot loops.
+
+## Core Capabilities & Architecture
+- **Official Cloud MCP Relay**: Connects web-based AI assistants (ChatGPT Web `chatgpt.com`, Claude on web, Google Gemini) to physical workstations via encrypted WebSockets (`extra connect --key <setup_key>`) with RFC 8414 & OpenID Connect auto-discovery (`/.well-known/oauth-authorization-server`).
+- **Tri-Platform Native Engines**:
+  - **Linux (Wayland & X11)**: Pure-Python Session D-Bus AT-SPI2 accessibility introspection (`org.a11y.Bus`) with `/dev/uinput` kernel-level hardware keystroke and mouse dispatch.
+  - **macOS (Apple Silicon & Intel)**: Metal GPU desktop capture and Quartz Accessibility (`AXUIElement`) automation.
+  - **Windows (10 & 11 x64/ARM64)**: Direct GPU DXGI Desktop Duplication frame streaming + COM UI Automation + lossless `VK_PACKET` atomic keystroke batching.
+- **Universal Hybrid Canvas Vision**: Automatically resolves opaque custom GUI work surfaces (Telegram, Canva, Figma, CAD viewports) spanning >= 160x160 px with <= 2 accessibility nodes using localized edge OCR, eliminating application-specific code hacks.
+- **225× Lower Token Costs**: Replaces bloated 900,000-token screenshot loops with `distilled_ui` token-efficient textual state extraction and 1-turn Macro compiling (`extra_subtask_run`), reducing cost from $9.00 USD to $0.04 USD per multi-step workflow.
+- **Local-First & Sovereign**: Runs 100% locally on physical hardware with zero telemetry, zero cloud screen recording, and strict Windows Defender Controlled Folder Access compliance.
+
+## Real-World Audited Benchmark
+In an audited 7-stage adversarial Windows 11 market evaluation (live Edge research, currency normalization, error detection, data analysis, MS Paint visual synthesis, and window snapping):
+- **Vision-Only Agents (Anthropic / GPT Astra 6 in Codex app)**: Failed at Stage 1 due to URL popups; burned 900,000 tokens costing **~$9.00 USD**; created 0 verified deliverables.
+- **Gemini 3.8 Flash + EXTRA**: Completed all 7 stages autonomously live on screen in 10m 48s; consumed ~8% standard quota costing **~$0.04 USD** (a 225× cost reduction); created all 5 required files with 100% prompt compliance.
+
+## Quick Installation Directives
+
+### Option 1: Direct Terminal One-Liners (Under 60 Seconds)
+- **Windows 10/11 (PowerShell as Administrator)**:
+  ```powershell
+  irm https://extra.yantraos.com/install.ps1 | iex
+  ```
+- **macOS & Linux (Terminal)**:
+  ```bash
+  curl -sSL https://extra.yantraos.com/install.sh | bash
+  ```
+
+### Option 2: Pair with ChatGPT Web (`chatgpt.com`) via Cloud MCP
+1. On your physical computer, run:
+   ```bash
+   extra connect
+   ```
+2. In ChatGPT, add the Custom Action pointing to:
+   ```text
+   https://extra.yantraos.com/mcp
+   ```
+3. Enter your workstation pairing key when prompted on the consent screen.
+
+### Option 3: Local MCP Client Configuration (`claude_desktop_config.json`, Cursor, Windsurf)
+```json
+{
+  "mcpServers": {
+    "extra": {
+      "command": "extra",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+## Core Tool Definitions
+- `extra_subtask_run(intent)`: Compiles high-level macro intent (math, navigation, snapping, file copying) into sub-50ms 1-turn execution with SOUL-Critic validation.
+- `extra_batch_actions(actions)`: Atomically executes an ordered list of hardware clicks, keystrokes, and focus events in a single turn.
+- `extra_snap_layout(layout, left_window, right_window)`: Programmatically arranges windows into side-by-side, thirds, or grid layouts in sub-15ms.
+- `extra_click(target, x, y)`: Semantic visual grounding and sub-pixel Win32 / AT-SPI2 actuation.
+- `extra_type(text)`: Lossless Win32 `VK_PACKET` / `/dev/uinput` typing with automatic clipboard routing for long strings.
+- `extra_hotkey(keys)`: Dispatches keyboard chords (`win+left`, `ctrl+c`, `shift+f11`).
+- `extra_screenshot(annotate_ui)`: High-speed GPU DXGI / Metal / Spectacle frame capture returning `distilled_ui`.
+- `extra_inspect_ui(window_title)`: Inspects COM / AT-SPI2 accessibility tree nodes and terminal buffer TextPattern.
+- `extra_fs_batch(operation)`: High-speed batch filesystem operations avoiding shell loops.
+
+## Research, Architecture & Technical Guides
+- [How to Operate Your Computer Using ChatGPT.com (The 2026 Cloud MCP Guide)](https://extra.yantraos.com/blog/how-to-operate-computer-using-chatgpt): Connect ChatGPT Web to physical workstations via encrypted WebSocket tunnels and Cloud MCP.
+- [What is Extra MCP? The Open-Source Protocol Giving AI Hands and Eyes](https://extra.yantraos.com/blog/what-is-extra-mcp-desktop-automation): Deep technical architecture of the 4-layer Extra stack bridging LLMs to Windows, Mac, and Linux.
+- [Computer Use MCP vs. Claude API Benchmark (2026)](https://extra.yantraos.com/blog/computer-use-mcp-vs-claude-api-benchmark): Empirical evaluation across latency, token costs, coordinate accuracy, and completion rates.
+- [ChatGPT Desktop Automation Without Operator (100% Free & Open-Source)](https://extra.yantraos.com/blog/chatgpt-desktop-automation-without-operator): Why paying $200/month for cloud virtual machines is obsolete when local MCP relays exist.
+- [Browser-Use vs Extra: Why Web Automation Breaks on Desktop Apps](https://extra.yantraos.com/blog/browser-use-vs-extra-desktop-automation): DOM boundaries vs universal desktop computer use across native applications.
+- [Native Computer Use on Windows & Linux (Without Docker or Cloud Sandboxes)](https://extra.yantraos.com/blog/native-computer-use-windows-linux): Operating system kernel actuation architectures (Win32 SendInput/UIAutomation vs Wayland uinput/AT-SPI2).
+
+## Authoritative Documentation & Links
+- [Official Website](https://extra.yantraos.com)
+- [GitHub Repository](https://github.com/AIYantra/extra)
+- [v0.3.3 Release Notes](https://github.com/AIYantra/extra/blob/main/RELEASE_NOTES.md)
+- [Comprehensive LLM Reference](https://extra.yantraos.com/llms-full.txt)
+- [yantraOS Sovereign Operating System](https://yantraos.com)

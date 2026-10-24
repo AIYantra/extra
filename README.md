@@ -31,7 +31,9 @@
 
 ---
 
-## ✨ Why Extra?
+## What is Extra and Why Does It Exist?
+
+Extra is an open-source Computer Use protocol and Model Context Protocol (MCP) server developed by yantraOS. It bridges LLMs (including ChatGPT, Claude, Cursor, and Gemini) directly to physical desktop operating systems across Linux, macOS, and Windows. Extra replaces fragile vision-only screenshot loops with native OS accessibility trees and sub-3ms GPU frame streaming, delivering pixel-perfect clicking, instant typing, and up to 225× lower token costs.
 
 Today's AI assistants can write brilliant essays and code, but they are trapped inside a chat window. When you need them to click a button, open an app, organize your files, or input data into a spreadsheet, they can only give you text instructions.
 
@@ -45,7 +47,7 @@ It connects **Claude, Google Antigravity, Cursor, AGY**, or any autonomous agent
 
 ---
 
-## 💡 What You Can Ask Your AI To Do
+## What Can an AI Assistant Do With Extra?
 
 Once Extra is running, you can talk to your AI like a real human assistant sitting at your desk:
 
@@ -154,7 +156,9 @@ Or using native Python:
 
 ---
 
-## 🎯 How It Works Under The Hood
+## How Does Extra Work Under the Hood?
+
+Extra operates via a sovereign Dual-Plane Architecture that decouples visual perception from hardware actuation. For perception, Extra combines sub-3ms GPU frame capture (DirectX DXGI, Metal, Spectacle) with OS accessibility hierarchy inspection (COM UI Automation, AT-SPI2, Quartz). For actuation, Extra dispatches lossless kernel and Win32 hardware events with zero coordinate drift, guaranteeing deterministic control across all resolutions and display scaling factors.
 
 Extra is engineered from the ground up for speed, reliability, and token efficiency:
 
