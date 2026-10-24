@@ -158,5 +158,48 @@ class TestExecutionModes(unittest.TestCase):
         self.assertEqual(called_actions[0]["ms"], 50.0)
 
 
+
+    def test_cli_mode_and_modeset_commands(self):
+        """Tests that CLI 'extra mode' and 'extra modeset' switch and display modes cleanly."""
+        import argparse
+        import io
+        from contextlib import redirect_stdout
+        from extra.cli import cmd_mode
+
+        # Set to turbo via CLI
+        args = argparse.Namespace(mode="turbo")
+        ret = cmd_mode(args)
+        self.assertEqual(ret, 0)
+        self.assertEqual(get_execution_mode(), ExecutionMode.TURBO)
+
+        # View current mode via CLI (no arg)
+        f = io.StringIO()
+        with redirect_stdout(f):
+            ret_view = cmd_mode(argparse.Namespace(mode=None))
+        self.assertEqual(ret_view, 0)
+        self.assertIn("TURBO", f.getvalue())
+
+        # Set to smart via CLI modeset alias
+        ret_smart = cmd_mode(argparse.Namespace(mode="smart"))
+        self.assertEqual(ret_smart, 0)
+        self.assertEqual(get_execution_mode(), ExecutionMode.SMART)
+
+        # Restore balanced
+        cmd_mode(argparse.Namespace(mode="balanced"))
+        self.assertEqual(get_execution_mode(), ExecutionMode.BALANCED)
+
+    def test_mode_loads_from_config_file(self):
+        """Verifies _load_initial_mode reads speed_mode from config.json when env var is absent."""
+        import tempfile
+        from extra.core.mode import _load_initial_mode
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            extra_dir = Path(tmp_dir) / ".extra"
+            extra_dir.mkdir(parents=True, exist_ok=True)
+            (extra_dir / "config.json").write_text(json.dumps({"speed_mode": "turbo"}), encoding="utf-8")
+            with patch.dict(os.environ, {}, clear=True), patch("pathlib.Path.home", return_value=Path(tmp_dir)):
+                loaded = _load_initial_mode()
+                self.assertEqual(loaded, ExecutionMode.TURBO)
+
+
 if __name__ == "__main__":
     unittest.main()
