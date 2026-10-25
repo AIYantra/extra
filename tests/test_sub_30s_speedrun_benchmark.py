@@ -58,6 +58,7 @@ class TestSub30sSpeedrunBenchmark(unittest.TestCase):
         print(f"\n[BENCHMARK] Intent Compilation: {len(intents)} intents compiled in {elapsed_ms:.2f}ms (avg: {avg_ms:.3f}ms/intent)")
         self.assertLess(avg_ms, 5.0, "Intent compilation exceeded 5ms budget")
 
+    @unittest.skipIf(os.environ.get("CI") == "true" or sys.platform != "win32", "Live GUI speedrun skipped in headless CI")
     def test_02_end_to_end_turbo_pipeline_live(self):
         """Executes the complete 5-stage automation pipeline live in < 15.0 seconds."""
         timings = {}

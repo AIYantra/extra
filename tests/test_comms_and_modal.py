@@ -32,6 +32,7 @@ class TestCommsAndModal(unittest.TestCase):
         except Exception:
             pass
 
+    @unittest.skipUnless(sys.platform == "win32", "CF_HDROP clipboard injection requires Windows")
     def test_copy_files_to_clipboard(self):
         """Native file drop injection (CF_HDROP) must succeed for existing files."""
         ok = copy_files_to_clipboard([self.test_file])
