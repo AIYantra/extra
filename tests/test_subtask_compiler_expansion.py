@@ -33,7 +33,15 @@ class TestSubtaskCompilerExpansion(unittest.TestCase):
 
     def test_clock_timer_and_stopwatch_macros(self):
         """Clock timer and stopwatch intents must compile to deterministic UI actions."""
-        # 1. Start timer
+        # 1. Start timer with natural duration qualifiers
+        start_timer_10m = self.runner.compile_intent("start 10 minute timer in clock app")
+        self.assertTrue(len(start_timer_10m) >= 5)
+        self.assertEqual(start_timer_10m[0]["action"], "launch")
+        self.assertEqual(start_timer_10m[0]["app_name"], "clock")
+        self.assertEqual(start_timer_10m[3]["keys"], ["ctrl", "1"])
+        self.assertEqual(start_timer_10m[5]["keys"], ["space"])
+
+        # 1b. Standard start timer
         start_timer = self.runner.compile_intent("start clock timer")
         self.assertTrue(len(start_timer) >= 5)
         self.assertEqual(start_timer[0]["action"], "launch")
@@ -94,6 +102,27 @@ class TestSubtaskCompilerExpansion(unittest.TestCase):
         self.assertIn("2.", text)
         self.assertIn("%", text)
 
+    def test_nifty50_gainers_fastpath(self):
+        """Fetching Nifty 50 gainers must compile formatted report and launch in Notepad."""
+        intent = "Research Top 5 Nifty 50 gainers and save to Notepad"
+        actions = self.runner.compile_intent(intent)
+        self.assertTrue(len(actions) >= 3)
+        self.assertEqual(actions[0]["action"], "launch")
+        self.assertEqual(actions[0]["app_name"], "notepad")
+
+        gainers_path = Path(actions[0]["args"][0])
+        self.assertTrue(gainers_path.exists())
+        text = gainers_path.read_text(encoding="utf-8")
+        self.assertIn("Top 5 Nifty 50 Performers", text)
+        self.assertIn("1.", text)
+        self.assertIn("2.", text)
+        self.assertIn("%", text)
+        self.assertIn("Rs.", text)
+
+        # Verify compatibility path in ~/.extra/nifty/
+        compat_path = Path.home() / ".extra" / "nifty" / "nifty50_top_performers.txt"
+        self.assertTrue(compat_path.exists())
+
     def test_compound_intent_pipeline_chaining(self):
         """Compound intents joined by 'and', ';', or 'then' must chain into one pipeline."""
         # 1. Chained with ';'
@@ -109,6 +138,23 @@ class TestSubtaskCompilerExpansion(unittest.TestCase):
         self.assertEqual(chained_and[0]["app_name"], "clock")
         has_notepad = any(a.get("app_name") == "notepad" for a in chained_and)
         self.assertTrue(has_notepad)
+
+        # 3. Multi-app compound pipeline with bound sub-phrases:
+        # "start 10 minute timer in clock app then fetch nifty50 gainers and save to notepad"
+        chained_multi_then = self.runner.compile_intent(
+            "start 10 minute timer in clock app then fetch nifty50 gainers and save to notepad"
+        )
+        self.assertEqual(len(chained_multi_then), 9)
+        self.assertEqual(chained_multi_then[0]["app_name"], "clock")
+        self.assertEqual(chained_multi_then[6]["app_name"], "notepad")
+
+        # 4. Multi-app compound pipeline partitioned across 'and':
+        chained_multi_and = self.runner.compile_intent(
+            "start 10 minute timer in clock app and fetch nifty50 gainers and save to notepad"
+        )
+        self.assertEqual(len(chained_multi_and), 9)
+        self.assertEqual(chained_multi_and[0]["app_name"], "clock")
+        self.assertEqual(chained_multi_and[6]["app_name"], "notepad")
 
     @patch("extra.core.subtask.execute_batch_actions")
     def test_mode_scaling_in_subtask_runner(self, mock_exec):
