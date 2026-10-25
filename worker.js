@@ -982,7 +982,7 @@ export default {
         JSON.stringify({
           status: "healthy",
           service: "extra-edge-router",
-          version: "0.3.3",
+          version: "0.3.4",
           edge: geo,
         }),
         {
@@ -1009,7 +1009,7 @@ export default {
         body = {
           os: url.searchParams.get("os") || "unknown",
           arch: url.searchParams.get("arch") || "unknown",
-          version: url.searchParams.get("version") || "0.3.3",
+          version: url.searchParams.get("version") || "0.3.4",
           method: url.searchParams.get("method") || "script",
         };
       }
@@ -1024,7 +1024,7 @@ export default {
         event: "install_success",
         os: body.os || "unknown",
         arch: body.arch || "unknown",
-        version: body.version || "0.3.3",
+        version: body.version || "0.3.4",
         method: body.method || "script",
         geo,
         timestamp: Date.now(),
