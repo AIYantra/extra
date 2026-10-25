@@ -71,6 +71,19 @@ def get_default_device_name() -> str:
 _CUSTOM_TOOL_EXECUTOR = None
 
 
+
+_UPLOAD_SESSION = None
+
+def get_upload_session():
+    global _UPLOAD_SESSION
+    if _UPLOAD_SESSION is None:
+        try:
+            import requests
+            _UPLOAD_SESSION = requests.Session()
+        except Exception:
+            _UPLOAD_SESSION = None
+    return _UPLOAD_SESSION
+
 def register_tool_executor(executor_fn) -> None:
     """Registers an external tool executor callback (e.g. from MCP server or test harness)."""
     global _CUSTOM_TOOL_EXECUTOR
@@ -174,18 +187,32 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
                     img_data = buf.getvalue()
 
                     up_url = f"https://extra.yantraos.com/api/action/upload?action_id={act_id}"
-                    up_req = urllib.request.Request(
-                        up_url,
-                        data=img_data,
-                        headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.3"},
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(up_req, timeout=6) as up_resp:
-                        if up_resp.status == 200:
+                    session = get_upload_session()
+                    if session is not None:
+                        up_resp = session.post(
+                            up_url,
+                            data=img_data,
+                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.3"},
+                            timeout=6
+                        )
+                        if up_resp.status_code == 200:
                             inner_res["s3_image_key"] = f"screenshots/{act_id}.jpg"
                             inner_res["image_url"] = f"https://extra.yantraos.com/screenshots/{act_id}.jpg"
                             uploaded = True
-                            logger.info("Uploaded full-resolution screenshot (%sx%s, %s bytes) to S3.", w, h, len(img_data))
+                            logger.info("Uploaded full-resolution screenshot (%sx%s, %s bytes) to S3 via persistent session.", w, h, len(img_data))
+                    else:
+                        up_req = urllib.request.Request(
+                            up_url,
+                            data=img_data,
+                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.3"},
+                            method="POST"
+                        )
+                        with urllib.request.urlopen(up_req, timeout=6) as up_resp:
+                            if up_resp.status == 200:
+                                inner_res["s3_image_key"] = f"screenshots/{act_id}.jpg"
+                                inner_res["image_url"] = f"https://extra.yantraos.com/screenshots/{act_id}.jpg"
+                                uploaded = True
+                                logger.info("Uploaded full-resolution screenshot (%sx%s, %s bytes) to S3 via urllib.", w, h, len(img_data))
                 except Exception as ex:
                     logger.debug("Full-res screenshot upload failed, falling back to safe thumbnail: %s", ex)
 
