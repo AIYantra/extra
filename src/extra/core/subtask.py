@@ -492,7 +492,58 @@ class SubtaskRunner:
                 {"action": "wait_until_settled", "timeout_sec": 1.0},
             ]
 
-        # 14. Compound Intent Pipeline Decomposition:
+                # 14. Telegram & Communications File Delivery Fast-Path:
+        # e.g. "send file to @ijhaomi on telegram", "send nifty50_top_performers.txt to @ijhaomi on telegram"
+        tg_send_match = re.match(
+            r"^(?:send|upload|share|forward)\s+(?:(?:the\s+)?file\s+)?(?:['\"]?([^'\"\s]+)['\"]?\s+)?(?:to\s+)?@?([a-zA-Z0-9_]+)\s+(?:on|via|in|through)\s+telegram$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if tg_send_match:
+            raw_file = tg_send_match.group(1)
+            recipient = tg_send_match.group(2)
+            file_name = None
+            if raw_file and raw_file.lower() not in ("to", "the", "a"):
+                file_name = raw_file.strip("'\"")
+
+            from pathlib import Path
+            target_path = None
+            if file_name:
+                cand = Path(file_name)
+                if cand.exists():
+                    target_path = cand
+                else:
+                    ws_cand = Path.home() / ".extra" / "workspace" / file_name
+                    if ws_cand.exists():
+                        target_path = ws_cand
+
+            if not target_path:
+                ws_dir = Path.home() / ".extra" / "workspace"
+                if ws_dir.exists():
+                    files = [f for f in ws_dir.iterdir() if f.is_file() and not f.name.endswith(".png")]
+                    if files:
+                        files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+                        target_path = files[0]
+
+            if target_path and target_path.exists():
+                try:
+                    from extra.fastpath.comms import copy_files_to_clipboard
+                    copy_files_to_clipboard([target_path])
+                except Exception as e:
+                    logger.debug("Failed to pre-copy file to clipboard: %s", e)
+
+            app_target = f"tg://resolve?domain={recipient}" if recipient else "telegram"
+            return [
+                {"action": "launch", "app_name": app_target},
+                {"action": "focus", "window_title": "Telegram"},
+                {"action": "wait_until_settled", "timeout_sec": 1.0},
+                {"action": "hotkey", "keys": ["ctrl", "v"]},
+                {"action": "sleep", "ms": 350},
+                {"action": "hotkey", "keys": ["enter"]},
+                {"action": "wait_until_settled", "timeout_sec": 1.0},
+            ]
+
+# 14. Compound Intent Pipeline Decomposition:
         # e.g. "start clock timer and open notepad"
         # e.g. "calculate 500*25 ; copy all"
         # e.g. "start 10 minute timer in clock app and fetch nifty50 gainers and save to notepad"
