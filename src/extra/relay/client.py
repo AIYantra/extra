@@ -99,7 +99,14 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
         }
 
     try:
-        safe_args = arguments if isinstance(arguments, dict) else {}
+        safe_args = dict(arguments) if isinstance(arguments, dict) else {}
+
+        # Cloud Relay Invariant: Remote cloud agents (e.g. ChatGPT on chatgpt.com) run on external
+        # servers and have zero access to the local workstation filesystem (C:\Users\...).
+        # When extra_screenshot is executed over the cloud relay, automatically enable include_base64
+        # so the remote AI receives the image data directly in the response payload.
+        if tool_name == "extra_screenshot" and "include_base64" not in safe_args:
+            safe_args["include_base64"] = True
 
         # 1. Pluggable tool executor callback (decoupled from mcp.server)
         if _CUSTOM_TOOL_EXECUTOR is not None:
