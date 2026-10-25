@@ -1,3 +1,8 @@
+from extra.fastpath.comms import (
+    copy_files_to_clipboard,
+    send_telegram_file,
+    send_chat_file,
+)
 """
 Project Extra — Fast-Path Accelerators
 Direct application launch and Playwright DOM extraction without visual overhead.
@@ -66,6 +71,9 @@ __all__ = [
     "get_browser_fastpath",
     "execute_browser_action",
     "execute_fs_batch",
+    "copy_files_to_clipboard",
+    "send_telegram_file",
+    "send_chat_file",
     "HarnessResult",
     "UniversalHarnessRunner",
     "execute_harness",
