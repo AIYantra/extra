@@ -196,17 +196,18 @@ ALIAS_PROCESS_MAP: Dict[str, str] = _DynamicProcessMap()
 
 
 def _normalize_title(t: str) -> str:
-    """Normalizes title string by stripping zero-width and invisible control unicode chars."""
+    """Normalizes title string by stripping zero-width, bidirectional, and invisible control unicode chars."""
     if not t:
         return ""
-    return (
-        t.replace("\u200b", "")
-        .replace("\u200c", "")
-        .replace("\u200d", "")
-        .replace("\ufeff", "")
-        .strip()
-        .lower()
+    bad_chars = (
+        "\u200b", "\u200c", "\u200d", "\u200e", "\u200f",
+        "\u202a", "\u202b", "\u202c", "\u202d", "\u202e",
+        "\ufeff", "\ufffc", "\u00a0",
     )
+    res = t
+    for ch in bad_chars:
+        res = res.replace(ch, "")
+    return res.strip().lower()
 
 
 def find_window_by_title(
@@ -285,6 +286,39 @@ def find_window_by_title(
         if time.perf_counter() >= deadline:
             break
         time.sleep(0.1)
+
+    # Tier 5: Minimized or Tray Window Fallback
+    # If standard visible lookup fails, check non-visible windows for process match.
+    # If a window exists (e.g. Telegram or WhatsApp docked to tray or minimized console),
+    # restore it into foreground visibility and return it.
+    if visible_only:
+        proc_target = None
+        try:
+            from extra.core.platform.windows.shell import APP_REGISTRY
+            reg_entry = APP_REGISTRY.get(q)
+            if reg_entry and "proc" in reg_entry:
+                proc_target = reg_entry["proc"].lower().rstrip(".exe")
+        except Exception:
+            pass
+        if not proc_target:
+            proc_target = q.rstrip(".exe")
+
+        all_wins = list_windows(visible_only=False)
+        for win in all_wins:
+            w_proc = win.process_name.lower().rstrip(".exe")
+            is_proc_match = (
+                w_proc == proc_target
+                or proc_target in w_proc
+                or (len(proc_target) > 3 and w_proc in proc_target)
+                or (proc_target in ("powershell", "pwsh", "cmd") and w_proc in ("windowsterminal", "openconsole"))
+            )
+            if is_proc_match and win.title:
+                try:
+                    win32gui.ShowWindow(win.hwnd, SW_RESTORE)
+                    time.sleep(0.1)
+                except Exception:
+                    pass
+                return win
 
     return None
 
