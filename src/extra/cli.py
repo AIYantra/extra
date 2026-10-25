@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.3.3"
+    __version__ = "0.3.4"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
