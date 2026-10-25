@@ -34,6 +34,8 @@ Whenever automating Windows desktop applications or executing computer use:
   - `extra_scroll`: `call_mcp_tool(ServerName="extra", ToolName="extra_scroll", Arguments={"clicks": -5, "direction": "vertical"})` or `Arguments={"delta": -500, "horizontal": false}`.
   - `extra_drag`: `call_mcp_tool(ServerName="extra", ToolName="extra_drag", Arguments={"start_x": <int>, "start_y": <int>, "end_x": <int>, "end_y": <int>, "canvas_relative": false})`
   - `extra_browser`: `call_mcp_tool(ServerName="extra", ToolName="extra_browser", Arguments={"action": "navigate"|"content"|"click"|"settle", "url": "..."})`
+  - `extra_confirm_modal`: `call_mcp_tool(ServerName="extra", ToolName="extra_confirm_modal", Arguments={"action": "send"|"ok"|"save"|"open"|"confirm"|"dismiss", "button_query": "...", "window_title": "..."})`
+    Universal Modal Confirmation Gate. Resolves and clicks confirmation buttons in active popups/dialogs and verifies dismissal to prevent unclosed modal dialogs.
   - `extra_task_start`: `call_mcp_tool(ServerName="extra", ToolName="extra_task_start", Arguments={"task_name": "<name>"})`
     Activates ambient screen edge pulse and cursor halo.
   - `extra_task_complete`: `call_mcp_tool(ServerName="extra", ToolName="extra_task_complete", Arguments={"summary": "<summary>", "success": true})`
@@ -144,6 +146,10 @@ Whenever automating Windows desktop applications or executing computer use:
   - Creative tasks must be drawn live on the glass using actual brush strokes, vector splines, tool selections, and color swatches.
 - **LIVE HUMAN-OBSERVABLE FLIGHT:**
   - `extra_click` and `extra_stroke` default to `human_like=True`. The user must see the cursor glide across the glass with the ambient glow, observing the live execution as it happens.
+- **ZERO BRAIN DIRECTORY SNOOPING PROHIBITION:**
+  - **STRICT PROHIBITION: NEVER search, grep, read, list, or execute scripts against `~/.gemini/antigravity-cli/brain/` or `.system_generated/logs` during task execution.**
+  - Snooping past conversation logs or transcripts violates runtime session boundaries, pollutes the context window with stale tokens, and leads to multi-turn wandering loops (e.g. 14 turn transcript debugging loops).
+  - The desktop state is live in front of you—pilot the live applications directly via Extra MCP tools!
 - **Every application opened for the user MUST REMAIN OPEN AND VISIBLE.** NEVER call `.terminate()`, `kill`, or `taskkill` on apps that were requested to be opened.
 
 ### 1.1 Strict Prohibition on Workflow Substitution & Fake Exports (Ground-Truth Invariant)
@@ -153,6 +159,11 @@ Whenever automating Windows desktop applications or executing computer use:
     - **NEVER substitute local programmatic workarounds (e.g. generating local HTML/CSS files, running headless Chrome to print PDFs, or generating local mockups) as a replacement for requested GUI application workflows.**
     - If a benchmark asks to create a presentation in Google Slides, you MUST create the slides in Google Slides. Creating a local HTML slide deck and exporting it to PDF is a STRICTLY PROHIBITED CHEAT.
     - If a benchmark asks to export a PDF from Google Docs or Slides, the PDF must originate from the actual document (via in-browser download or official `/export?format=pdf` URL endpoint), NEVER from a locally fabricated HTML file.
+- **THE MODAL CONFIRMATION & FILE SEND INVARIANT (ZERO-ABANDONMENT GATE):**
+  - Selecting a file in an Open File dialog or pasting a file into a chat/web application (Telegram, Slack, Discord, Chrome file upload) DOES NOT send or upload it!
+  - The agent MUST actuate the modal confirmation button (click `Send`/`Open`/`Save`/`OK` or call `extra_confirm_modal(action="send")` or hit `Enter`) and verify that the modal is dismissed and the deliverable is physically transmitted before declaring task completion or moving to downstream applications.
+  - Abandoning an open modal dialogue and declaring completion is a prohibited epistemic drift violation.
+
 ### 1.2 Long-Horizon Pacing & Milestone Turn Budgeting (Max 30 Turns Per Subtask)
 - **STRICT PROHIBITION: NEVER spend more than 30 turns on any single subtask or application in multi-step workflows.**
 - In long-horizon or multi-application benchmarks (e.g. creating graphics in Paint, building financial models in Sheets, drafting documents in Docs, generating presentation slides):
@@ -164,6 +175,21 @@ Whenever automating Windows desktop applications or executing computer use:
 
 ### 2. High-Speed Hybrid Fast Paths (Zero-Stall Content Creation)
 To prevent human-slow typing or sloppy freehand drawing while keeping the UI 100% visible:
+- **Market Research & Stock Tickers (Zero Hallucination Gate):**
+  1. If the user requests researching stock performers (e.g. Nifty 50, NASDAQ, Sensex):
+     - Use the atomic market subtask compiler:
+       `call_mcp_tool(ServerName="extra", ToolName="extra_subtask_run", Arguments={"intent": "Research Top 5 Nifty 50 gainers and save to Notepad"})`
+       or
+       `call_mcp_tool(ServerName="extra", ToolName="extra_subtask_run", Arguments={"intent": "fetch nasdaq gainers and open in notepad"})`
+       This atomically fetches verified live stock quotes in < 1s and saves them directly to `%USERPROFILE%\.extra\workspace\nifty50_top_performers.txt`.
+     - Or genuinely navigate Edge/Chrome and read the live web DOM/pixels.
+     - **STRICT PROHIBITION**: NEVER write a local text file with fabricated/hallucinated stock companies (e.g. inventing fictitious companies like "Eternal Ltd" or guessing price changes due to system date differences) prior to opening the browser or running the verified market compiler.
+- **Telegram & Chat File Delivery Fast-Path:**
+  1. Execute in ONE turn:
+     `call_mcp_tool(ServerName="extra", ToolName="extra_subtask_run", Arguments={"intent": "send file to @<username> on telegram"})`
+     Or chained with market research:
+     `call_mcp_tool(ServerName="extra", ToolName="extra_subtask_run", Arguments={"intent": "fetch nifty50 gainers and save to notepad then send file to @<username> on telegram"})`
+  2. Injects the file directly via native `CF_HDROP` clipboard drop, opens the target conversation via `tg://resolve?domain=<username>`, triggers the file modal (`Ctrl+V`), confirms with `Enter`, and settles in < 1.8 seconds.
 - **Google Sheets & Web Spreadsheets:**
   1. Bottom sheet tabs and cell grids render in an opaque HTML5 canvas where screenshot captures dismiss open context menus.
   2. **Add Sheet Tab Fast-Path:** Use `extra_hotkey(keys=["shift", "f11"])` to instantly insert a new sheet tab in 1 turn without clicking the bottom `+` button.
