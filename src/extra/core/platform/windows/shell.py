@@ -74,6 +74,8 @@ BUILTIN_APP_REGISTRY: Dict[str, Dict[str, str]] = {
     "vlc": {"target": "vlc.exe", "type": "exe", "proc": "vlc.exe"},
     "blender": {"target": "blender.exe", "type": "exe", "proc": "blender.exe"},
     "canva": {"target": "canva.exe", "type": "exe", "proc": "canva.exe"},
+    "telegram": {"target": "Telegram.exe", "type": "exe", "proc": "Telegram.exe"},
+    "whatsapp": {"target": "WhatsApp.exe", "type": "exe", "proc": "WhatsApp.exe"},
 }
 
 APP_REGISTRY: Dict[str, Dict[str, str]] = dict(BUILTIN_APP_REGISTRY)

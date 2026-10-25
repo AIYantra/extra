@@ -1542,21 +1542,24 @@ def extra_inspect_ui(
 
 
 
-    return {
-
+    res = {
         "success": True,
-
         "count": len(formatted_elements),
-
         "duration_ms": round(duration_ms, 2),
-
         "mode": mode_cfg.name.value,
-
         "ui_summary": "\n".join(summary_lines),
-
         "elements": formatted_elements,
-
     }
+    if len(formatted_elements) <= 2 and target_hwnd:
+        res["canvas_advisory"] = (
+            "Target window uses an opaque custom rendering canvas (Qt, dormant Chromium webview, or DirectX DirectWrite) "
+            "that does not publish internal child controls to OS accessibility trees. "
+            "To interact with this application without blindness, use: "
+            "1) 'extra_click(target=\"<label>\")' with zero-coordinate SOUL-Eyes visual grounding; "
+            "2) 'extra_screenshot()' for pixel-level layout perception; "
+            "3) 'extra_type(text=\"...\")' for direct keyboard injection."
+        )
+    return res
 
 
 
