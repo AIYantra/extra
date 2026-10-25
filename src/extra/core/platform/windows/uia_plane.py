@@ -279,17 +279,44 @@ class UIAutomationPlane(AbstractAccessibilityPlane):
                             txt_pat = elem.GetCurrentPattern(UIA_TEXT_PATTERN_ID)
                             if txt_pat:
                                 txt_iface = txt_pat.QueryInterface(self._mod.IUIAutomationTextPattern)
+                                
+                                # 1. Extract visible ranges (what is actively visible on the user's glass)
+                                vis_lines = []
+                                try:
+                                    vis_ranges = txt_iface.GetVisibleRanges()
+                                    if vis_ranges and vis_ranges.Length > 0:
+                                        for v_idx in range(vis_ranges.Length):
+                                            vr_txt = str(vis_ranges.GetElement(v_idx).GetText(-1) or "")
+                                            for ln in vr_txt.splitlines():
+                                                s = ln.strip()
+                                                if s:
+                                                    vis_lines.append(s)
+                                except Exception:
+                                    pass
+
+                                # 2. Extract DocumentRange (up to 16,384 characters to capture banner and full terminal history)
                                 doc_range = txt_iface.DocumentRange
-                                full_txt = str(doc_range.GetText(400) or "").strip()
-                                if full_txt:
-                                    lines = [ln.strip() for ln in full_txt.splitlines() if ln.strip()]
-                                    buffer_tail = " \n ".join(lines[-4:]) if len(lines) > 4 else full_txt
-                                    if not name:
-                                        name = buffer_tail
-                                        el_source = "text_pattern"
-                                    elif len(name) <= 80 and buffer_tail != name and buffer_tail not in name:
-                                        name = f"{name} | Buffer: {buffer_tail}"
-                                        el_source = "text_pattern"
+                                full_txt = str(doc_range.GetText(16384) or "").strip()
+                                if full_txt or vis_lines:
+                                    doc_lines = [ln.strip() for ln in full_txt.splitlines() if ln.strip()]
+                                    
+                                    # Universal console/document buffer synthesis:
+                                    # If <= 50 lines, retain the complete unabridged output.
+                                    # If > 50 lines, preserve the opening head (commands/banners) and active tail (recent prompt/logs).
+                                    if len(doc_lines) <= 25:
+                                        final_lines = doc_lines
+                                    else:
+                                        tail = vis_lines[-15:] if vis_lines else doc_lines[-15:]
+                                        final_lines = doc_lines[:8] + ["... [scrollback truncated] ..."] + tail
+
+                                    if final_lines:
+                                        buffer_tail = " \n ".join(final_lines)
+                                        if not name:
+                                            name = buffer_tail
+                                            el_source = "text_pattern"
+                                        elif len(name) <= 80 and buffer_tail != name and buffer_tail not in name:
+                                            name = f"{name} | Buffer: {buffer_tail}"
+                                            el_source = "text_pattern"
                         except Exception:
                             pass
 
