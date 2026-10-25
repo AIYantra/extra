@@ -81,6 +81,7 @@ class TestFullNiftySpeedrunBenchmark(unittest.TestCase):
         print(f"\n[BENCHMARK] Nifty 50 Data Fetch: 5 tickers verified in {elapsed_ms:.2f}ms: {found_tickers}")
         self.assertLess(elapsed_ms, 5000.0, "Live Nifty fetch exceeded 5.0s budget")
 
+    @unittest.skipUnless(sys.platform == "win32", "CF_HDROP clipboard injection requires Windows")
     def test_02_telegram_comms_and_modal_fastpath(self):
         """Verifies CF_HDROP clipboard injection and 7-action atomic intent compilation."""
         deliverable = self.ws_dir / "nifty50_top_performers.txt"
@@ -106,6 +107,7 @@ class TestFullNiftySpeedrunBenchmark(unittest.TestCase):
 
         print(f"[BENCHMARK] Telegram File Injection & Intent: {cb_ms:.2f}ms clipboard, {compile_ms:.3f}ms compiler")
 
+    @unittest.skipIf(os.environ.get("CI") == "true" or sys.platform != "win32", "Live multi-app GUI benchmark skipped in headless CI")
     def test_03_full_pipeline_speedrun_live(self):
         """
         Executes the complete 6-stage automation pipeline live on the Windows desktop in Turbo mode:
