@@ -576,12 +576,21 @@ class UIDistiller:
             )
 
         # Streams & Buffers (Terminals, Console stdout, Rich Documents, OCR Text)
+        terminal_buffers = []
         stream_items = []
         for el in elements:
             src_tag = self._get_provenance_tag(el)
-            if src_tag in ("[TXT]", "[OCR]") or " | Buffer:" in el.name:
+            if " | Buffer:" in el.name:
+                clean_buf = el.name.split(" | Buffer:", 1)[1].strip()
+                lines = [l.strip() for l in clean_buf.splitlines() if l.strip()]
+                clean_lines = " \n ".join(lines)
+                terminal_buffers.append(f"[{el.element_id}] {clean_lines}")
+            elif src_tag in ("[TXT]", "[OCR]"):
                 coords = f"({el.center[0]},{el.center[1]})" if include_coordinates else ""
                 stream_items.append(f"{src_tag} [{el.element_id}] {el.name}{coords}")
+
+        if terminal_buffers:
+            parts.append("TERMINAL_BUFFER: " + " | ".join(terminal_buffers[:4]))
         if stream_items:
             parts.append("STREAMS: " + " | ".join(stream_items[:4]))
 
