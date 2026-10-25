@@ -77,6 +77,29 @@ def register_tool_executor(executor_fn) -> None:
     _CUSTOM_TOOL_EXECUTOR = executor_fn
 
 
+def generate_relay_safe_b64(file_path: str, max_b64_len: int = 18000) -> Optional[str]:
+    """Generates an optimized, low-latency base64 thumbnail (< 18KB) compliant with AWS API Gateway 32KB frame limits."""
+    if not file_path or not os.path.exists(file_path):
+        return None
+    try:
+        from PIL import Image
+        import io
+        import base64
+        im = Image.open(file_path)
+        w, h = im.size
+        for target_w, quality in [(640, 45), (512, 35), (400, 30), (320, 25)]:
+            target_h = max(1, int(h * (target_w / w)))
+            thumb = im.resize((target_w, target_h), Image.Resampling.BILINEAR)
+            buf = io.BytesIO()
+            thumb.save(buf, format="JPEG", quality=quality, optimize=True)
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            if len(b64) <= max_b64_len:
+                return b64
+        return b64
+    except Exception:
+        return None
+
+
 async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Executes an Extra tool locally on the glass and returns the outcome.
@@ -101,36 +124,45 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
     try:
         safe_args = dict(arguments) if isinstance(arguments, dict) else {}
 
-        # Cloud Relay Invariant: Remote cloud agents (e.g. ChatGPT on chatgpt.com) run on external
-        # servers and have zero access to the local workstation filesystem (C:\Users\...).
-        # When extra_screenshot is executed over the cloud relay, automatically enable include_base64
-        # so the remote AI receives the image data directly in the response payload.
-        if tool_name == "extra_screenshot" and "include_base64" not in safe_args:
-            safe_args["include_base64"] = True
-
         # 1. Pluggable tool executor callback (decoupled from mcp.server)
         if _CUSTOM_TOOL_EXECUTOR is not None:
             if asyncio.iscoroutinefunction(_CUSTOM_TOOL_EXECUTOR):
                 res = await _CUSTOM_TOOL_EXECUTOR(tool_name, safe_args)
             else:
                 res = _CUSTOM_TOOL_EXECUTOR(tool_name, safe_args)
-            return {"success": True, "result": res}
-
-        # 2. Lazy fallback to extra.mcp.server
-        from extra.mcp import server as mcp_server
-
-        # Map tool names to native implementations
-        tool_func = getattr(mcp_server, tool_name, None)
-        if not tool_func or not callable(tool_func):
-            return {"success": False, "error": f"Tool '{tool_name}' not found on local Extra engine."}
-
-        # Handle async vs sync tool calls
-        if asyncio.iscoroutinefunction(tool_func):
-            res = await tool_func(**safe_args)
+            outcome = {"success": True, "result": res}
         else:
-            res = tool_func(**safe_args)
+            # 2. Lazy fallback to extra.mcp.server
+            from extra.mcp import server as mcp_server
 
-        return {"success": True, "result": res}
+            # Map tool names to native implementations
+            tool_func = getattr(mcp_server, tool_name, None)
+            if not tool_func or not callable(tool_func):
+                return {"success": False, "error": f"Tool '{tool_name}' not found on local Extra engine."}
+
+            # Handle async vs sync tool calls
+            if asyncio.iscoroutinefunction(tool_func):
+                res = await tool_func(**safe_args)
+            else:
+                res = tool_func(**safe_args)
+
+            outcome = {"success": True, "result": res}
+
+        # Cloud Relay Invariant: Remote cloud agents (e.g. ChatGPT on chatgpt.com) run on external
+        # servers and have zero access to the local workstation filesystem (C:\Users\...).
+        # Attach a compressed relay-safe base64 thumbnail (< 18KB) so the remote AI can see the visual desktop
+        # without exceeding AWS API Gateway's 32KB WebSocket frame limit (Error 1009).
+        if tool_name == "extra_screenshot" and isinstance(outcome.get("result"), dict):
+            inner_res = outcome["result"]
+            if not inner_res.get("screenshot_base64"):
+                fp = inner_res.get("file_path")
+                if fp:
+                    safe_b64 = generate_relay_safe_b64(fp, max_b64_len=18000)
+                    if safe_b64:
+                        inner_res["screenshot_base64"] = safe_b64
+                        inner_res["is_compressed_relay_thumbnail"] = True
+
+        return outcome
     except Exception as e:
         logger.error("Error executing local tool %s: %s", tool_name, e)
         return {"success": False, "error": str(e)}
@@ -209,7 +241,15 @@ async def run_relay_loop(
                                 "result": outcome,
                                 "timestamp": int(time.time() * 1000)
                             }
-                            await ws.send(json.dumps(resp))
+                            raw_payload = json.dumps(resp)
+                            # Hard Guard: AWS API Gateway drops connections if frame > 32,768 bytes (Error 1009)
+                            if len(raw_payload.encode("utf-8")) > 30000:
+                                inner = resp.get("result", {}).get("result", {})
+                                if isinstance(inner, dict) and "screenshot_base64" in inner:
+                                    inner["screenshot_base64"] = "[Image omitted: exceeded 30KB frame limit. Use extra_inspect_ui]"
+                                raw_payload = json.dumps(resp)
+
+                            await ws.send(raw_payload)
                             logger.info("Completed action %s: success=%s", action_id, outcome.get("success"))
                             print(f"[ACTION] Completed: {tool_name} (success={outcome.get('success')})", flush=True)
 
