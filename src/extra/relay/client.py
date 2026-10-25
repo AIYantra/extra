@@ -100,7 +100,7 @@ def generate_relay_safe_b64(file_path: str, max_b64_len: int = 18000) -> Optiona
         return None
 
 
-async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]] = None, action_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Executes an Extra tool locally on the glass and returns the outcome.
     Enforces a strict tool allowlist to prevent unauthorized remote code execution.
@@ -150,17 +150,51 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
 
         # Cloud Relay Invariant: Remote cloud agents (e.g. ChatGPT on chatgpt.com) run on external
         # servers and have zero access to the local workstation filesystem (C:\Users\...).
-        # Attach a compressed relay-safe base64 thumbnail (< 18KB) so the remote AI can see the visual desktop
-        # without exceeding AWS API Gateway's 32KB WebSocket frame limit (Error 1009).
+        # Upload full native-resolution screenshot (1366x768 / 1920x1080) to S3 via Cloud Hub HTTP API,
+        # keeping the WebSocket frame lightweight (~1.5KB) to strictly comply with AWS 32KB frame limits.
         if tool_name == "extra_screenshot" and isinstance(outcome.get("result"), dict):
             inner_res = outcome["result"]
-            if not inner_res.get("screenshot_base64"):
-                fp = inner_res.get("file_path")
-                if fp:
-                    safe_b64 = generate_relay_safe_b64(fp, max_b64_len=18000)
-                    if safe_b64:
-                        inner_res["screenshot_base64"] = safe_b64
-                        inner_res["is_compressed_relay_thumbnail"] = True
+            fp = inner_res.get("file_path")
+            act_id = action_id or f"act_{int(time.time() * 1000)}"
+            uploaded = False
+            if fp and os.path.exists(fp):
+                try:
+                    from PIL import Image
+                    import io
+                    import urllib.request
+                    im = Image.open(fp)
+                    w, h = im.size
+                    inner_res["width"] = w
+                    inner_res["height"] = h
+                    inner_res["desktop_resolution"] = f"{w}x{h}"
+
+                    # Compress full-resolution image as high-quality JPEG (Quality 82)
+                    buf = io.BytesIO()
+                    im.save(buf, format="JPEG", quality=82, optimize=True)
+                    img_data = buf.getvalue()
+
+                    up_url = f"https://extra.yantraos.com/api/action/upload?action_id={act_id}"
+                    up_req = urllib.request.Request(
+                        up_url,
+                        data=img_data,
+                        headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.3"},
+                        method="POST"
+                    )
+                    with urllib.request.urlopen(up_req, timeout=6) as up_resp:
+                        if up_resp.status == 200:
+                            inner_res["s3_image_key"] = f"screenshots/{act_id}.jpg"
+                            inner_res["image_url"] = f"https://extra.yantraos.com/screenshots/{act_id}.jpg"
+                            uploaded = True
+                            logger.info("Uploaded full-resolution screenshot (%sx%s, %s bytes) to S3.", w, h, len(img_data))
+                except Exception as ex:
+                    logger.debug("Full-res screenshot upload failed, falling back to safe thumbnail: %s", ex)
+
+            # Fallback only if S3 upload failed
+            if not uploaded and not inner_res.get("screenshot_base64") and fp:
+                safe_b64 = generate_relay_safe_b64(fp, max_b64_len=18000)
+                if safe_b64:
+                    inner_res["screenshot_base64"] = safe_b64
+                    inner_res["is_compressed_relay_thumbnail"] = True
 
         return outcome
     except Exception as e:
@@ -232,7 +266,7 @@ async def run_relay_loop(
                             print(f"[ACTION] Received: {tool_name} -> executing on glass...", flush=True)
 
                             # Run tool locally
-                            outcome = await execute_local_tool(tool_name, tool_args)
+                            outcome = await execute_local_tool(tool_name, tool_args, action_id=action_id)
 
                             # Send result back across relay
                             resp = {
