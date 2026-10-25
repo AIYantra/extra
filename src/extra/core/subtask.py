@@ -354,7 +354,7 @@ class SubtaskRunner:
         # 10. Clock & Timer / Stopwatch Control Patterns:
         # e.g. "start timer", "start clock timer", "start timer in clock", "stop timer", "pause stopwatch", "reset timer"
         clock_timer_start_match = re.match(
-            r"^(?:start|launch|begin|run)\s+(?:the\s+)?(?:clock\s+)?timer(?:\s+(?:in|for)\s+clock)?$",
+            r"^(?:start|launch|begin|run)\s+(?:a\s+|the\s+)?(?:\d+[\s\-]*(?:minute|min|sec|second|hour|hr)s?\s+)?(?:clock\s+)?timer(?:\s+(?:in|on|for)\s+(?:the\s+)?clock(?:\s+app)?)?$",
             clean_intent,
             flags=re.IGNORECASE,
         )
@@ -384,7 +384,7 @@ class SubtaskRunner:
             ]
 
         clock_pause_match = re.match(
-            r"^(?:stop|pause|halt)\s+(?:the\s+)?(?:clock\s+)?(?:timer|stopwatch)$",
+            r"^(?:stop|pause|halt)\s+(?:the\s+)?(?:running\s+)?(?:clock\s+)?(?:timer|stopwatch)(?:\s+(?:in|on|for)\s+(?:the\s+)?clock(?:\s+app)?)?$",
             clean_intent,
             flags=re.IGNORECASE,
         )
