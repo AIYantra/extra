@@ -10,8 +10,18 @@ import base64
 import time
 from typing import Any, Dict, Optional, List
 
-from bs4 import BeautifulSoup
-from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
+try:
+    from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
+except ImportError:
+    Browser = None
+    BrowserContext = None
+    Page = None
+    sync_playwright = None
 
 from extra.core.scout.cdp_sniffer import NetworkSniffer, CapturedRequest
 from extra.core.scout.session_vault import SessionVault, ServiceSession

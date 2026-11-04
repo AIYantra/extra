@@ -4,10 +4,15 @@
 # ── Tier 1: Protocol & Remote Transports ───────────────────────────────────────
 mcp>=1.0.0,<2                   # Official Anthropic Model Context Protocol SDK
 websockets>=13.0                 # High-speed WebSocket relay client
+requests>=2.31.0                # HTTP transport client
+starlette>=0.38.0               # SSE transport and server routing
 
 # ── Tier 1: Core System Utilities & Desktop Perception ─────────────────────────
 pillow>=10.4.0                  # High-speed image encoding and ROI manipulation
 psutil>=6.0.0                   # Process & window metadata discovery
+imagehash>=4.3.1                # Perceptual hash diffing for closed-loop stall breaking
+numpy>=1.24.0                   # Array manipulation and vector operations
+beautifulsoup4>=4.12.0          # Semantic HTML DOM parser for web fast-path
 
 # ── Windows Dependencies ────────────────────────────────────────────────────────
 pywin32>=306; sys_platform == 'win32'                    # Official Windows COM & Win32 extensions

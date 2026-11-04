@@ -17,8 +17,15 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import imagehash
-import numpy as np
+try:
+    import imagehash
+except ImportError:
+    imagehash = None
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 from PIL import Image
 
 from extra.core.geometry import attach_input_desktop, ensure_dpi_aware, get_cursor_position
