@@ -5,6 +5,7 @@ for Windows 10/11, bypassing visual desktop searching.
 """
 
 from __future__ import annotations
+import sys
 
 import ctypes
 from ctypes import wintypes
@@ -31,16 +32,19 @@ from extra.core.platform.windows.focus import (
 )
 from extra.core.platform.windows.geometry import attach_input_desktop, ensure_dpi_aware
 
-shell32 = ctypes.windll.shell32
-shell32.ShellExecuteW.argtypes = [
-    wintypes.HWND,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    wintypes.LPCWSTR,
-    ctypes.c_int,
-]
-shell32.ShellExecuteW.restype = wintypes.HINSTANCE
+if sys.platform == 'win32' and hasattr(ctypes, 'windll'):
+    shell32 = ctypes.windll.shell32
+    shell32.ShellExecuteW.argtypes = [
+        wintypes.HWND,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        ctypes.c_int,
+    ]
+    shell32.ShellExecuteW.restype = wintypes.HINSTANCE
+else:
+    shell32 = None
 
 SW_SHOWNORMAL = 1
 

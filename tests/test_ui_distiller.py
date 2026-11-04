@@ -323,6 +323,9 @@ def test_virtualized_viewport_clipping() -> None:
 
 def test_terminal_buffer_text_extraction() -> None:
     print("[Test 8] Universal Terminal & Document Buffer Text Extraction...", end=" ")
+    if sys.platform != "win32":
+        print("SKIPPED (Windows UIA only)")
+        return
     from unittest.mock import MagicMock
     from extra.core.distiller import UIDistiller
     from extra.core.platform.base import UIElement

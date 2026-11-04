@@ -1002,6 +1002,30 @@ export default {
       );
     }
 
+    // Route 1b: Release Version & Update Manifest
+    if (url.pathname === "/api/version" || url.pathname === "/api/updates/latest") {
+      return new Response(
+        JSON.stringify({
+          version: "0.3.4",
+          tag_name: "v0.3.4",
+          published_at: "2026-11-04T00:00:00Z",
+          html_url: "https://github.com/AIYantra/extra/releases/tag/v0.3.4",
+          notes: "Extra 0.3.4 — Sovereign AI computer-use engine with desktop companion station, high-speed macro executor, and zero-stall Dual-Plane fast paths.",
+          download_url: "https://extra.yantraos.com/download/Extra.exe",
+          assets: [
+            {
+              name: "Extra.exe",
+              browser_download_url: "https://extra.yantraos.com/download/Extra.exe"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+        }
+      );
+    }
+
     // Route 2: Anonymous Installation Success Beacon
     if (url.pathname === "/api/install-success" && request.method === "POST") {
       const contentLength = parseInt(request.headers.get("content-length") || "0", 10);

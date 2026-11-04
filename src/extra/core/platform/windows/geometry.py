@@ -5,6 +5,7 @@ and normalized [0, 1000] bounding-box mathematics for Windows 10/11.
 """
 
 from __future__ import annotations
+import sys
 
 import ctypes
 from ctypes import wintypes
@@ -33,9 +34,14 @@ MDT_EFFECTIVE_DPI = 0
 # Desktop Security Access Mask
 DESKTOP_ALL = 0x01FF
 
-user32 = ctypes.windll.user32
-shcore = getattr(ctypes.windll, "shcore", None)
-kernel32 = ctypes.windll.kernel32
+if sys.platform == "win32":
+    user32 = getattr(ctypes, "windll", None).user32 if hasattr(ctypes, "windll") else None
+    shcore = getattr(getattr(ctypes, "windll", None), "shcore", None) if hasattr(ctypes, "windll") else None
+    kernel32 = getattr(ctypes, "windll", None).kernel32 if hasattr(ctypes, "windll") else None
+else:
+    user32 = None
+    shcore = None
+    kernel32 = None
 
 
 class RECT(ctypes.Structure):

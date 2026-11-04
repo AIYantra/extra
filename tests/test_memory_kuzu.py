@@ -19,6 +19,20 @@ from extra.core.memory.recall import recall_memory
 class TestExtraMemory(unittest.TestCase):
     """Test suite for Extra local episodic memory and knowledge graph."""
 
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import kuzu
+        except ImportError:
+            raise unittest.SkipTest('kuzu not installed')
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import kuzu
+        except ImportError:
+            raise unittest.SkipTest('kuzu not installed')
+
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.db_path = Path(self.tmp_dir) / "test_graph.kuzu"

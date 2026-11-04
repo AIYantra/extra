@@ -1020,6 +1020,106 @@ ARCHETYPE_MAP = {
 }
 
 
+_UPDATE_CACHE = {"data": None, "ts": 0.0}
+
+
+def get_app_update_info() -> dict:
+    """Fetches release info with caching, fallbacks, and zero unhandled exceptions."""
+    now = time.time()
+    if _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 900:
+        return _UPDATE_CACHE["data"]
+
+    current_ver = "0.3.4"
+    result = {
+        "current": current_ver,
+        "latest": current_ver,
+        "latestTag": f"v{current_ver}",
+        "available": False,
+        "publishedAt": None,
+        "releaseUrl": "https://github.com/AIYantra/extra/releases",
+        "notes": f"Extra v{current_ver} is installed and up to date.",
+        "downloadUrl": "https://extra.yantraos.com/download/Extra.exe",
+        "assetName": "Extra.exe",
+        "installable": True,
+        "offline": False,
+    }
+
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/AIYantra/extra/releases/latest",
+            headers={"User-Agent": f"ExtraApp/{current_ver}", "Accept": "application/vnd.github+json"}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                tag = data.get("tag_name", f"v{current_ver}")
+                latest_clean = tag.lstrip("vV")
+                assets = data.get("assets", [])
+                download_url = None
+                asset_name = None
+                for a in assets:
+                    name = a.get("name", "")
+                    if name.endswith((".exe", ".msi")):
+                        download_url = a.get("browser_download_url")
+                        asset_name = name
+                        break
+                if not download_url and assets:
+                    download_url = assets[0].get("browser_download_url")
+                    asset_name = assets[0].get("name")
+
+                cur_parts = [int(p) for p in current_ver.split(".") if p.isdigit()]
+                lat_parts = [int(p) for p in latest_clean.split(".") if p.isdigit()]
+                is_newer = lat_parts > cur_parts
+
+                result.update({
+                    "latest": latest_clean,
+                    "latestTag": tag,
+                    "available": is_newer,
+                    "publishedAt": data.get("published_at"),
+                    "releaseUrl": data.get("html_url", result["releaseUrl"]),
+                    "notes": data.get("body"),
+                    "downloadUrl": download_url or result["downloadUrl"],
+                    "assetName": asset_name or result["assetName"],
+                })
+                _UPDATE_CACHE["data"] = result
+                _UPDATE_CACHE["ts"] = now
+                return result
+    except Exception:
+        pass
+
+    try:
+        req = urllib.request.Request(
+            "https://extra.yantraos.com/api/version.json",
+            headers={"User-Agent": f"ExtraApp/{current_ver}"}
+        )
+        with urllib.request.urlopen(req, timeout=2.5) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                tag = data.get("tag_name", f"v{current_ver}")
+                latest_clean = tag.lstrip("vV")
+                cur_parts = [int(p) for p in current_ver.split(".") if p.isdigit()]
+                lat_parts = [int(p) for p in latest_clean.split(".") if p.isdigit()]
+                result.update({
+                    "latest": latest_clean,
+                    "latestTag": tag,
+                    "available": lat_parts > cur_parts,
+                    "publishedAt": data.get("published_at"),
+                    "releaseUrl": data.get("html_url", result["releaseUrl"]),
+                    "notes": data.get("notes"),
+                    "downloadUrl": data.get("download_url", result["downloadUrl"]),
+                })
+                _UPDATE_CACHE["data"] = result
+                _UPDATE_CACHE["ts"] = now
+                return result
+    except Exception:
+        pass
+
+    result["offline"] = True
+    _UPDATE_CACHE["data"] = result
+    _UPDATE_CACHE["ts"] = now
+    return result
+
+
 def get_operator_info():
     username = os.environ.get("USERNAME") or os.environ.get("USER") or "Operator"
     machine_name = os.environ.get("COMPUTERNAME") or socket.gethostname() or "workstation"

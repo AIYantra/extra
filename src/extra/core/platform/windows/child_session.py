@@ -39,10 +39,16 @@ DESKTOP_JOURNALRECORD = 0x0008
 DESKTOP_JOURNALPLAYBACK = 0x0010
 DESKTOP_ALL_ACCESS = 0x01FF
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
-shell32 = ctypes.windll.shell32
-wtsapi32 = getattr(ctypes.windll, "wtsapi32", None)
+if sys.platform == "win32" and hasattr(ctypes, "windll"):
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    shell32 = ctypes.windll.shell32
+    wtsapi32 = getattr(ctypes.windll, "wtsapi32", None)
+else:
+    user32 = None
+    kernel32 = None
+    shell32 = None
+    wtsapi32 = None
 
 
 class SessionTier(str, Enum):

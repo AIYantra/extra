@@ -10,6 +10,7 @@ Validates:
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 import pytest
 from PIL import Image
 
@@ -54,6 +55,7 @@ def test_canvas_reset_intent_compilation():
     assert blank_actions[5]["action"] == "hotkey" and blank_actions[5]["keys"] == ["b"]
 
 
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows input engine test')
 def test_render_vector_stroke_no_redundant_click(monkeypatch):
     """Verifies that render_vector_stroke starts drawing with mouse_down directly (no double-click glitch)."""
     from unittest.mock import MagicMock
@@ -188,6 +190,7 @@ def test_batch_duration_estimation_and_scaling():
         assert a["duration"] >= 0.06, "Stroke duration should not drop below 0.06s"
 
 
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows input engine test')
 def test_batch_hard_deadline_timeout_guard(monkeypatch):
     """Verifies that execute_batch_actions safely pauses when hard deadline is reached."""
     import time

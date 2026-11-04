@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import sys
 import pytest
 
 from extra.core.soul.state_critic import (
@@ -124,6 +125,7 @@ def test_state_critic_accessibility_probe():
     assert any("Tab count deficit: Expected 5 tabs, but found only 2" in d for d in result.defects)
 
 
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows UIA plane test')
 def test_accessibility_plane_has_inspect_tree():
     """Verify that UIAutomationPlane has inspect_tree method implemented."""
     from extra.core.platform.windows.uia_plane import UIAutomationPlane
