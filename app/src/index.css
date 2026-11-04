@@ -1,0 +1,159 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+@import "./styles/variable.css";
+@import "./styles/common.css";
+@import "./styles/typography.css";
+
+/* ==========================================================================
+   SHADCN / TAILWIND V4 SEMANTIC TOKEN BRIDGING (LIGHT THEME DEFAULT)
+   ========================================================================== */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Extra Station Structural Surface Tokens */
+  --color-station-canvas: var(--station-canvas);
+  --color-station-well: var(--station-well);
+  --color-station-elevated: var(--station-elevated);
+  --color-station-surface: var(--station-surface);
+  --color-station-surface-hover: var(--station-surface-hover);
+  --color-station-border: var(--station-border);
+  --color-station-border-subtle: var(--station-border-subtle);
+  --color-station-text-primary: var(--station-text-primary);
+  --color-station-text-muted: var(--station-text-muted);
+  --color-station-text-dim: var(--station-text-dim);
+}
+
+/* ==========================================================================
+   EXTRA STATION: LIGHT THEME BASE (SYNCHRONIZED WITH extra.yantraos.com)
+   ========================================================================== */
+:root {
+  color-scheme: light;
+  --radius: 0.75rem;
+  --background: #f0f2f6;
+  --foreground: #1a1a1c;
+  --card: #ffffff;
+  --card-foreground: #1a1a1c;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a1c;
+  --primary: #1677ff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1a1c;
+  --secondary-foreground: #ffffff;
+  --muted: #f4f5f8;
+  --muted-foreground: #525866;
+  --accent: #e6f4ff;
+  --accent-foreground: #1677ff;
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+  --border: #dfe4eb;
+  --input: #dfe4eb;
+  --ring: #1677ff;
+  --chart-1: #1a1a1c;
+  --chart-2: #4096ff;
+  --chart-3: #83e7ee;
+  --chart-4: #10b981;
+  --chart-5: #f59e0b;
+
+  /* Extra Station Structural Surface Tokens (Light Theme First) */
+  --station-canvas: #f0f2f6;
+  --station-well: #ffffff;
+  --station-elevated: #f4f5f8;
+  --station-surface: #dfe4eb;
+  --station-surface-hover: #e3e7ed;
+  --station-border: #dfe4eb;
+  --station-border-subtle: #eceff4;
+  --station-text-primary: #1a1a1c;
+  --station-text-muted: #525866;
+  --station-text-dim: #868c98;
+  --station-shadow: 0 4px 20px -2px rgba(26, 26, 28, 0.05);
+}
+
+/* Optional Sovereign Dark Mode override */
+.dark {
+  color-scheme: dark;
+  --background: #08090a;
+  --foreground: #f4f4f6;
+  --card: #0d0e11;
+  --card-foreground: #f4f4f6;
+  --popover: #121417;
+  --popover-foreground: #f4f4f6;
+  --primary: #1677ff;
+  --primary-foreground: #ffffff;
+  --secondary: #181b20;
+  --secondary-foreground: #f4f4f6;
+  --muted: #14161b;
+  --muted-foreground: #8a8f98;
+  --accent: #20242b;
+  --accent-foreground: #ffffff;
+  --destructive: #f43f5e;
+  --destructive-foreground: #ffffff;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.08);
+  --ring: #1677ff;
+  --chart-1: #1677ff;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #83e7ee;
+  --chart-5: #f43f5e;
+
+  --station-canvas: #08090a;
+  --station-well: #0d0e11;
+  --station-elevated: #121417;
+  --station-surface: #181b20;
+  --station-surface-hover: #20242b;
+  --station-border: rgba(255, 255, 255, 0.06);
+  --station-border-subtle: rgba(255, 255, 255, 0.04);
+  --station-text-primary: #f4f4f6;
+  --station-text-muted: #8a8f98;
+  --station-text-dim: #555a64;
+  --station-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+html,
+body,
+#root {
+  height: 100vh;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, "Inter Tight", sans-serif);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  letter-spacing: -0.01em;
+}

@@ -264,6 +264,36 @@ fi
 export PATH="$BIN_DIR:$PATH"
 write_ok "Global CLI wrapper ready at $BIN_DIR/extra"
 
+# 6b. Application Shortcut Integration (macOS .app Bundle / Linux .desktop Entry)
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    if command -v osacompile &>/dev/null; then
+        mkdir -p "$HOME/Applications"
+        osacompile -o "$HOME/Applications/Extra.app" -e 'do shell script "'"$BIN_DIR/extra station > /dev/null 2>&1 &"'"' 2>/dev/null || true
+        write_ok "Created macOS application bundle: $HOME/Applications/Extra.app"
+    fi
+elif [[ "$OS_TYPE" == "Linux" ]]; then
+    DESKTOP_DIR="$HOME/.local/share/applications"
+    mkdir -p "$DESKTOP_DIR"
+    cat << 'EOF_DESKTOP' > "$DESKTOP_DIR/extra.desktop"
+[Desktop Entry]
+Name=Extra
+GenericName=Desktop AI Companion
+Comment=Universal Autonomous Desktop Automation & MCP Server
+Exec=BIN_DIR_PLACEHOLDER/extra station
+Icon=preferences-system
+Terminal=false
+Type=Application
+Categories=Utility;Development;
+StartupNotify=true
+EOF_DESKTOP
+    sed -i "s|BIN_DIR_PLACEHOLDER|$BIN_DIR|g" "$DESKTOP_DIR/extra.desktop" 2>/dev/null || true
+    chmod +x "$DESKTOP_DIR/extra.desktop"
+    if command -v update-desktop-database &>/dev/null; then
+        update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+    fi
+    write_ok "Created Linux desktop entry: $DESKTOP_DIR/extra.desktop"
+fi
+
 # 7. Configure Claude Desktop
 write_step "Configuring Claude Desktop MCP Integration..."
 if [[ "$OS_TYPE" == "Darwin" ]]; then
@@ -315,11 +345,11 @@ else
     )
 fi
 
-"$VENV_DIR/bin/python" - << EOF
-import json, os
+"$VENV_DIR/bin/python" - "${CURSOR_TARGETS[@]}" << 'EOF'
+import sys, json, os
 
-python_path = os.path.expanduser("$VENV_DIR/bin/python")
-targets = [os.path.expanduser(p) for p in "$CURSOR_TARGETS".split()]
+python_path = os.path.expanduser(os.environ.get("VENV_DIR", "") + "/bin/python") if "VENV_DIR" in os.environ else sys.executable
+targets = [os.path.expanduser(p) for p in sys.argv[1:] if p.strip()]
 
 for config_path in targets:
     try:
@@ -331,7 +361,7 @@ for config_path in targets:
                         data = json.load(f)
                 except Exception:
                     pass
-            if "mcpServers" not in data:
+            if "mcpServers" not in data or not isinstance(data["mcpServers"], dict):
                 data["mcpServers"] = {}
             data["mcpServers"]["extra"] = {
                 "command": python_path,
@@ -376,6 +406,55 @@ except Exception:
 EOF
     write_ok "Windsurf MCP configuration updated: $WINDSURF_CONFIG"
 fi
+
+# 9b. Configure Claude Code CLI (if detected)
+if command -v claude &>/dev/null; then
+    write_step "Configuring Claude Code CLI MCP Integration..."
+    claude mcp add extra -- "$VENV_DIR/bin/python" -m extra.mcp.server &>/dev/null || true
+    write_ok "Claude Code CLI registered Extra MCP server."
+fi
+
+# 9c. Configure Roo Code / Cline (if detected)
+ROO_TARGETS=()
+if [[ "$OS_TYPE" == "Darwin" ]]; then
+    ROO_TARGETS+=(
+        "$HOME/Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json"
+        "$HOME/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+    )
+else
+    ROO_TARGETS+=(
+        "$HOME/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json"
+        "$HOME/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json"
+    )
+fi
+
+"$VENV_DIR/bin/python" - "${ROO_TARGETS[@]}" << 'EOF'
+import sys, json, os
+
+python_path = os.path.expanduser(os.environ.get("VENV_DIR", "") + "/bin/python") if "VENV_DIR" in os.environ else sys.executable
+targets = [os.path.expanduser(p) for p in sys.argv[1:] if p.strip()]
+
+for config_path in targets:
+    try:
+        if os.path.exists(os.path.dirname(config_path)):
+            data = {"mcpServers": {}}
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                except Exception:
+                    pass
+            if "mcpServers" not in data or not isinstance(data["mcpServers"], dict):
+                data["mcpServers"] = {}
+            data["mcpServers"]["extra"] = {
+                "command": python_path,
+                "args": ["-m", "extra.mcp.server"]
+            }
+            with open(config_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+    except Exception:
+        pass
+EOF
 
 # 10. Configure Antigravity CLI (agy) & Deploy AI Protocol Rules
 if command -v agy &>/dev/null; then
@@ -457,7 +536,7 @@ fi
 if [[ "${DO_NOT_TRACK:-0}" != "1" && "${EXTRA_TELEMETRY:-1}" != "0" ]]; then
     (curl -s -m 2 -X POST "https://extra.yantraos.com/api/install-success" \
         -H "Content-Type: application/json" \
-        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.3.3\",\"method\":\"install.sh\"}" \
+        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.3.4\",\"method\":\"install.sh\"}" \
         >/dev/null 2>&1 &) || true
 fi
 
@@ -481,3 +560,24 @@ echo -e "👉  ${BOLD}${CYAN}Setup $STARTER_PROMPT_PATH${NC}\n"
 echo -e "${WHITE}Your AI will automatically configure its rules and reply:${NC}"
 echo -e "${GREEN}\"We are ready! Please restart <your AI application> to make it work.\"${NC}"
 echo -e "${BOLD}${GREEN}======================================================================${NC}\n"
+
+# 13. Auto-Launch Desktop Companion if graphical display is detected
+if [[ -z "$NO_LAUNCH" && -z "$CI" ]]; then
+    if [[ "$OS_TYPE" == "Darwin" ]]; then
+        if [[ -d "/Applications/ExtraApp.app" ]]; then
+            write_step "Launching Extra Desktop Companion..."
+            open "/Applications/ExtraApp.app" 2>/dev/null || true
+        elif [[ -d "$HOME/Applications/Extra.app" ]]; then
+            write_step "Launching Extra Desktop Companion..."
+            open "$HOME/Applications/Extra.app" 2>/dev/null || true
+        elif command -v "$BIN_DIR/extra" &>/dev/null; then
+            write_step "Launching Extra Station..."
+            "$BIN_DIR/extra" station &>/dev/null & disown || true
+        fi
+    elif [[ -n "$DISPLAY" || -n "$WAYLAND_DISPLAY" ]]; then
+        if command -v "$BIN_DIR/extra" &>/dev/null; then
+            write_step "Launching Extra Station..."
+            "$BIN_DIR/extra" station &>/dev/null & disown || true
+        fi
+    fi
+fi

@@ -19,6 +19,12 @@ except ImportError:
 logger = logging.getLogger("Extra-Memory-DB")
 
 _DB_LOCK = threading.Lock()
+
+
+def has_kuzu() -> bool:
+    """Returns True if KùzuDB is installed and operational."""
+    return kuzu is not None
+
 _KUZU_DB: Optional[Any] = None
 _DB_PATH: Optional[Path] = None
 

@@ -59,39 +59,25 @@ Once Extra is running, you can talk to your AI like a real human assistant sitti
 
 ---
 
-## ⚡ Quickstart (1 Minute)
+## ⚡ Quickstart (Under 10 Seconds)
 
-You can set up Extra in seconds on **Linux**, **macOS**, or **Windows**:
+You can set up Extra in seconds on **Windows**, **macOS**, or **Linux**:
 
-### Option A: Ask Your AI To Set It Up (Primary Funnel — Easiest)
+### Option A: 1-Click Cursor Install (Zero Terminal)
+If you use **Cursor IDE**, install Extra with a single click via the native deeplink:
 
-Copy and paste the single directive for your OS into **Claude Desktop**, **Google Antigravity**, **Cursor**, **Windsurf**, or any MCP agent:
+👉 **[Add Extra to Cursor (1-Click Install)](cursor://anysphere.cursor-deeplink/mcp/install?name=extra&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJleHRyYS1kZXNrdG9wIl19)**
 
-* **🐧 For Linux (Arch / yantraOS, Ubuntu, Debian, Fedora):**
-  ```text
-  Setup Extra on my Linux machine: In Terminal run 'curl -sSL https://extra.yantraos.com/install.sh | bash', then read and configure ~/.extra/app/STARTER_PROMPT_LINUX.md so we are ready to use Extra.
-  ```
-
-* **🍏 For macOS (Apple Silicon M1-M4 & Intel):**
-  ```text
-  Setup Extra on my Mac: In Terminal run 'curl -sSL https://extra.yantraos.com/install.sh | bash', then read and configure ~/.extra/app/STARTER_PROMPT_MACOS.md so we are ready to use Extra.
-  ```
-
-* **🪟 For Windows (11 / 10):**
-  ```text
-  Setup Extra on my PC: In PowerShell run 'iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"', then read and configure ~/.extra/app/STARTER_PROMPT.md so we are ready to use Extra.
-  ```
-
-Your AI will run the installer, configure MCP and local rules, and reply:  
-> **"We are ready! Please restart <your AI application, e.g. Claude Desktop, Antigravity, Cursor, Windsurf> to make it work."**
+Cursor will prompt: *"Install MCP Server 'extra' with command 'uvx extra-desktop'?"* — click **Install** and you're ready!
 
 ---
 
-### Option B: Run the One-Liner Yourself
+### Option B: Automated One-Liner (Configures All Clients Simultaneously)
+The one-liner downloads the lightweight core engine (< 6.3 MB) and automatically configures **Cursor**, **Claude Desktop**, **Windsurf**, **Claude Code**, and **Antigravity** with zero JSON editing:
 
-* **🐧 Linux Terminal (Arch / yantraOS, Ubuntu, Debian, Fedora):**
-  ```bash
-  curl -sSL https://extra.yantraos.com/install.sh | bash
+* **🪟 Windows PowerShell:**
+  ```powershell
+  irm https://extra.yantraos.com/install.ps1 | iex
   ```
 
 * **🍏 macOS Terminal:**
@@ -99,20 +85,52 @@ Your AI will run the installer, configure MCP and local rules, and reply:
   curl -sSL https://extra.yantraos.com/install.sh | bash
   ```
 
-* **🪟 Windows PowerShell (Staged, Defender-Clean):**
-  ```powershell
-  iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"
+  Or ask your AI on macOS directly:
+  ```text
+  Setup Extra on my Mac: In Terminal run 'curl -sSL https://extra.yantraos.com/install.sh | bash', then read and configure ~/.extra/app/STARTER_PROMPT_MACOS.md so we are ready to use Extra.
+  ```
+
+* **🐧 Linux Terminal (Arch / yantraOS, Ubuntu, Debian, Fedora):**
+  ```bash
+  curl -fsSL https://extra.yantraos.com/install.sh | bash
   ```
 
 The automated installer will:
-* Verify OS architecture (Linux Wayland/X11, macOS 12.3+, or Windows 10/11 64-bit).
-* Provision isolated Python 3.10+ runtime (`~/.extra/venv`).
-* Auto-configure **Claude Desktop**, **Cursor**, **Windsurf**, and **Antigravity** (`agy`).
-* Run the health diagnostic doctor and present the 1-step starter prompt.
+* Verify OS architecture (Windows 10/11 64-bit, macOS 12.3+, or Linux Wayland/X11).
+* Provision isolated Python runtime (`~/.extra/venv`) in under 3 seconds.
+* Auto-detect and wire **Cursor**, **Claude Desktop**, **Windsurf**, **Claude Code CLI**, and **Antigravity** (`agy`).
+* Run the health diagnostic doctor and confirm readiness.
 
 ---
 
-### Option C: Developer Git Clone
+### Option C: Instant Zero-Install Runner (`uvx` / `npx`)
+Run Extra instantly without installing or configuring local venvs:
+
+```bash
+# Via Astral uv (sub-second cold start):
+uvx extra-desktop run
+
+# Or via Node npx:
+npx -y @yantraos/extra-desktop
+```
+
+---
+
+### 🎯 Your First 3 Missions
+Once Extra is connected, paste any of these 3 verified starter missions into your AI to verify its hands and eyes:
+
+1. 🪄 **The Desktop Magic Trick (Window Snap + Notepad Haiku):**
+   > *"Snap my active window to the left, open Notepad on the right, and write a haiku about autonomous desktop agents."*
+
+2. 🧮 **The Fast Calculator (Sub-3ms Math):**
+   > *"Open Calculator, calculate 245.12 * 3.14159, and tell me the result."*
+
+3. 📁 **The Safe File Organizer (Desktop Triage):**
+   > *"Inspect my Desktop, find all screenshot files, and organize them into a clean Screenshots folder."*
+
+---
+
+### Option D: Developer Git Clone
 
 ```bash
 # Linux / macOS:

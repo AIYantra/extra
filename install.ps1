@@ -20,7 +20,8 @@
 param(
     [switch]$SkipDoctor = $false,
     [switch]$NoClaudeConfig = $false,
-    [switch]$NoTelemetry = $false
+    [switch]$NoTelemetry = $false,
+    [switch]$NoLaunch = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,7 +65,7 @@ Write-Host @"
 "@ -ForegroundColor Cyan
 
 # 1. Architecture Check
-Write-Step "Validating Windows 10/11 (64-bit) Host..."
+Write-Step "[1/5] Validating Windows 10/11 (64-bit) Host..."
 if (-not [Environment]::Is64BitOperatingSystem) {
     Write-ErrorMsg "Extra requires 64-bit Windows 10 or Windows 11."
     exit 1
@@ -77,7 +78,7 @@ if ($osVersion.Major -lt 10) {
 Write-Success "Windows host verified: $([Environment]::OSVersion.VersionString) (64-bit)"
 
 # 2. Python 3.10+ Discovery
-Write-Step "Checking Python runtime environment..."
+Write-Step "[2/5] Preparing Python 3.10+ runtime environment..."
 $pythonExe = $null
 
 $pythonCandidates = @("python.exe", "py.exe", "python3.exe")
@@ -121,6 +122,28 @@ if (-not $pythonExe) {
 }
 
 if (-not $pythonExe) {
+    Write-Step "Winget not available or failed. Downloading official Python 3.12 installer..."
+    $pyInstallerUrl = "https://www.python.org/ftp/python/3.12.8/python-3.12.8-amd64.exe"
+    $pyInstallerPath = Join-Path $env:TEMP "python-3.12.8-amd64.exe"
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+        Invoke-WebRequest -Uri $pyInstallerUrl -OutFile $pyInstallerPath -UseBasicParsing -TimeoutSec 60
+        if (Test-Path $pyInstallerPath) {
+            Write-Step "Installing Python 3.12 silently..."
+            Start-Process -FilePath $pyInstallerPath -ArgumentList "/quiet", "InstallAllUsers=0", "PrependPath=1", "Include_pip=1", "Include_test=0" -Wait
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+            $foundPy = Get-Command python.exe -ErrorAction SilentlyContinue
+            if ($foundPy) {
+                $pythonExe = $foundPy.Source
+            }
+            Remove-Item $pyInstallerPath -Force -ErrorAction SilentlyContinue
+        }
+    } catch {
+        Write-WarningMsg "Direct Python installer download failed: $_"
+    }
+}
+
+if (-not $pythonExe) {
     Write-ErrorMsg "Could not locate or install Python 3.10+."
     Write-Host "Please install Python 3.10+ from https://www.python.org/downloads/ and check 'Add python.exe to PATH'." -ForegroundColor Yellow
     exit 1
@@ -130,7 +153,7 @@ $pyVersion = & $pythonExe --version
 Write-Success "Using Python runtime: $pythonExe ($pyVersion)"
 
 # 3. Setup Target Directory & Isolated Environment
-Write-Step "Configuring application repository & virtual environment..."
+Write-Step "[3/5] Setting up workspace & isolated environment..."
 
 $extraHome = Join-Path $env:USERPROFILE ".extra"
 if (-not (Test-Path $extraHome)) {
@@ -244,7 +267,7 @@ $venvPython = Join-Path $venvDir "Scripts\python.exe"
 $venvPip = Join-Path $venvDir "Scripts\pip.exe"
 
 # 5. Dependency Installation
-Write-Step "Installing verified production dependencies (Playwright, MCP, PyWin32, MSS, Comtypes, WebSockets)..."
+Write-Step "Installing lightning-fast Core Tier dependencies (< 6.3 MB)..."
 & $venvPython -m pip install --quiet --upgrade pip
 & $venvPython -m pip install --quiet --prefer-binary -r "$installDir\requirements.txt"
 # Fail-safe install of core relay & desktop modules
@@ -282,15 +305,53 @@ try {
 }
 
 # 7. Global CLI Wrapper Setup
-Write-Step "Creating global 'extra' command wrapper..."
+Write-Step "[4/5] Compiling native launcher & desktop shortcuts..."
 $binDir = Join-Path $env:USERPROFILE ".extra\bin"
 if (-not (Test-Path $binDir)) {
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 }
 
+# 7a. Native Desktop Launcher Compilation (Zero-Dependency C# WinForms)
+$appDir = Join-Path $env:USERPROFILE ".extra\app"
+if (-not (Test-Path $appDir)) {
+    New-Item -ItemType Directory -Path $appDir -Force | Out-Null
+}
+$extraExe = Join-Path $appDir "Extra.exe"
+$launcherCs = Join-Path $installDir "app\launcher\Launcher.cs"
+$launcherIco = Join-Path $installDir "app\launcher\app.ico"
+$cscExe = Join-Path $env:SystemRoot "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+
+if ((Test-Path $launcherCs) -and (Test-Path $cscExe)) {
+    Write-Step "Compiling native Windows launcher (Extra.exe)..."
+    try {
+        if (Test-Path $launcherIco) {
+            & $cscExe /nologo /target:winexe /optimize+ /platform:anycpu "/win32icon:$launcherIco" "/out:$extraExe" "$launcherCs" | Out-Null
+        } else {
+            & $cscExe /nologo /target:winexe /optimize+ /platform:anycpu "/out:$extraExe" "$launcherCs" | Out-Null
+        }
+        if (Test-Path $extraExe) {
+            Write-Success "Native launcher compiled to $extraExe."
+            try {
+                $wsh = New-Object -ComObject WScript.Shell
+                $desktopPath = [Environment]::GetFolderPath("Desktop")
+                $shortcutPath = Join-Path $desktopPath "Extra.lnk"
+                $shortcut = $wsh.CreateShortcut($shortcutPath)
+                $shortcut.TargetPath = $extraExe
+                $shortcut.WorkingDirectory = $appDir
+                if (Test-Path $launcherIco) { $shortcut.IconLocation = $launcherIco }
+                $shortcut.Description = "Extra Desktop Companion"
+                $shortcut.Save()
+                Write-Success "Created desktop shortcut at $shortcutPath."
+            } catch { }
+        }
+    } catch {
+        Write-WarningMsg "Could not compile native launcher: $_"
+    }
+}
+
 $parentDir = Split-Path -Parent $installDir
 $cmdWrapper = Join-Path $binDir "extra.cmd"
-"@echo off`nset PYTHONPATH=$installDir\src;$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
+"@echo off`nif `"%~1`"==`"`" (`n    start `"`" `"%USERPROFILE%\.extra\app\Extra.exe`"`n    exit /b 0`n)`nset PYTHONPATH=$installDir\src;$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
 
 # Add ~/.extra/bin to User PATH if not already there
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -302,40 +363,103 @@ if ($userPath -notlike "*$binDir*") {
     Write-Success "Global CLI wrapper ready at $cmdWrapper."
 }
 
-# 8. Claude Desktop Configuration
-if (-not $NoClaudeConfig) {
-    Write-Step "Configuring Claude Desktop MCP Integration..."
-    $claudeConfigDir = Join-Path $env:APPDATA "Claude"
-    $claudeConfigFile = Join-Path $claudeConfigDir "claude_desktop_config.json"
-
-    if (-not (Test-Path $claudeConfigDir)) {
-        New-Item -ItemType Directory -Path $claudeConfigDir -Force | Out-Null
-    }
-
-    $configObj = @{}
-    if (Test-Path $claudeConfigFile) {
-        try {
-            $rawJson = Get-Content -Path $claudeConfigFile -Raw -Encoding UTF8
-            if ($rawJson.Trim()) {
-                $configObj = $rawJson | ConvertFrom-Json -AsHashtable
-            }
-        } catch {
-            $configObj = @{}
+function Update-McpConfigFile {
+    param(
+        [string]$ConfigPath,
+        [string]$PythonExe,
+        [string]$ClientName
+    )
+    try {
+        $parentDir = Split-Path -Parent $ConfigPath
+        if (-not (Test-Path $parentDir)) {
+            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
         }
-    }
 
-    if (-not $configObj.ContainsKey("mcpServers")) {
-        $configObj["mcpServers"] = @{}
-    }
+        $configObj = @{}
+        if (Test-Path $ConfigPath) {
+            try {
+                $rawJson = Get-Content -Path $ConfigPath -Raw -Encoding UTF8
+                if ($rawJson -and $rawJson.Trim()) {
+                    $configObj = $rawJson | ConvertFrom-Json -AsHashtable
+                }
+            } catch {
+                $configObj = @{}
+            }
+        }
 
-    $configObj["mcpServers"]["extra"] = @{
-        "command" = $venvPython
-        "args" = @("-m", "extra.mcp.server")
-    }
+        if (-not $configObj.ContainsKey("mcpServers")) {
+            $configObj["mcpServers"] = @{}
+        }
 
-    $updatedJson = $configObj | ConvertTo-Json -Depth 10
-    Set-Content -Path $claudeConfigFile -Value $updatedJson -Encoding UTF8
-    Write-Success "Claude Desktop configuration updated: $claudeConfigFile"
+        $configObj["mcpServers"]["extra"] = @{
+            "command" = $PythonExe
+            "args" = @("-m", "extra.mcp.server")
+        }
+
+        $updatedJson = $configObj | ConvertTo-Json -Depth 10
+        Set-Content -Path $ConfigPath -Value $updatedJson -Encoding UTF8
+        Write-Success "$ClientName MCP configuration updated: $ConfigPath"
+        return $true
+    } catch {
+        Write-WarningMsg "Could not update $ClientName configuration: $_"
+        return $false
+    }
+}
+
+# 8. Multi-Client AI Configuration (Claude Desktop, Cursor, Windsurf, Claude Code, VS Code)
+Write-Step "Configuring AI Client MCP Integrations..."
+
+# 8a. Claude Desktop
+if (-not $NoClaudeConfig) {
+    $claudeConfigFile = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
+    [void](Update-McpConfigFile -ConfigPath $claudeConfigFile -PythonExe $venvPython -ClientName "Claude Desktop")
+}
+
+# 8b. Cursor IDE
+$cursorDetected = (Test-Path (Join-Path $env:USERPROFILE ".cursor")) -or `
+                  (Test-Path (Join-Path $env:LOCALAPPDATA "Programs\cursor")) -or `
+                  (Get-Command cursor.cmd, cursor.exe -ErrorAction SilentlyContinue)
+if ($cursorDetected -or (Test-Path (Join-Path $env:USERPROFILE ".cursor"))) {
+    $cursorConfig = Join-Path $env:USERPROFILE ".cursor\mcp.json"
+    [void](Update-McpConfigFile -ConfigPath $cursorConfig -PythonExe $venvPython -ClientName "Cursor IDE (Global)")
+
+    $cursorAppData = Join-Path $env:APPDATA "Cursor\User\globalStorage\cursor.mcp\mcp.json"
+    if (Test-Path (Split-Path -Parent $cursorAppData)) {
+        [void](Update-McpConfigFile -ConfigPath $cursorAppData -PythonExe $venvPython -ClientName "Cursor IDE (Storage)")
+    }
+}
+
+# 8c. Windsurf IDE
+$windsurfDetected = (Test-Path (Join-Path $env:USERPROFILE ".codeium\windsurf")) -or `
+                    (Test-Path (Join-Path $env:LOCALAPPDATA "Programs\windsurf")) -or `
+                    (Get-Command windsurf.cmd, windsurf.exe -ErrorAction SilentlyContinue)
+if ($windsurfDetected) {
+    $windsurfConfig = Join-Path $env:USERPROFILE ".codeium\windsurf\mcp_config.json"
+    [void](Update-McpConfigFile -ConfigPath $windsurfConfig -PythonExe $venvPython -ClientName "Windsurf IDE")
+}
+
+# 8d. Claude Code CLI
+$claudeCmd = Get-Command claude.exe, claude.cmd -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($claudeCmd) {
+    try {
+        & $claudeCmd.Source mcp add extra -- $venvPython -m extra.mcp.server 2>$null
+        Write-Success "Claude Code CLI registered Extra MCP server."
+    } catch {
+        $claudeJson = Join-Path $env:USERPROFILE ".claude.json"
+        [void](Update-McpConfigFile -ConfigPath $claudeJson -PythonExe $venvPython -ClientName "Claude Code CLI")
+    }
+}
+
+# 8e. Roo Code / Cline (VS Code MCP Extensions)
+$rooClineDir = Join-Path $env:APPDATA "Code\User\globalStorage\rooveterinaryinc.roo-cline\settings"
+if (Test-Path $rooClineDir) {
+    $rooConfig = Join-Path $rooClineDir "cline_mcp_settings.json"
+    [void](Update-McpConfigFile -ConfigPath $rooConfig -PythonExe $venvPython -ClientName "Roo Code (VS Code)")
+}
+$clineDir = Join-Path $env:APPDATA "Code\User\globalStorage\saoudrizwan.claude-dev\settings"
+if (Test-Path $clineDir) {
+    $clineConfig = Join-Path $clineDir "cline_mcp_settings.json"
+    [void](Update-McpConfigFile -ConfigPath $clineConfig -PythonExe $venvPython -ClientName "Cline (VS Code)")
 }
 
 # 9. Antigravity CLI (agy) Configuration
@@ -410,13 +534,24 @@ if (-not $SkipDoctor) {
 # 11. Send Anonymous Installation Success Beacon (Non-blocking, 2s timeout)
 if ($env:DO_NOT_TRACK -ne "1" -and $env:EXTRA_TELEMETRY -ne "0") {
     try {
-        $beaconBody = '{"os":"windows","arch":"' + $env:PROCESSOR_ARCHITECTURE + '","version":"0.3.3","method":"install.ps1"}'
+        $beaconBody = '{"os":"windows","arch":"' + $env:PROCESSOR_ARCHITECTURE + '","version":"0.3.4","method":"install.ps1"}'
         if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
             Start-Process -FilePath "curl.exe" -ArgumentList @("-s", "-m", "2", "-X", "POST", "https://extra.yantraos.com/api/install-success", "-H", "Content-Type: application/json", "-d", $beaconBody) -WindowStyle Hidden
         } else {
             Invoke-RestMethod -Uri "https://extra.yantraos.com/api/install-success" -Method Post -Body $beaconBody -ContentType "application/json" -TimeoutSec 2 -ErrorAction SilentlyContinue | Out-Null
         }
     } catch { }
+}
+
+# 12. Auto-Launch Extra Desktop Companion App
+if (-not $NoLaunch -and (Test-Path $extraExe)) {
+    Write-Step "[5/5] Launching Extra Desktop Companion App..."
+    try {
+        Start-Process -FilePath $extraExe -WorkingDirectory $appDir
+        Write-Success "Extra Companion is now running on your desktop!"
+    } catch {
+        Write-WarningMsg "Could not auto-launch Extra Companion: $_"
+    }
 }
 
 $starterPromptPath = Join-Path $installDir "STARTER_PROMPT.md"

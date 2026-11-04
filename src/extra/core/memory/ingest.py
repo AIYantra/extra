@@ -14,8 +14,14 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from extra.core.memory.db import close_memory_db, get_memory_connection
+from extra.core.memory.db import close_memory_db, get_memory_connection, has_kuzu
 from extra.core.memory.embeddings import get_embedding
+from extra.core.memory.sqlite_store import (
+    sqlite_save_task,
+    sqlite_save_quirk,
+    sqlite_save_soul_decision,
+    sqlite_save_app_session,
+)
 
 logger = logging.getLogger("Extra-Memory-Ingest")
 
@@ -115,25 +121,55 @@ class TaskMemoryRecorder:
             })
 
     def commit_to_db(self, summary: str, success: bool = True, custom_db_path: Optional[Path] = None) -> bool:
-        """Commits the full task trajectory to KùzuDB."""
+        """Commits the full task trajectory to KùzuDB (or SQLite FTS5 fallback)."""
+        duration_ms = (time.time() - self.start_time) * 1000.0
+
+        clean_goal = str(self.goal or "").strip()
+        if not clean_goal:
+            clean_goal = str(self.task_name or "").strip()
+        if not clean_goal and summary:
+            clean_goal = str(summary).strip()
+        if not clean_goal:
+            app_names = list(self.apps.keys())
+            if app_names:
+                clean_goal = f"Automated workflow in {', '.join(app_names)}"
+            else:
+                clean_goal = "Autonomous desktop session"
+
+        clean_summary = str(summary or clean_goal).strip()
+
+        if not has_kuzu():
+            try:
+                sqlite_save_task(
+                    task_id=self.task_id,
+                    goal=clean_goal,
+                    summary=clean_summary,
+                    timestamp=self.start_time,
+                    duration_ms=duration_ms,
+                    total_steps=len(self.steps),
+                    success=success,
+                    apps=list(self.apps.values()),
+                    artifacts=self.artifacts,
+                    steps=self.steps,
+                    stalls=self.stalls,
+                    custom_path=custom_db_path,
+                )
+                for quirk in self.quirks:
+                    sqlite_save_quirk(
+                        app_name=quirk.get("app_name", ""),
+                        issue=quirk.get("issue", ""),
+                        workaround=quirk.get("workaround", ""),
+                        playbook=quirk.get("playbook", ""),
+                        custom_path=custom_db_path,
+                    )
+                logger.info("Persisted task '%s' (%s) to SQLite FTS5 memory.", self.task_name, self.task_id)
+                return True
+            except Exception as sex:
+                logger.error("Failed to commit task to SQLite fallback: %s", sex)
+                return False
+
         try:
             conn = get_memory_connection(custom_db_path)
-            duration_ms = (time.time() - self.start_time) * 1000.0
-
-            # Compute semantic embedding on full intent + outcome (prevent hollow goals)
-            clean_goal = str(self.goal or "").strip()
-            if not clean_goal:
-                clean_goal = str(self.task_name or "").strip()
-            if not clean_goal and summary:
-                clean_goal = str(summary).strip()
-            if not clean_goal:
-                app_names = list(self.apps.keys())
-                if app_names:
-                    clean_goal = f"Automated workflow in {', '.join(app_names)}"
-                else:
-                    clean_goal = "Autonomous desktop session"
-
-            clean_summary = str(summary or clean_goal).strip()
             text_to_embed = f"{self.task_name or 'Task'}: {clean_goal}\nSummary: {clean_summary}"
             embedding_vec = get_embedding(text_to_embed)
 
@@ -356,6 +392,15 @@ def get_active_recorder() -> Optional[TaskMemoryRecorder]:
         return _ACTIVE_RECORDER
 
 
+def reset_active_recorder() -> None:
+    """Safely resets the active recorder without persisting to DB (used in tests/cleanups)."""
+    global _ACTIVE_RECORDER
+    with _RECORDER_LOCK:
+        if _ACTIVE_RECORDER:
+            _ACTIVE_RECORDER.completed = True
+            _ACTIVE_RECORDER = None
+
+
 def finish_memory_recording(summary: str, success: bool = True, async_commit: bool = True) -> Optional[str]:
     """Finalizes active task recording and initiates database commit."""
     global _ACTIVE_RECORDER
@@ -404,6 +449,9 @@ def record_action_app(app_name: str, exe_path: Optional[str] = None, ui_type: Op
             logger.debug("Could not record app: %s", ex)
 
     # Standalone direct ingestion
+    if not has_kuzu():
+        return
+
     try:
         conn = get_memory_connection()
         clean_app = app_name.strip().lower()
@@ -453,6 +501,10 @@ def record_action_quirk(app_name: str, issue: str, workaround: str, playbook: st
             logger.debug("Could not record quirk: %s", ex)
 
     # Standalone direct ingestion
+    if not has_kuzu():
+        sqlite_save_quirk(app_name, issue, workaround, playbook)
+        return
+
     try:
         conn = get_memory_connection()
         clean_app = app_name.strip().lower()
@@ -536,6 +588,17 @@ def record_app_session(
         clear_app_session_cache()
     except Exception:
         pass
+
+    if not has_kuzu():
+        sqlite_save_app_session(
+            service_name=clean_service,
+            browser=browser.strip().lower(),
+            profile_name=profile_name.strip(),
+            profile_path=str(profile_path).strip(),
+            custom_path=custom_db_path,
+        )
+        logger.info("Persisted AppSession '%s' to SQLite.", clean_service)
+        return True
 
     try:
         conn = get_memory_connection(custom_db_path)

@@ -1145,6 +1145,110 @@ def check_first_run_consent() -> None:
         save_config(cfg)
 
 
+def cmd_onboard(args: Optional[argparse.Namespace] = None) -> int:
+    """Connect all detected AI clients and optionally run live sensory handshake."""
+    from extra.core.onboard import detect_installed_clients, configure_all_clients, run_sensory_handshake
+
+    skip_handshake = getattr(args, "skip_handshake", False)
+    clients = detect_installed_clients()
+    configure_all_clients(clients)
+    run_sensory_handshake(skip_handshake=skip_handshake)
+    print("  [OK] Extra onboarding and client configuration complete.")
+    return 0
+
+
+def cmd_station(args: Optional[argparse.Namespace] = None) -> int:
+    """Launch Extra Station desktop mission control cockpit."""
+    import webbrowser
+
+    force_web = getattr(args, "web", False)
+    target_url = getattr(args, "url", "http://localhost:5173")
+
+    if not force_web:
+        candidates = []
+        if os.environ.get("EXTRA_STATION_BIN"):
+            candidates.append(Path(os.environ["EXTRA_STATION_BIN"]))
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        app_dir = repo_root / "app"
+        user_run_app = Path.home() / ".extra" / "app" / "run_app.py"
+
+        if sys.platform == "win32":
+            user_prof = os.environ.get("USERPROFILE", "")
+            local_app = os.environ.get("LOCALAPPDATA", "")
+
+            if user_prof:
+                candidates.append(Path(user_prof) / ".extra" / "app" / "Extra.exe")
+                candidates.append(Path(user_prof) / ".extra" / "bin" / "Extra.exe")
+                candidates.append(user_run_app)
+            if local_app:
+                candidates.append(Path(local_app) / "Programs" / "ExtraApp" / "ExtraApp.exe")
+                candidates.append(Path(local_app) / "Programs" / "Extra" / "Extra.exe")
+
+            candidates.append(app_dir / "dist" / "ExtraApp.exe")
+            candidates.append(app_dir / "dist-desktop" / "ExtraApp.exe")
+            candidates.append(app_dir / "run_app.py")
+
+            for name in ["Extra.exe", "ExtraApp.exe"]:
+                which_bin = shutil.which(name)
+                if which_bin:
+                    candidates.append(Path(which_bin))
+
+        elif sys.platform == "darwin":
+            candidates.append(Path("/Applications/ExtraApp.app/Contents/MacOS/ExtraApp"))
+            candidates.append(Path.home() / "Applications" / "ExtraApp.app" / "Contents" / "MacOS" / "ExtraApp")
+            candidates.append(Path.home() / "Applications" / "Extra.app" / "Contents" / "MacOS" / "applet")
+            candidates.append(Path.home() / ".extra" / "bin" / "ExtraApp.app" / "Contents" / "MacOS" / "ExtraApp")
+            which_extra = shutil.which("ExtraApp")
+            if which_extra:
+                candidates.append(Path(which_extra))
+            candidates.append(user_run_app)
+            candidates.append(app_dir / "run_app.py")
+        else:
+            candidates.append(Path("/usr/bin/extraapp"))
+            candidates.append(Path.home() / ".local" / "bin" / "extraapp")
+            candidates.append(Path.home() / ".extra" / "bin" / "extraapp")
+            which_extra = shutil.which("extraapp")
+            if which_extra:
+                candidates.append(Path(which_extra))
+            candidates.append(user_run_app)
+            candidates.append(app_dir / "run_app.py")
+
+        for cand in candidates:
+            if cand and cand.is_file():
+                try:
+                    if str(cand).endswith(".py"):
+                        if sys.platform == "win32":
+                            DETACHED_PROCESS = 0x00000008
+                            subprocess.Popen([sys.executable, str(cand)], creationflags=DETACHED_PROCESS, close_fds=True)
+                        else:
+                            py_bin = sys.executable
+                            venv_py = Path.home() / ".extra" / "venv" / "bin" / "python"
+                            if venv_py.exists():
+                                py_bin = str(venv_py)
+                            subprocess.Popen([py_bin, str(cand)], start_new_session=True)
+                    elif sys.platform == "win32":
+                        import ctypes
+                        ret = ctypes.windll.shell32.ShellExecuteW(None, "open", str(cand), None, None, 1)
+                        if ret <= 32:
+                            DETACHED_PROCESS = 0x00000008
+                            subprocess.Popen([str(cand)], creationflags=DETACHED_PROCESS, close_fds=True)
+                    else:
+                        subprocess.Popen([str(cand)], start_new_session=True)
+                    print(f"  [OK] Launched native Extra Companion: {cand}")
+                    return 0
+                except Exception:
+                    pass
+
+    print(f"  [INFO] Opening Extra Station web cockpit at {target_url}...")
+    try:
+        webbrowser.open(target_url)
+    except Exception:
+        pass
+    return 0
+
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Builds and returns the top-level ArgumentParser for Extra CLI."""
     parser = argparse.ArgumentParser(
@@ -1155,6 +1259,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--version", "-v", action="version", version=f"extra {__version__}"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    # station / cockpit / app
+    station_parser = subparsers.add_parser("station", help="Launch Extra Station desktop mission control cockpit")
+    station_parser.add_argument("--url", default="http://localhost:5173", help="Web cockpit URL (default: http://localhost:5173)")
+    station_parser.add_argument("--web", action="store_true", help="Force opening web cockpit in browser instead of native binary")
+
+    cockpit_parser = subparsers.add_parser("cockpit", help="Launch Extra Station desktop mission control cockpit (alias for 'extra station')")
+    cockpit_parser.add_argument("--url", default="http://localhost:5173", help="Web cockpit URL (default: http://localhost:5173)")
+    cockpit_parser.add_argument("--web", action="store_true", help="Force opening web cockpit in browser instead of native binary")
+
+    app_parser = subparsers.add_parser("app", help="Launch Extra Station desktop mission control cockpit (alias for 'extra station')")
+    app_parser.add_argument("--url", default="http://localhost:5173", help="Web cockpit URL (default: http://localhost:5173)")
+    app_parser.add_argument("--web", action="store_true", help="Force opening web cockpit in browser instead of native binary")
+
+    # onboard / setup
+    onboard_parser = subparsers.add_parser("onboard", help="Connect all detected AI clients and run live sensory handshake")
+    onboard_parser.add_argument("--yes", "-y", action="store_true", help="Bypass interactive prompt and connect all clients automatically")
+    onboard_parser.add_argument("--skip-handshake", action="store_true", help="Skip the visual, kinetic, and acoustic handshake")
+
+    setup_parser = subparsers.add_parser("setup", help="Connect all detected AI clients (alias for 'extra onboard')")
+    setup_parser.add_argument("--yes", "-y", action="store_true", help="Bypass interactive prompt and connect all clients automatically")
+    setup_parser.add_argument("--skip-handshake", action="store_true", help="Skip the visual, kinetic, and acoustic handshake")
+
 
     # mode / modeset
     mode_parser = subparsers.add_parser("mode", help="View or set the Extra automation speed mode (turbo, balanced, smart)")
@@ -1315,7 +1441,11 @@ def main() -> None:
     except Exception:
         pass
 
-    if args.command in ("mode", "modeset"):
+    if args.command in ("onboard", "setup"):
+        sys.exit(cmd_onboard(args))
+    elif args.command in ("station", "cockpit", "app"):
+        sys.exit(cmd_station(args))
+    elif args.command in ("mode", "modeset"):
         sys.exit(cmd_mode(args))
     elif args.command == "stats":
         sys.exit(cmd_stats(args))

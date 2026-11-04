@@ -59,3 +59,19 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(pytest.mark.integration)
             else:
                 item.add_marker(pytest.mark.unit)
+
+
+@pytest.fixture(autouse=True)
+def isolate_extra_global_state():
+    """Guarantees memory recorder and speed execution mode state does not leak across test boundaries."""
+    yield
+    try:
+        from extra.core.memory.ingest import reset_active_recorder
+        reset_active_recorder()
+    except Exception:
+        pass
+    try:
+        from extra.core.mode import set_execution_mode, ExecutionMode
+        set_execution_mode(ExecutionMode.BALANCED)
+    except Exception:
+        pass

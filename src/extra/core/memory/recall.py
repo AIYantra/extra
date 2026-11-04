@@ -10,7 +10,12 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from extra.core.memory.db import close_memory_db, get_memory_connection
+from extra.core.memory.db import close_memory_db, get_memory_connection, has_kuzu
+from extra.core.memory.sqlite_store import (
+    sqlite_recall_memory,
+    sqlite_recall_soul_decision,
+    sqlite_recall_app_session,
+)
 from extra.core.memory.embeddings import cosine_similarity, get_embedding
 
 logger = logging.getLogger("Extra-Memory-Recall")
@@ -28,6 +33,14 @@ def recall_memory(
     Performs hybrid vector similarity on task goals + Cypher graph traversal.
     """
     try:
+        if not has_kuzu():
+            return sqlite_recall_memory(
+                query=query,
+                app_name=app_name,
+                top_k=top_k,
+                min_similarity=min_similarity,
+                custom_path=custom_db_path,
+            )
         conn = get_memory_connection(custom_db_path)
         query_vec = get_embedding(query)
 
@@ -198,7 +211,17 @@ def recall_memory(
         return res_dict
 
     except Exception as ex:
-        logger.error("Memory recall error: %s", ex, exc_info=True)
+        logger.debug("Kùzu recall failed, trying SQLite fallback: %s", ex)
+        try:
+            return sqlite_recall_memory(
+                query=query,
+                app_name=app_name,
+                top_k=top_k,
+                min_similarity=min_similarity,
+                custom_path=custom_db_path,
+            )
+        except Exception as sqlite_ex:
+            logger.error("Memory recall error: %s", sqlite_ex, exc_info=True)
         return {
             "query": query,
             "total_matches": 0,
@@ -228,6 +251,11 @@ def recall_soul_decision(
         return None
 
     cache_key = f"{app_name or ''}:{cond_clean}"
+    if not has_kuzu():
+        ret = sqlite_recall_soul_decision(condition, app_name, custom_db_path)
+        if custom_db_path is None:
+            _SOUL_DECISION_CACHE[cache_key] = ret
+        return ret
     if custom_db_path is None and cache_key in _SOUL_DECISION_CACHE:
         return _SOUL_DECISION_CACHE[cache_key]
 
@@ -345,6 +373,12 @@ def recall_app_session(
     Returns matching session dict or None if not found.
     """
     clean_service = service_name.strip().lower()
+    if not has_kuzu():
+        ret = sqlite_recall_app_session(service_name, custom_db_path)
+        if custom_db_path is None:
+            _APP_SESSION_CACHE[clean_service] = ret
+        return ret
+
     if custom_db_path is None and clean_service in _APP_SESSION_CACHE:
         return _APP_SESSION_CACHE[clean_service]
 

@@ -1,0 +1,6 @@
+# Extra — Optional Neural Memory & Vector Perception
+# Install via: pip install -r requirements-memory.txt OR pip install extra-desktop[memory]
+
+kuzu>=0.11.0; python_version < "3.14"                    # Embedded episodic and relational graph database
+fastembed>=0.8.0                                          # Sub-3ms pure ONNX vector embeddings for memory recall
+onnxruntime>=1.19.0                                      # Direct ONNX execution engine for SOUL perception and embeddings

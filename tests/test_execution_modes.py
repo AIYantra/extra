@@ -31,6 +31,11 @@ class TestExecutionModes(unittest.TestCase):
         set_execution_mode(ExecutionMode.BALANCED)
 
     def tearDown(self):
+        try:
+            from extra.core.memory.ingest import reset_active_recorder
+            reset_active_recorder()
+        except Exception:
+            pass
         if self.original_env is not None:
             set_execution_mode(self.original_env)
         else:

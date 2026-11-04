@@ -1,0 +1,22 @@
+{
+  "name": "Extra Station",
+  "short_name": "Extra",
+  "description": "Sovereign Desktop Computer-Use Engine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f0f2f6",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/ExtraLOGO-Square.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-square.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
