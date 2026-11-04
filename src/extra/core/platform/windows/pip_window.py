@@ -6,6 +6,7 @@ Renders real-time captures of the isolated Child Session or Virtual Desktop.
 """
 
 from __future__ import annotations
+import sys
 
 import ctypes
 from ctypes import wintypes
@@ -19,9 +20,14 @@ from PIL import Image
 
 logger = logging.getLogger("extra.core.platform.windows.pip_window")
 
-user32 = ctypes.windll.user32
-gdi32 = ctypes.windll.gdi32
-kernel32 = ctypes.windll.kernel32
+if sys.platform == 'win32' and hasattr(ctypes, 'windll'):
+    user32 = ctypes.windll.user32
+    gdi32 = ctypes.windll.gdi32
+    kernel32 = ctypes.windll.kernel32
+else:
+    user32 = None
+    gdi32 = None
+    kernel32 = None
 
 # Win32 Window Styles
 WS_POPUP = 0x80000000

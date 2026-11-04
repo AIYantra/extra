@@ -5,6 +5,7 @@ atomic clipboard swap, multi-button hardware mouse dispatch, and hotkeys.
 """
 
 from __future__ import annotations
+import sys
 
 import ctypes
 from ctypes import wintypes
@@ -129,7 +130,7 @@ VK_MAP = {
     "scrolllock": 0x91,
 }
 
-user32 = ctypes.windll.user32
+user32 = ctypes.windll.user32 if sys.platform == 'win32' and hasattr(ctypes, 'windll') else None
 
 
 class MOUSEINPUT(ctypes.Structure):

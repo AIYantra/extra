@@ -101,6 +101,10 @@ class TestUniversalTaskSuite(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        try:
+            import kuzu
+        except ImportError:
+            raise unittest.SkipTest('kuzu not installed')
         cls.temp_dir = tempfile.mkdtemp()
         cls.workspace_dir = Path(cls.temp_dir) / "workspace"
         cls.workspace_dir.mkdir(parents=True, exist_ok=True)

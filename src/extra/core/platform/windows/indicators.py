@@ -15,6 +15,7 @@ Engineered with:
 """
 
 from __future__ import annotations
+import sys
 
 import atexit
 import ctypes
@@ -43,7 +44,7 @@ from extra.core.platform.windows.geometry import (
 
 logger = logging.getLogger("extra.indicators")
 
-user32 = ctypes.windll.user32
+user32 = ctypes.windll.user32 if sys.platform == 'win32' and hasattr(ctypes, 'windll') else None
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
 

@@ -137,6 +137,10 @@ def test_souleyes_integration() -> None:
 
 def test_distiller_force_vision_tier1() -> None:
     print("[Test 5] UIDistiller live distillation with force_vision=True...", end=" ")
+    import os
+    if os.environ.get("CI") == "true" and sys.platform != "win32":
+        print("SKIPPED (Headless non-Windows CI)")
+        return
     res = distill_screen(format="markdown", max_elements=25, force_vision=True)
 
     assert res.source == "vision_tier1", f"Expected source 'vision_tier1', got '{res.source}'"

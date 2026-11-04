@@ -80,16 +80,22 @@ export const useUpdateStore = create<UpdateStoreState>()(
               });
             }
           } else if (!silent && !result.available) {
-            toast.success("You're up to date", {
-              description: `Installed ${result.current} is the latest release.`,
-            });
+            if (result.offline) {
+              toast.info(`Extra ${result.latestTag} (Installed)`, {
+                description: "Cannot reach update server. You are running the verified local release.",
+              });
+            } else {
+              toast.success("You're up to date", {
+                description: `Installed ${result.current} is the latest release.`,
+              });
+            }
           }
           return result;
         } catch (err: any) {
-          const message = err?.message || "Couldn't check for updates.";
+          const message = err?.message || "Couldn't reach update server.";
           set({ checking: false, error: message });
           if (!silent) {
-            toast.error("Update check failed", { description: message });
+            toast.info("Update check deferred", { description: message });
           }
           return null;
         }

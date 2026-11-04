@@ -27,6 +27,20 @@ from extra.core.soul.schemas import DecisionType
 class TestSoulEvolution(unittest.TestCase):
     """Test suite for SOUL memory ingestion, recall, and evolution."""
 
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import kuzu
+        except ImportError:
+            raise unittest.SkipTest('kuzu not installed')
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            import kuzu
+        except ImportError:
+            raise unittest.SkipTest('kuzu not installed')
+
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.db_path = Path(self.tmp_dir) / "test_soul_graph.kuzu"

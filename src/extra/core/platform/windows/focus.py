@@ -5,6 +5,7 @@ providing guaranteed window activation, enumeration, and title/PID search.
 """
 
 from __future__ import annotations
+import sys
 
 import ctypes
 from ctypes import wintypes
@@ -24,8 +25,12 @@ import win32process
 from extra.core.platform.base import AbstractFocusManager, WindowInfo
 from extra.core.platform.windows.geometry import attach_input_desktop, ensure_dpi_aware
 
-user32 = ctypes.windll.user32
-kernel32 = ctypes.windll.kernel32
+if sys.platform == 'win32' and hasattr(ctypes, 'windll'):
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+else:
+    user32 = None
+    kernel32 = None
 
 SW_RESTORE = 9
 SW_SHOW = 5
