@@ -159,7 +159,7 @@ class TestFullNiftySpeedrunBenchmark(unittest.TestCase):
 
         # Stage 5: Snap Layout (Clock Left, Notepad Right)
         t0 = time.perf_counter()
-        step5 = extra_snap_layout(layout="side_by_side", left_window="Clock", right_window="Telegram")
+        step5 = extra_snap_layout(layout="side_by_side", left_window="Clock", right_window="Notepad")
         timings["stage5_snap_layout"] = (time.perf_counter() - t0) * 1000.0
         self.assertTrue(step5.get("success", False), f"Stage 5 failed: {step5.get('error')}")
 

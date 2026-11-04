@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" style="height: 100vh; width: 100vw; margin: 0; padding: 0; overflow: hidden; position: fixed; inset: 0;">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/ExtraLOGO-Square.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Extra" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Extra</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://127.0.0.1:* http://localhost:*; connect-src 'self' http://127.0.0.1:* http://localhost:* https://extra.yantraos.com https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*; base-uri 'self';" />
+    <meta name="description" content="Extra mission-control cockpit: supervised autonomous desktop computer-use with optical grounding, human approvals, and cryptographic run lineage." />
+    <script>
+      (function() {
+        try {
+          document.documentElement.classList.remove("dark");
+          localStorage.setItem("extra_theme", "light");
+        } catch (e) {}
+        window.addEventListener("contextmenu", function(e) {
+          if (!e.target.closest("input, textarea, [contenteditable]")) {
+            e.preventDefault();
+          }
+        });
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,300..800;1,300..800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="antialiased" style="height: 100vh; width: 100vw; margin: 0; padding: 0; overflow: hidden; position: fixed; inset: 0;">
+    <div id="root" style="height: 100vh; width: 100vw; margin: 0; padding: 0; overflow: hidden; position: fixed; inset: 0;"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

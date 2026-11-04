@@ -37,6 +37,7 @@ VK_CONTROL = 0x11
 VK_MENU = 0x12  # Alt
 VK_SHIFT = 0x10
 VK_Q = 0x51
+VK_ESCAPE = 0x1B
 
 
 class StallStatus(str, Enum):
@@ -99,6 +100,7 @@ class StallBreaker:
         self._recent_clicks: List[Tuple[int, int, str]] = []
         self._last_cognitive_state: str = "NORMAL_PROGRESS"
         self._consequential_history: List[ConsequentialActionRecord] = []
+        self.is_paused: bool = False
 
     @property
     def current_strikes(self) -> int:
@@ -185,6 +187,12 @@ class StallBreaker:
         ensure_dpi_aware()
         attach_input_desktop()
 
+        # 0. Cockpit paused check
+        if getattr(self, "is_paused", False):
+            raise EmergencyAbortError(
+                "Fail-Safe Triggered: Automation paused by operator via Extra Station Cockpit."
+            )
+
         # 1. Corner fail-safe check
         cx, cy = get_cursor_position()
         if cx <= self.corner_abort_pixels and cy <= self.corner_abort_pixels:
@@ -200,6 +208,14 @@ class StallBreaker:
                 alt_down = bool(user32.GetAsyncKeyState(VK_MENU) & 0x8000)
                 shift_down = bool(user32.GetAsyncKeyState(VK_SHIFT) & 0x8000)
                 q_down = bool(user32.GetAsyncKeyState(VK_Q) & 0x8000)
+                esc_down = bool(user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+
+                # Emergency Panic Stop (Ctrl + Alt + Escape)
+                if ctrl_down and alt_down and esc_down:
+                    self.is_paused = True
+                    raise EmergencyAbortError(
+                        "Fail-Safe Triggered: Emergency Panic Kill Switch (Ctrl+Alt+Esc) pressed."
+                    )
 
                 if ctrl_down and alt_down and shift_down and q_down:
                     raise EmergencyAbortError(

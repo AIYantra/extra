@@ -175,6 +175,7 @@ export default {
       const cookieMatch = cookieHeader.match(/extra_device_key=([^;]+)/);
       const savedKey = cookieMatch ? decodeURIComponent(cookieMatch[1]) : "";
       const queryKey = (url.searchParams.get("key") || url.searchParams.get("relay_key") || "").trim();
+      const initialKey = queryKey || savedKey;
 
       // POST: Form submission from the pairing UI
       if (request.method === "POST") {
@@ -239,36 +240,7 @@ export default {
         });
       }
 
-      // GET: Instant auto-approve if key is present in query string
-      if (queryKey && redirectUri) {
-        const authCode = "auth_" + crypto.randomUUID().replace(/-/g, "");
-        const codeRecord = {
-          relay_key: queryKey,
-          client_id: clientId,
-          redirect_uri: redirectUri,
-          code_challenge: codeChallenge,
-          code_challenge_method: codeChallengeMethod,
-          created_at: Date.now(),
-        };
 
-        if (env && env.TELEMETRY_KV) {
-          try {
-            await env.TELEMETRY_KV.put(`oauth_code:${authCode}`, JSON.stringify(codeRecord), { expirationTtl: 600 });
-          } catch (_) {}
-        }
-
-        const target = new URL(redirectUri);
-        target.searchParams.set("code", authCode);
-        if (state) target.searchParams.set("state", state);
-
-        return new Response(null, {
-          status: 302,
-          headers: {
-            "Location": target.toString(),
-            "Set-Cookie": `extra_device_key=${encodeURIComponent(queryKey)}; Path=/; Max-Age=2592000; Secure; SameSite=Lax`,
-          },
-        });
-      }
 
       // GET: Render clean, luminous consent & pairing UI matching extra.yantraos.com
       const cancelHref = redirectUri
@@ -588,7 +560,7 @@ export default {
       <div class="form-group">
         <label for="relay_key" class="field-label">Workstation Setup Key</label>
         <div class="input-wrapper">
-          <input type="text" id="relay_key" name="relay_key" value="${savedKey}" placeholder="extra_rel_..." required autofocus spellcheck="false" autocomplete="off">
+          <input type="text" id="relay_key" name="relay_key" value="${initialKey}" placeholder="extra_rel_..." required autofocus spellcheck="false" autocomplete="off">
         </div>
         <span class="hint">Find your key by running <code class="code-chip">extra connect</code> in your terminal.</span>
       </div>
@@ -685,6 +657,24 @@ export default {
           } catch (_) {}
         }
 
+        // Enforce client authentication if client was registered via RFC 7591
+        let clientRecord = null;
+        if (clientId && env && env.TELEMETRY_KV) {
+          try {
+            const rawClient = await env.TELEMETRY_KV.get(`oauth_client:${clientId}`);
+            if (rawClient) clientRecord = JSON.parse(rawClient);
+          } catch (_) {}
+        }
+
+        if (clientRecord && clientRecord.client_secret) {
+          if (!clientSecret || clientSecret !== clientRecord.client_secret) {
+            return new Response(JSON.stringify({ error: "invalid_client", error_description: "Client authentication failed: invalid client_secret" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+        }
+
         // Grant Type 1: authorization_code
         if (grantType === "authorization_code") {
           if (!code) {
@@ -708,6 +698,13 @@ export default {
 
           if (!codeRecord) {
             return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Authorization code is invalid or expired" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          if (codeRecord.client_id && clientId && codeRecord.client_id !== clientId) {
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Client ID mismatch with authorization code" }), {
               status: 400,
               headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
             });
@@ -780,7 +777,7 @@ export default {
           });
         }
 
-        // Grant Type 2: refresh_token
+        // Grant Type 2: refresh_token (OAuth 2.1 Rotating Refresh Tokens)
         if (grantType === "refresh_token") {
           if (!refreshToken) {
             return new Response(JSON.stringify({ error: "invalid_request", error_description: "Missing refresh token" }), {
@@ -804,10 +801,23 @@ export default {
             });
           }
 
+          if (refreshRecord.client_id && clientId && refreshRecord.client_id !== clientId) {
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Client ID mismatch with refresh token" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          // Issue new access token and rotated refresh token
           const newAccessToken = "extra_tok_" + crypto.randomUUID().replace(/-/g, "");
+          const rotatedRefreshToken = "extra_ref_" + crypto.randomUUID().replace(/-/g, "");
+
           if (env && env.TELEMETRY_KV) {
             try {
+              // Revoke old refresh token to prevent replay
+              await env.TELEMETRY_KV.delete(`oauth_refresh:${refreshToken}`);
               await env.TELEMETRY_KV.put(`oauth_token:${newAccessToken}`, JSON.stringify(refreshRecord), { expirationTtl: 86400 * 30 });
+              await env.TELEMETRY_KV.put(`oauth_refresh:${rotatedRefreshToken}`, JSON.stringify(refreshRecord), { expirationTtl: 86400 * 90 });
             } catch (_) {}
           }
 
@@ -815,7 +825,7 @@ export default {
             access_token: newAccessToken,
             token_type: "Bearer",
             expires_in: 86400 * 30,
-            refresh_token: refreshToken,
+            refresh_token: rotatedRefreshToken,
             scope: "mcp offline_access",
           }), {
             status: 200,
@@ -1138,7 +1148,17 @@ export default {
         })());
       }
 
-      const upstreamRes = await fetch(SCRIPT_MAP[url.pathname]);
+      let upstreamRes = null;
+      try {
+        const originRes = await fetch(request);
+        if (originRes && originRes.status === 200) {
+          upstreamRes = originRes;
+        }
+      } catch (_) {}
+
+      if (!upstreamRes) {
+        upstreamRes = await fetch(SCRIPT_MAP[url.pathname]);
+      }
       const headers = new Headers(upstreamRes.headers);
       headers.set("Content-Type", "text/plain; charset=utf-8");
       headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
@@ -1154,7 +1174,17 @@ export default {
     // Route 5: Universal CLI one-liner: curl -sSL https://extra.yantraos.com/install | bash
     if (url.pathname === "/install") {
       const targetScript = isMacOrUnixUserAgent(userAgent) ? "/install.sh" : "/install.ps1";
-      const upstreamRes = await fetch(SCRIPT_MAP[targetScript]);
+      let upstreamRes = null;
+      try {
+        const originRes = await fetch(new Request(new URL(targetScript, request.url), request));
+        if (originRes && originRes.status === 200) {
+          upstreamRes = originRes;
+        }
+      } catch (_) {}
+
+      if (!upstreamRes) {
+        upstreamRes = await fetch(SCRIPT_MAP[targetScript]);
+      }
       const headers = new Headers(upstreamRes.headers);
       headers.set("Content-Type", "text/plain; charset=utf-8");
       headers.set("Cache-Control", "public, max-age=60, s-maxage=300");

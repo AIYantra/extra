@@ -1,0 +1,30 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/anthropic-quickstarts/main/mcp-builder/schemas/mcpb-v0.4.json",
+  "manifest_version": "0.4",
+  "name": "extra-desktop",
+  "display_name": "Extra — Computer Use Engine",
+  "version": "0.3.4",
+  "description": "Flashless Windows, Mac & Linux desktop control for Claude Desktop and MCP agents.",
+  "author": {
+    "name": "yantraOS",
+    "url": "https://extra.yantraos.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AIYantra/extra"
+  },
+  "homepage": "https://extra.yantraos.com",
+  "license": "MIT",
+  "server": {
+    "type": "node",
+    "entry_point": "bin/cli.js",
+    "mcp_config": {
+      "command": "extra",
+      "args": ["run"]
+    }
+  },
+  "permissions": [
+    "desktop_control",
+    "screen_capture"
+  ]
+}

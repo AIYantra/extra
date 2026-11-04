@@ -13,14 +13,18 @@ __pycache__/
 *.so
 *.dylib
 *.dll
+*.exe
 
 # ------------------------------------------------------------------------------
 # 2. Build Toolchains & Packaging Distribution
 # ------------------------------------------------------------------------------
 .Python
 build/
+build-desktop/
 develop-eggs/
 dist/
+dist-desktop/
+node_modules/
 downloads/
 eggs/
 .eggs/

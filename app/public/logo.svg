@@ -1,0 +1,22 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Center dot -->
+  <circle cx="50" cy="50" r="4.85" fill="#1A1A1C" />
+
+  <!-- Inner diagonal ring -->
+  <circle cx="38.28" cy="38.28" r="4.85" fill="#1A1A1C" />
+  <circle cx="61.72" cy="38.28" r="4.85" fill="#1A1A1C" />
+  <circle cx="38.28" cy="61.72" r="4.85" fill="#1A1A1C" />
+  <circle cx="61.72" cy="61.72" r="4.85" fill="#1A1A1C" />
+
+  <!-- Outer diagonal ring -->
+  <circle cx="26.57" cy="26.57" r="4.85" fill="#1A1A1C" />
+  <circle cx="73.43" cy="26.57" r="4.85" fill="#1A1A1C" />
+  <circle cx="26.57" cy="73.43" r="4.85" fill="#1A1A1C" />
+  <circle cx="73.43" cy="73.43" r="4.85" fill="#1A1A1C" />
+
+  <!-- Vertical serif terminals -->
+  <circle cx="26.57" cy="14.85" r="4.85" fill="#1A1A1C" />
+  <circle cx="73.43" cy="14.85" r="4.85" fill="#1A1A1C" />
+  <circle cx="26.57" cy="85.15" r="4.85" fill="#1A1A1C" />
+  <circle cx="73.43" cy="85.15" r="4.85" fill="#1A1A1C" />
+</svg>

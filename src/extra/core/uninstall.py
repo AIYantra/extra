@@ -235,6 +235,47 @@ def cleanup_ide_configs() -> List[str]:
     return cleaned
 
 
+def cleanup_shortcuts() -> List[str]:
+    """Removes Desktop and Start Menu shortcuts across platforms."""
+    cleaned = []
+    system = platform.system()
+    if system == "Windows":
+        user_prof = Path(os.environ.get("USERPROFILE", str(Path.home())))
+        desktop_shortcut = user_prof / "Desktop" / "Extra.lnk"
+        if desktop_shortcut.exists():
+            try:
+                desktop_shortcut.unlink()
+                cleaned.append(f"Removed Desktop shortcut: {desktop_shortcut}")
+            except Exception:
+                pass
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            start_shortcut = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Extra.lnk"
+            if start_shortcut.exists():
+                try:
+                    start_shortcut.unlink()
+                    cleaned.append(f"Removed Start Menu shortcut: {start_shortcut}")
+                except Exception:
+                    pass
+    elif system == "Darwin":
+        apps_extra = Path.home() / "Applications" / "Extra.app"
+        if apps_extra.exists():
+            try:
+                shutil.rmtree(apps_extra, ignore_errors=True)
+                cleaned.append(f"Removed macOS application: {apps_extra}")
+            except Exception:
+                pass
+    elif system == "Linux":
+        desktop_entry = Path.home() / ".local" / "share" / "applications" / "extra.desktop"
+        if desktop_entry.exists():
+            try:
+                desktop_entry.unlink()
+                cleaned.append(f"Removed Linux desktop entry: {desktop_entry}")
+            except Exception:
+                pass
+    return cleaned
+
+
 def remove_from_user_path() -> bool:
     """Removes ~/.extra/bin from user PATH variable."""
     system = platform.system()
@@ -420,6 +461,11 @@ def perform_uninstall(
     path_cleaned = remove_from_user_path()
     if path_cleaned:
         print("  [OK] Removed Extra from user PATH environment variable")
+
+    # 5b. Remove Desktop & Start Menu shortcuts
+    shortcuts_cleaned = cleanup_shortcuts()
+    for item in shortcuts_cleaned:
+        print(f"  [OK] {item}")
 
     # 6. Purge files & directory
     print(f"  [OK] Purging Extra installation directory: {target_dir}")

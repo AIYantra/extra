@@ -46,11 +46,12 @@ Your human operator has provided you with this file to empower you with direct, 
 
    > **"We are ready! Please restart <AI client name, e.g., Claude Desktop, Antigravity, Cursor> to make it work."**
    > 
-   > Extra has been successfully configured for your Windows system. Once you restart this app so it connects to the new Extra MCP server, the full `extra_*` tool suite will be active, and you can ask me to perform any task on your PC, for example:
-   > - *"Open Settings and check for Windows updates"*
-   > - *"Open Calculator and compute our valuation ratios"*
-   > - *"Organize the downloaded files in my Downloads folder"*
-   > - *"Open Notepad and draft an executive briefing"*
+   > Extra has been successfully configured for your system. Once you restart this app so it connects to the new Extra MCP server, the full `extra_*` tool suite will be active!
+   > 
+   > Here are the 3 verified starter missions you can give me immediately:
+   > 1. 🪄 **The Desktop Magic Trick:** *"Snap my active window to the left, open Notepad on the right, and write a haiku about autonomous desktop agents."*
+   > 2. 🧮 **The Fast Calculator:** *"Open Calculator, calculate 245.12 * 3.14159, and tell me the result."*
+   > 3. 📁 **The Safe File Organizer:** *"Inspect my Desktop, find all screenshot files, and organize them into a clean Screenshots folder."*
    > 
    > Please restart your AI app now, and I'll be ready to control your PC!
 

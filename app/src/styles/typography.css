@@ -1,0 +1,44 @@
+/* ==========================================================================
+   EXTRA STATION: 3-TIER CALM TYPOGRAPHIC DISCIPLINE
+   Linear / Teenage Engineering Inspired Minimalist Hierarchy
+   ========================================================================== */
+body {
+  @apply font-sans antialiased text-station-text-primary bg-station-canvas selection:bg-indigo-500/20 selection:text-indigo-400;
+}
+
+@layer base {
+  /* Tier 1: Bold display numbers & section anchors */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-sans text-station-text-primary font-semibold tracking-tight;
+  }
+
+  h1 {
+    @apply text-xl sm:text-2xl font-bold tracking-tight text-station-text-primary;
+  }
+  h2 {
+    @apply text-base sm:text-lg font-semibold tracking-tight text-station-text-primary;
+  }
+  h3 {
+    @apply text-sm sm:text-base font-semibold tracking-tight text-station-text-primary;
+  }
+  h4 {
+    @apply text-xs sm:text-sm font-medium tracking-tight text-station-text-primary;
+  }
+  h5 {
+    @apply text-xs font-medium tracking-tight text-station-text-primary;
+  }
+  h6 {
+    @apply text-[11px] font-mono uppercase tracking-wider text-station-text-dim;
+  }
+
+  /* Tier 2: Primary reading & content */
+  p {
+    @apply text-xs sm:text-sm text-station-text-muted font-normal leading-relaxed;
+  }
+
+  /* Monospace tabular numbers */
+  code, kbd, samp, pre {
+    @apply font-mono;
+    font-feature-settings: "tnum" 1, "cv05" 1;
+  }
+}

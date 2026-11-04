@@ -192,7 +192,7 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
                         up_resp = session.post(
                             up_url,
                             data=img_data,
-                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.3"},
+                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.4"},
                             timeout=6
                         )
                         if up_resp.status_code == 200:
@@ -204,7 +204,7 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
                         up_req = urllib.request.Request(
                             up_url,
                             data=img_data,
-                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.3"},
+                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.4"},
                             method="POST"
                         )
                         with urllib.request.urlopen(up_req, timeout=6) as up_resp:

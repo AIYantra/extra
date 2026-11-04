@@ -15,15 +15,8 @@ authors = [
 dependencies = [
     "mcp>=1.0.0,<2",
     "websockets>=13.0",
-    "playwright>=1.47.0",
     "pillow>=10.4.0",
-    "beautifulsoup4>=4.12.3",
-    "imagehash>=4.3.1",
-    "numpy>=1.26.0",
     "psutil>=6.0.0",
-    "kuzu>=0.11.0; python_version < '3.14'",
-    "fastembed>=0.8.0",
-    "onnxruntime>=1.19.0",
     "pywin32>=306; sys_platform == 'win32'",
     "comtypes>=1.4.0; sys_platform == 'win32'",
     "mss>=9.0.1; sys_platform == 'win32'",
@@ -38,6 +31,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+memory = [
+    "kuzu>=0.11.0; python_version < '3.14'",
+    "fastembed>=0.8.0",
+    "onnxruntime>=1.19.0",
+]
+all = [
+    "extra-desktop[memory]",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
@@ -73,4 +74,3 @@ markers = [
     "benchmark: Performance profiling and stress benchmark suites",
     "security: Security audit and vulnerability verification tests",
 ]
-

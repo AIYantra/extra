@@ -70,7 +70,7 @@ class TestPillar2Installer(unittest.TestCase):
             self.assertIn(framework, self.req_content)
             self.assertIn("sys_platform == 'darwin'", self.req_content)
 
-        core_deps = ["mcp", "playwright", "pillow", "imagehash", "numpy", "psutil"]
+        core_deps = ["mcp", "websockets", "pillow", "psutil"]
         for dep in core_deps:
             self.assertIn(dep, self.req_content)
 

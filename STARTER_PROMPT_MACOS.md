@@ -68,11 +68,12 @@ Your human operator has provided you with this file to empower you with direct, 
 
    > **"We are ready! Please restart <AI client name, e.g., Claude Desktop, Antigravity, Cursor, Windsurf> to make it work."**
    > 
-   > Extra has been successfully configured for your Mac. Once you restart this app so it connects to the new Extra MCP server, the full `extra_*` tool suite will be active, and you can ask me to perform any task on your Mac, for example:
-   > - *"Open Calculator and compute our quarterly revenue growth"*
-   > - *"Open Finder and organize the downloaded files in my Downloads folder"*
-   > - *"Open TextEdit and draft an executive summary"*
-   > - *"Open System Settings and check battery health"*
+   > Extra has been successfully configured for your Mac. Once you restart this app so it connects to the new Extra MCP server, the full `extra_*` tool suite will be active!
+   > 
+   > Here are the 3 verified starter missions you can give me immediately:
+   > 1. 🪄 **The Desktop Magic Trick:** *"Open TextEdit, write a haiku about autonomous desktop agents, and save it to my Desktop."*
+   > 2. 🧮 **The Fast Calculator:** *"Open Calculator, calculate 245.12 * 3.14159, and tell me the result."*
+   > 3. 📁 **The Safe File Organizer:** *"Inspect my Desktop, find all screenshot files, and organize them into a clean Screenshots folder."*
    > 
    > Please restart your AI app now, and I'll be ready to control your Mac!
 

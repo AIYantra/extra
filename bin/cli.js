@@ -109,8 +109,16 @@ function resolveRunner() {
     return { bin: extraBin, prefixArgs: [] };
   }
 
-  // Priority 2: uvx (Astral's ultra-fast ephemeral Python runner)
+  // Priority 1b: Dedicated virtualenv python from official installer (~/.extra/venv)
   const home = process.env.USERPROFILE || process.env.HOME || "";
+  const venvPython = isWin
+    ? path.join(home, ".extra", "venv", "Scripts", "python.exe")
+    : path.join(home, ".extra", "venv", "bin", "python");
+  if (fs.existsSync(venvPython)) {
+    return { bin: venvPython, prefixArgs: ["-m", "extra.cli"] };
+  }
+
+  // Priority 2: uvx (Astral's ultra-fast ephemeral Python runner)
   const uvxCandidate = isWin
     ? path.join(home, ".local", "bin", "uvx.exe")
     : path.join(home, ".local", "bin", "uvx");
@@ -147,7 +155,31 @@ function run() {
   // Default to "run" (MCP server stdio mode) if invoked with no arguments (e.g. via npx in MCP clients)
   const targetArgs = userArgs.length === 0 ? ["run"] : userArgs;
 
-  const runner = resolveRunner();
+  let runner = resolveRunner();
+
+  if (!runner) {
+    if (process.stdout.isTTY && !process.env.CI) {
+      console.log("\n[Notice] Extra native engine not yet detected. Triggering self-healing 1-click installation...");
+      try {
+        if (isWin) {
+          execFileSync(
+            "powershell.exe",
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "irm https://extra.yantraos.com/install.ps1 | iex"],
+            { stdio: "inherit" }
+          );
+        } else {
+          execFileSync(
+            "bash",
+            ["-c", "curl -fsSL https://extra.yantraos.com/install.sh | bash"],
+            { stdio: "inherit" }
+          );
+        }
+        runner = resolveRunner();
+      } catch (err) {
+        console.warn("[Warning] Self-healing installation attempt failed:", err.message);
+      }
+    }
+  }
 
   if (!runner) {
     console.error(`

@@ -1,22 +1,13 @@
-# Extra — Production Dependencies Manifest
-# Audited: 100% Enterprise-Clean & Free of Unverified Solo Binary Blobs
+# Extra — Core Production Dependencies Manifest
+# Audited: Lean < 6.3 MB Core Tier for instant, frictionless installation
 
-# ── Tier 1: Microsoft & Anthropic Official ─────────────────────────────────────
+# ── Tier 1: Protocol & Remote Transports ───────────────────────────────────────
 mcp>=1.0.0,<2                   # Official Anthropic Model Context Protocol SDK
 websockets>=13.0                 # High-speed WebSocket relay client
-playwright>=1.47.0              # Official Microsoft Browser Automation (Chromium/Edge/WebKit)
 
-# ── Tier 1: Python Software Foundation & Foundational OSS ──────────────────────
+# ── Tier 1: Core System Utilities & Desktop Perception ─────────────────────────
 pillow>=10.4.0                  # High-speed image encoding and ROI manipulation
-beautifulsoup4>=4.12.3          # Semantic DOM tree parsing
-imagehash>=4.3.1                # Perceptual hash for closed-loop stall detection
-numpy>=1.26.0                   # High-performance pixel array buffers
 psutil>=6.0.0                   # Process & window metadata discovery
-
-# ── Tier 1: Local Knowledge Graph & Memory Subsystem ───────────────────────────
-kuzu>=0.11.0; python_version < "3.14"                    # Embedded episodic and relational graph database
-fastembed>=0.8.0                # Sub-3ms pure ONNX vector embeddings for memory recall
-onnxruntime>=1.19.0              # Direct ONNX execution engine for SOUL perception and embeddings
 
 # ── Windows Dependencies ────────────────────────────────────────────────────────
 pywin32>=306; sys_platform == 'win32'                    # Official Windows COM & Win32 extensions
@@ -34,4 +25,3 @@ pyobjc-framework-ScreenCaptureKit>=10.0; sys_platform == 'darwin'
 evdev>=1.7.0; sys_platform == 'linux'                        # Kernel uinput zero-latency hardware event injection
 mss>=9.0.1; sys_platform == 'linux'                          # X11 XShm screen capture fallback
 jeepney>=0.8.0; sys_platform == 'linux'                      # Pure-Python Session & System D-Bus protocol parser (AT-SPI2)
-
