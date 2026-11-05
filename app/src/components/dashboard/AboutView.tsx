@@ -32,15 +32,6 @@ const TABS: { id: AboutTab; label: string; icon: typeof Info }[] = [
   { id: "updates", label: "Updates", icon: RefreshCw },
 ];
 
-function DraftNote() {
-  return (
-    <p className="inline-flex items-center gap-2 rounded-lg border border-[#f3d99e] bg-[#fffbf0] px-3 py-2 text-[11px] text-[#92400e]">
-      <Info className="size-3.5 shrink-0" strokeWidth={1.5} />
-      Draft for legal review. Nothing here is final legal advice.
-    </p>
-  );
-}
-
 function Section({
   title,
   children,
@@ -347,7 +338,6 @@ export function AboutView() {
 
       {tab === "privacy" && (
         <div className="space-y-4">
-          <DraftNote />
           <Section title="Stays on this computer">
             <p>
               Your sign-in credential is stored encrypted with Windows
@@ -379,7 +369,6 @@ export function AboutView() {
 
       {tab === "terms" && (
         <div className="space-y-4">
-          <DraftNote />
           <Section title="Terms of use">
             <p>
               Extra operates apps on your own computer at your direction.
