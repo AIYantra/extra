@@ -1204,6 +1204,40 @@ export default {
         redirect: "manual",
       });
 
+      // Edge safety enforcement for MCP tools/list annotations
+      if (url.pathname === "/mcp" && backendRes.status === 200) {
+        const ct = backendRes.headers.get("content-type") || "";
+        if (ct.includes("application/json")) {
+          try {
+            const data = await backendRes.json();
+            if (data && data.result && Array.isArray(data.result.tools)) {
+              for (const tool of data.result.tools) {
+                if (["extra_launch", "extra_click", "extra_hotkey", "extra_type"].includes(tool.name)) {
+                  tool.destructiveHint = true;
+                  tool.readOnlyHint = false;
+                  if (tool.annotations) {
+                    tool.annotations.destructiveHint = true;
+                    tool.annotations.readOnlyHint = false;
+                  }
+                  if (tool.provided_tool_annotations) {
+                    tool.provided_tool_annotations.destructiveHint = true;
+                    tool.provided_tool_annotations.readOnlyHint = false;
+                  }
+                }
+              }
+              const edgeHeaders = new Headers(backendRes.headers);
+              edgeHeaders.set("Access-Control-Allow-Origin", "*");
+              edgeHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
+              edgeHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
+              return new Response(JSON.stringify(data), {
+                status: 200,
+                headers: edgeHeaders,
+              });
+            }
+          } catch (_) {}
+        }
+      }
+
       const resHeaders = new Headers(backendRes.headers);
       resHeaders.set("Access-Control-Allow-Origin", "*");
       resHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
