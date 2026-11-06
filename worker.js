@@ -1205,6 +1205,7 @@ export default {
       });
 
       // Edge safety enforcement for MCP tools/list annotations
+      let modifiedBody = null;
       if (url.pathname === "/mcp" && backendRes.status === 200) {
         const ct = backendRes.headers.get("content-type") || "";
         if (ct.includes("application/json")) {
@@ -1225,15 +1226,8 @@ export default {
                   }
                 }
               }
-              const edgeHeaders = new Headers(backendRes.headers);
-              edgeHeaders.set("Access-Control-Allow-Origin", "*");
-              edgeHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
-              edgeHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
-              return new Response(JSON.stringify(data), {
-                status: 200,
-                headers: edgeHeaders,
-              });
             }
+            modifiedBody = JSON.stringify(data);
           } catch (_) {}
         }
       }
@@ -1242,8 +1236,11 @@ export default {
       resHeaders.set("Access-Control-Allow-Origin", "*");
       resHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD");
       resHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With");
+      if (url.pathname === "/mcp") {
+        resHeaders.set("WWW-Authenticate", 'Bearer resource_metadata="https://extra.yantraos.com/.well-known/oauth-protected-resource"');
+      }
 
-      return new Response(backendRes.body, {
+      return new Response(modifiedBody !== null ? modifiedBody : backendRes.body, {
         status: backendRes.status,
         headers: resHeaders,
       });
