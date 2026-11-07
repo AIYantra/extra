@@ -1,3 +1,33 @@
+# Extra Release Notes — v0.3.5
+
+**Release Date:** November 7, 2026  
+**Release Title:** Cloudflare Worker MCP Stream Optimization (RFC 9728), OpenAI DestructiveHint Compliance, Zero-Setup Reviewer Sandbox & Full Ecosystem Version Parity  
+**Target Systems:** Linux (KDE Plasma, GNOME, wlroots, X11), Windows 10/11 (x64 / ARM64), macOS (Apple Silicon / Intel)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.5)
+
+Version 0.3.5 delivers key cloud infrastructure reliability, OpenAI Custom Actions compliance, and synchronized installer telemetry across the entire Extra ecosystem.
+
+### Key Highlights:
+
+1. **Cloudflare Worker MCP Body Stream Fix & RFC 9728 Auth Header (`worker.js`):**
+   - Eliminated Cloudflare 1101 Worker exceptions by cloning request bodies prior to dual-pass JSON inspection.
+   - Added standard RFC 9728 compliant `WWW-Authenticate: Bearer` challenge headers on unauthorized MCP endpoints.
+
+2. **OpenAI ChatGPT Custom Actions Compliance (`mcp/server.py`):**
+   - Configured explicit `destructiveHint: true` metadata on actuation and hardware injection tools to satisfy OpenAI GPT store submission security guidelines.
+
+3. **Dynamic Reviewer Sandbox & Zero-Setup Evaluation (`extra.yantraos.com`):**
+   - Integrated zero-setup cloud reviewer sandbox for rapid validation of remote desktop automation capabilities without hardware provisioning.
+
+4. **Synchronized Multi-Platform Installer Telemetry & Parity:**
+   - Unified installer beacons across `install.ps1` (Windows) and `install.sh` (macOS/Linux).
+   - Reconciled package manifests across PyPI (`extra-desktop`), npm (`@yantraos/extra-desktop`), Homebrew Formula, Glama, Smithery, and Model Context Protocol registries.
+
+---
+
 # Extra Release Notes — v0.3.4
 
 **Release Date:** October 25, 2026  
