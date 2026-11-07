@@ -6,7 +6,7 @@
 
 # Extra for macOS
 
-### The Open-Source Astra 6 for your Mac
+### The Open-Source Computer Use Engine for your Mac
 **Your AI can see, click, type, navigate, and get real work done on macOS.**
 
 <!-- mcp-name: io.github.AIYantra/extra -->
