@@ -19,8 +19,8 @@ using System.Windows.Forms;
 [assembly: AssemblyCopyright("Copyright (C) 2026 yantraOS. All rights reserved.")]
 [assembly: AssemblyTrademark("Extra")]
 [assembly: AssemblyCulture("")]
-[assembly: AssemblyVersion("0.3.4.0")]
-[assembly: AssemblyFileVersion("0.3.4.0")]
+[assembly: AssemblyVersion("0.3.5.0")]
+[assembly: AssemblyFileVersion("0.3.5.0")]
 
 namespace ExtraLauncher
 {
@@ -118,7 +118,7 @@ namespace ExtraLauncher
             this.Controls.Add(_track);
 
             Label version = new Label();
-            version.Text = "v1.0.0 · YantraOS";
+            version.Text = "v0.3.5 · YantraOS";
             version.Font = new Font(SystemFonts.DefaultFont.FontFamily, 9f, FontStyle.Regular);
             version.ForeColor = Muted;
             version.AutoSize = true;

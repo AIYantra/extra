@@ -43,6 +43,10 @@ memory = [
 ]
 all = [
     "extra-desktop[memory]",
+    "extra-desktop[livebrowser]",
+]
+livebrowser = [
+    "playwright>=1.40",
 ]
 dev = [
     "pytest>=8.0.0",

@@ -56,7 +56,9 @@ In an audited 7-stage adversarial Windows 11 market evaluation (live Edge resear
 - `extra_subtask_run(intent)`: Compiles high-level macro intent (math, navigation, snapping, file copying) into sub-50ms 1-turn execution with SOUL-Critic validation.
 - `extra_batch_actions(actions)`: Atomically executes an ordered list of hardware clicks, keystrokes, and focus events in a single turn.
 - `extra_snap_layout(layout, left_window, right_window)`: Programmatically arranges windows into side-by-side, thirds, or grid layouts in sub-15ms.
-- `extra_click(target, x, y)`: Semantic visual grounding and sub-pixel Win32 / AT-SPI2 actuation.
+- `extra_click(target, x, y)`: Semantic visual grounding and sub-pixel Win32 / AT-SPI2 actuation (`profile="fast"` for form-fill batches: jump move, capped perception).
+- `extra_form_fill(fields, submit)`: One-turn live-browser web form fill via CDP attach to the user's Edge/Chrome (selector-to-value map, native input events, no-submit default).
+- `extra_browser(action, target)`: Web automation via Playwright; `target="live"` attaches to the user's running browser tab (navigate/content/click/fill/eval), `target="sandbox"` (default) uses the dedicated background instance.
 - `extra_type(text)`: Lossless Win32 `VK_PACKET` / `/dev/uinput` typing with automatic clipboard routing for long strings.
 - `extra_hotkey(keys)`: Dispatches keyboard chords (`win+left`, `ctrl+c`, `shift+f11`).
 - `extra_screenshot(annotate_ui)`: High-speed GPU DXGI / Metal / Spectacle frame capture returning `distilled_ui`.
@@ -74,6 +76,6 @@ In an audited 7-stage adversarial Windows 11 market evaluation (live Edge resear
 ## Authoritative Documentation & Links
 - [Official Website](https://extra.yantraos.com)
 - [GitHub Repository](https://github.com/AIYantra/extra)
-- [v0.3.3 Release Notes](https://github.com/AIYantra/extra/blob/main/RELEASE_NOTES.md)
+- [v0.3.5 Release Notes](https://github.com/AIYantra/extra/blob/main/RELEASE_NOTES.md)
 - [Comprehensive LLM Reference](https://extra.yantraos.com/llms-full.txt)
 - [yantraOS Sovereign Operating System](https://yantraos.com)

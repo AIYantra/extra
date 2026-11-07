@@ -152,6 +152,7 @@ class UIDistiller:
         interactive_only: bool = False,
         group_by_type: bool = True,
         force_vision: bool = False,
+    fast: bool = False,
     ) -> DistillationResult:
         """
         Distills a target window into a concise representation.
@@ -165,6 +166,7 @@ class UIDistiller:
             interactive_only: If True, discards passive text/labels and retains only actionable controls.
             group_by_type: If True in markdown format, groups into Inputs, Actions, and Info sections.
             force_vision: If True, forces edge computer vision parsing even if UIA accessibility is present.
+            fast: If True, fast click-path profile — capped UIA fetch, no vision/work-surface parsing.
         """
         t0 = time.perf_counter()
 
@@ -209,7 +211,7 @@ class UIDistiller:
         raw_elements = self.plane.inspect_window(
             hwnd=target_hwnd,
             interactive_only=False,
-            max_elements=max(max_elements * 4, 150),
+            max_elements=(max(max_elements * 2, 60) if fast else max(max_elements * 4, 150)),
         )
 
         # 3. Filter, Prune, and Classify (with strict window viewport boundary enforcement)
@@ -231,7 +233,7 @@ class UIDistiller:
         ]
 
         # Edge Vision Fallback: If accessibility returned an opaque canvas (<= 2 content controls) or force_vision is active
-        if (len(content_elements) <= 2 or force_vision) and target_hwnd:
+        if (len(content_elements) <= 2 or (force_vision and not fast)) and target_hwnd:
             try:
                 from extra.core.soul.vision_parser import EdgeVisionParser
                 if not hasattr(self, "_vision_parser") or self._vision_parser is None:
@@ -245,7 +247,7 @@ class UIDistiller:
 
         # 4. Discover High-Contrast Work Surface / Custom Canvas Viewport (< 5ms)
         work_surface_dict = None
-        if target_hwnd:
+        if target_hwnd and not fast:
             try:
                 from extra.core.soul.vision_parser import EdgeVisionParser
                 if not hasattr(self, "_vision_parser") or self._vision_parser is None:
@@ -666,6 +668,7 @@ def distill_screen(
     interactive_only: bool = False,
     group_by_type: bool = True,
     force_vision: bool = False,
+    fast: bool = False,
 ) -> DistillationResult:
     """Convenience top-level function for screen distillation."""
     return _default_distiller.distill_window(
@@ -677,5 +680,6 @@ def distill_screen(
         interactive_only=interactive_only,
         group_by_type=group_by_type,
         force_vision=force_vision,
+        fast=fast,
     )
 

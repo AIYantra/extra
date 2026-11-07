@@ -8,8 +8,8 @@ authors:
 url: "https://extra.yantraos.com"
 repository-code: "https://github.com/AIYantra/extra"
 license: "MIT"
-version: "0.3.3"
-date-released: "2026-10-22"
+version: "0.3.5"
+date-released: "2026-11-07"
 keywords:
   - "computer-use"
   - "model-context-protocol"

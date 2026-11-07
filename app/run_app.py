@@ -1029,7 +1029,7 @@ def get_app_update_info() -> dict:
     if _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 900:
         return _UPDATE_CACHE["data"]
 
-    current_ver = "0.3.4"
+    current_ver = "0.3.5"
     result = {
         "current": current_ver,
         "latest": current_ver,

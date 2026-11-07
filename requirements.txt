@@ -30,3 +30,6 @@ pyobjc-framework-ScreenCaptureKit>=10.0; sys_platform == 'darwin'
 evdev>=1.7.0; sys_platform == 'linux'                        # Kernel uinput zero-latency hardware event injection
 mss>=9.0.1; sys_platform == 'linux'                          # X11 XShm screen capture fallback
 jeepney>=0.8.0; sys_platform == 'linux'                      # Pure-Python Session & System D-Bus protocol parser (AT-SPI2)
+
+# Optional: live-browser CDP attach for extra_form_fill (uses the installed Edge/Chrome, no browser download).
+# Install with: pip install "extra-desktop[livebrowser]"  (or: pip install "playwright>=1.40")

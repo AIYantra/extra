@@ -110,6 +110,8 @@ Most automation tools behave like a human looking at a screen: they capture slow
 * **DO NOT** take 10 screenshots scrolling down a webpage.
 * **DO** use `extra_browser(action="navigate", url="...")` and `extra_browser(action="content")`.
 * This extracts the clean semantic DOM tree and text directly in sub-50ms with zero vision token overhead.
+* **Web forms MUST try `extra_form_fill(fields={...})` / live `extra_browser(target="live", ...)` FIRST** — one-turn CDP attach to the user's running Edge/Chrome with native input events. Coordinate piloting (`extra_click` on fields) is the fallback, not the default.
+* **STRICT PROHIBITION: NEVER use OCR/`pytesseract` detours, script-generated overlays, or blind coordinate guessing for web forms.** If no live CDP endpoint answers, surface the guided relaunch error (Extra automation profile with remote debugging) and ask the user — do not click blindly.
 
 ### Rule 3: Semantic UIA Targeting Before Blind Clicks
 * Before guessing coordinates on complex or dense interfaces:

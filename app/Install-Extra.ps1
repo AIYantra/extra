@@ -9,18 +9,18 @@
 
 .EXAMPLE
   # One-line web install:
-  irm https://github.com/AIYantra/extra/releases/download/v0.3.4/Install-Extra.ps1 | iex
+  irm https://github.com/AIYantra/extra/releases/download/v0.3.5/Install-Extra.ps1 | iex
 
 .PARAMETER InstallDir
   Folder the app is installed into. Defaults to %USERPROFILE%\.extra\app.
 
 .PARAMETER Version
-  Release tag to download. Defaults to v0.3.4.
+  Release tag to download. Defaults to v0.3.5.
 #>
 [CmdletBinding()]
 param(
   [string]$InstallDir = (Join-Path $env:USERPROFILE ".extra\app"),
-  [string]$Version = "v0.3.4"
+  [string]$Version = "v0.3.5"
 )
 
 $ErrorActionPreference = "Stop"

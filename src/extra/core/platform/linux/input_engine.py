@@ -1244,6 +1244,10 @@ def execute_batch_actions(
                 clicks = int(act.get("clicks", 1))
                 human = bool(act.get("human_like", False))
                 speed = str(act.get("speed", "normal"))
+                click_profile = str(act.get("profile", "normal")).strip().lower()
+                if click_profile == "fast":
+                    human = False
+                    act["settle_ms"] = 0  # fast path: skip Tier-1 + final settle waits
                 if human:
                     mouse_click(
                         int(x) if x is not None else None,
@@ -1268,6 +1272,7 @@ def execute_batch_actions(
                     "y": y,
                     "button": btn,
                     "human_like": human,
+                    "profile": click_profile,
                     "duration_ms": round(step_dur, 2),
                 }
                 if target:
@@ -1428,6 +1433,14 @@ def execute_batch_actions(
                     "value": clip_text,
                     "duration_ms": round(step_dur, 2),
                 })
+
+            elif atype in ("browser_fill", "form_fill"):
+                from extra.fastpath.cdp_attach import execute_browser_fill_action
+                fill_item = execute_browser_fill_action(act)
+                fill_item["index"] = current_index
+                step_dur = (time.perf_counter() - step_t0) * 1000.0
+                fill_item["duration_ms"] = round(step_dur, 2)
+                executed.append(fill_item)
 
             # Tier 1 In-Memory Visual Settle / Physical Action Delay
             if "settle_ms" in act:
