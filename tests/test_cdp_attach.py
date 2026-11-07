@@ -221,9 +221,12 @@ class TestLiveAttachFixture(unittest.TestCase):
     )
 
     def test_attach_fill_readback(self) -> None:
+        import importlib.util
         import subprocess
         import time as _time
 
+        if importlib.util.find_spec("playwright") is None:
+            self.skipTest("playwright not installed")
         chrome = next((p for p in self.CHROME_CANDIDATES if Path(p).is_file()), None)
         if chrome is None:
             self.skipTest("no Chrome binary found")

@@ -8,6 +8,7 @@ and batch transcript marking. Never wall-clock asserts on live input.
 
 from __future__ import annotations
 
+import sys
 import time
 import unittest
 from typing import List, Optional
@@ -110,6 +111,7 @@ class TestExtraClickFastProfile(unittest.TestCase):
         self.assertIn(0.08, sleeps)
 
 
+@unittest.skipUnless(sys.platform == "win32", "Windows batch dispatcher tests")
 class TestBatchClickFastProfile(unittest.TestCase):
     def test_batch_fast_click_skips_glide_and_settle(self) -> None:
         from extra.core.platform.windows import input_engine as win
