@@ -8,6 +8,7 @@ import json
 import unittest
 from starlette.testclient import TestClient
 
+from extra import __version__
 from extra.mcp.server import (
     server,
     BearerAuthASGIMiddleware,
@@ -40,7 +41,7 @@ class TestMCPSSETransport(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data.get("status"), "healthy")
-        self.assertEqual(data.get("version"), "0.3.2")
+        self.assertEqual(data.get("version"), __version__)
 
     def test_plugin_manifest_endpoints(self):
         """GET /plugin.json and /.well-known/ai-plugin.json return compliant OpenAI plugin manifests."""
