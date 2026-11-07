@@ -31,7 +31,7 @@ flowchart TD
             RetinaDPI["Retina BackingScaleFactor & Y-Inversion Normalizer"]
         end
 
-        subgraph Semantic["Semantic Engine (The Astra 6 Killer)"]
+        subgraph Semantic["Semantic Engine"]
             AXTree["ApplicationServices AXUIElement System-Wide Client"]
             ElementResolver["BoundingRect & Control Property Resolver"]
             SoM["Set-of-Mark (SoM) Retina Badge Labeler"]

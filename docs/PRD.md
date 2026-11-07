@@ -24,7 +24,7 @@ While Google’s Project Astra, Anthropic Computer Use, and existing Python auto
 
 ## 2. Problem Statement & Opportunities
 
-| Existing Problem in Astra / Anthropic / PyAutoGUI | Root Cause | Extra's Solution |
+| Existing Problem in Vision-Only / Anthropic / PyAutoGUI | Root Cause | Extra's Solution |
 | :--- | :--- | :--- |
 | **High Latency (3–6s per step)** | Legacy GDI screen capture (`BitBlt`) taking 150–300ms + massive full-res vision token processing. | **DXGI / MSS Capture (< 3ms)** + ROI cropping and Windows UIA semantic element targeting. |
 | **DPI & Multi-Monitor Misclicks** | Windows DPI Virtualization on 125%/150%/200% displays causes 20–50% coordinate offset. | **Strict `PerMonitorV2` DPI normalization** mapping physical hardware pixels directly. |
@@ -122,6 +122,6 @@ While Google’s Project Astra, Anthropic Computer Use, and existing Python auto
 ## 7. Launch Deliverables & Success Metrics (24-Hour Horizon)
 
 1. **GitHub Repository:** `github.com/AIYantra/extra` with complete source code, tests, and documentation.
-2. **Landing Page:** `extra.yantraos.com` showcasing the 1-line PowerShell installer and interactive comparison with Astra 6.
+2. **Landing Page:** `extra.yantraos.com` showcasing the 1-line PowerShell installer and interactive comparison with vision-only agents.
 3. **Demo Asset:** A 45-second video/GIF showing Extra executing an end-to-end multi-app workflow on Windows 11.
 4. **Starter Prompt:** `STARTER_PROMPT.md` allowing any user to copy-paste into Claude/ChatGPT and instantly turn it into an autonomous Windows operator.

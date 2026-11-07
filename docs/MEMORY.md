@@ -16,7 +16,7 @@ While yantraOS provides sovereign, bare-metal desktop AI autonomy, the vast majo
 
 **The Strategy:** Package yantraOS's Computer Use engine as an open-source, standalone Windows 11/10 application and MCP server named **Extra** (`extra.yantraos.com`). 
 * It lowers the onboarding friction from "install a new operating system" to "run one PowerShell command".
-* It establishes AIYantra as a leader in the Computer Use arena (directly competing with Google's Astra 6 and Anthropic's Computer Use).
+* It establishes AIYantra as a leader in the Computer Use arena (directly competing with vision-only agents and Anthropic's Computer Use).
 * It creates a direct user conversion funnel into the sovereign yantraOS ecosystem.
 
 ---
@@ -34,7 +34,7 @@ While yantraOS provides sovereign, bare-metal desktop AI autonomy, the vast majo
 * **Consequence:** 100% clean security pedigree, zero SmartScreen or Defender alerts, and instant corporate audit compliance.
 
 ### ADR-003: Hybrid Dual-Plane Perception (Visual + Windows UIA v3)
-* **Context:** Pure vision models (like Astra 6 and Anthropic Computer Use) suffer from a ~25% failure rate when clicking tiny buttons, and waste significant API tokens re-analyzing full 4K screens.
+* **Context:** Pure vision models (like cloud vision-only agents and Anthropic Computer Use) suffer from a ~25% failure rate when clicking tiny buttons, and waste significant API tokens re-analyzing full 4K screens.
 * **Decision:** Implement a dual-plane perception pipeline:
   * **Plane A (Visual):** High-speed DXGI/MSS screen capture.
   * **Plane B (Semantic):** Windows UI Automation v3 COM interface.

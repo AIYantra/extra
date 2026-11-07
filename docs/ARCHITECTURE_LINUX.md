@@ -39,7 +39,7 @@ flowchart TD
             DPI["XRandR / QScreen Geometry & DPI Normalizer"]
         end
 
-        subgraph Semantic["Semantic Engine (The Astra 6 Killer)"]
+        subgraph Semantic["Semantic Engine"]
             ATSPITree["AT-SPI2 D-Bus System-Wide Client (org.a11y.Bus)"]
             ElementResolver["BoundingRect & Control Property Resolver"]
             SoM["Set-of-Mark (SoM) Badge Labeler"]

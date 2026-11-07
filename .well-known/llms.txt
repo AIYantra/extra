@@ -14,7 +14,7 @@
 
 ## Real-World Audited Benchmark
 In an audited 7-stage adversarial Windows 11 market evaluation (live Edge research, currency normalization, error detection, data analysis, MS Paint visual synthesis, and window snapping):
-- **Vision-Only Agents (Anthropic / GPT Astra 6 in Codex app)**: Failed at Stage 1 due to URL popups; burned 900,000 tokens costing **~$9.00 USD**; created 0 verified deliverables.
+- **Vision-Only Agents (Anthropic / GPT in Codex app)**: Failed at Stage 1 due to URL popups; burned 900,000 tokens costing **~$9.00 USD**; created 0 verified deliverables.
 - **Gemini 3.8 Flash + EXTRA**: Completed all 7 stages autonomously live on screen in 10m 48s; consumed ~8% standard quota costing **~$0.04 USD** (a 225× cost reduction); created all 5 required files with 100% prompt compliance.
 
 ## Quick Installation Directives

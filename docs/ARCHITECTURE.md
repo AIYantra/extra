@@ -30,7 +30,7 @@ flowchart TD
             DPI["PerMonitorV2 DPI Geometry Normalizer"]
         end
 
-        subgraph Semantic["Semantic Engine (The Astra 6 Killer)"]
+        subgraph Semantic["Semantic Engine"]
             UIA["Windows UI Automation v3 COM Client"]
             ElementResolver["BoundingRect & Control Property Resolver"]
             SoM["Set-of-Mark (SoM) Visual Labeler"]
