@@ -293,7 +293,7 @@ def normalize_coordinates(
 ) -> Tuple[int, int]:
     """
     Converts physical hardware screen pixel coordinates into normalized [0, 1000] scale.
-    Standardized for vision models (Sonnet, GPT-4o, Astra 6).
+    Standardized for vision models (Sonnet, GPT-4o, frontier vision models).
     """
     monitors = get_monitors_info()
     target_mon = monitors[monitor_index] if 0 <= monitor_index < len(monitors) else get_primary_monitor()
