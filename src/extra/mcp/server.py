@@ -5533,7 +5533,7 @@ async def _root_endpoint(request: Any) -> Any:
 
         "status": "online",
 
-        "version": "0.3.2",
+        "version": "0.3.5",
 
         "platform": _platform_tag,
 
@@ -5553,7 +5553,7 @@ async def _health_endpoint(request: Any) -> Any:
 
     from starlette.responses import JSONResponse
 
-    return JSONResponse({"status": "healthy", "version": "0.3.2", "platform": _platform_tag})
+    return JSONResponse({"status": "healthy", "version": "0.3.5", "platform": _platform_tag})
 
 
 

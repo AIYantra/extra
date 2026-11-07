@@ -264,8 +264,8 @@ extra/
 ├── cli.py                  # CLI runner (extra doctor, test, indicators, run, inspect, snap)
 ├── install.ps1             # 1-line PowerShell installer (Windows)
 ├── install.sh              # 1-line bash installer (macOS)
-├── pyproject.toml          # PyPI package manifest (extra-desktop v0.3.3)
-├── package.json            # npm package manifest (@yantraos/extra-desktop v0.3.3)
+├── pyproject.toml          # PyPI package manifest (extra-desktop v0.3.5)
+├── package.json            # npm package manifest (@yantraos/extra-desktop v0.3.5)
 ├── server.json             # Official MCP registry manifest
 ├── glama.json              # Glama MCP ecosystem manifest
 ├── smithery.yaml           # Smithery 1-click deployment manifest

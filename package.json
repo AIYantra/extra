@@ -1,6 +1,6 @@
 {
   "name": "@yantraos/extra-desktop",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Flashless Linux, Windows & macOS Native Computer-Use Engine & Model Context Protocol (MCP) Server",
   "main": "bin/cli.js",
   "bin": {
