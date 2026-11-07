@@ -6,7 +6,7 @@
 
 # Extra
 
-### The Open-Source Astra 6 for your Linux PC, Mac & Windows
+### The Open-Source Computer Use Engine for your Linux PC, Mac & Windows
 **Your AI can see, click, type, navigate, and get real work done on Linux, macOS & Windows.**
 
 <!-- mcp-name: io.github.AIYantra/extra -->
