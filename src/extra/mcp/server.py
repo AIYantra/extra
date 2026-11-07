@@ -155,6 +155,12 @@ from extra.core.mode import (
 )
 
 from extra.fastpath.browser import execute_browser_action
+from extra.fastpath.cdp_attach import (
+    LiveBrowserSession,
+    fill_form as cdp_fill_form,
+    guided_attach_error,
+    probe_cdp_endpoint,
+)
 
 from extra.fastpath.fs import execute_fs_batch
 
@@ -634,6 +640,8 @@ def extra_click(
 
     speed: str = "normal",
 
+    profile: str = "normal",
+
     auto_distill: bool = True,
 
     force: bool = False,
@@ -673,6 +681,8 @@ def extra_click(
         human_like: If True, approaches target via human Bézier trajectory with physiological pre-click reaction delay (default: True).
 
         speed: Speed preset if human_like is True ('fast', 'normal', 'slow').
+
+        profile: Click-path profile ('normal' default preserves human-like behavior; 'fast' is the form-fill batch profile: cursor jump + 10ms dwell, zeroed reaction delays, single-capture verify, capped fast distill).
 
         auto_distill: If True (default), returns updated compact UI state after click settle to eliminate intermediate screenshot roundtrips.
 
@@ -836,6 +846,11 @@ def extra_click(
 
 
 
+    _click_profile = str(profile or "normal").strip().lower()
+    _fast_click = _click_profile == "fast"
+    _eff_human_like = False if _fast_click else human_like
+    _eff_speed = "fast" if _fast_click else speed
+
     t0 = time.perf_counter()
 
     mouse_click(
@@ -850,9 +865,9 @@ def extra_click(
 
         monitor_index=monitor_index,
 
-        human_like=human_like,
+        human_like=_eff_human_like,
 
-        speed=speed,
+        speed=_eff_speed,
 
     )
 
@@ -860,9 +875,11 @@ def extra_click(
 
 
 
-    # Settle time for UI animation/dispatch
+    # Settle time for UI animation/dispatch (skipped in fast profile; verify stays single-capture)
 
-    time.sleep(0.08)
+    if not _fast_click:
+
+        time.sleep(0.08)
 
 
 
@@ -904,7 +921,7 @@ def extra_click(
 
 
 
-    record_action_step("extra_click", {"x": phys_x, "y": phys_y, "button": button, "clicks": clicks, "human_like": human_like}, duration_ms)
+    record_action_step("extra_click", {"x": phys_x, "y": phys_y, "button": button, "clicks": clicks, "human_like": _eff_human_like, "profile": _click_profile}, duration_ms)
 
     if outcome.status != StallStatus.NORMAL:
 
@@ -938,7 +955,9 @@ def extra_click(
 
         "clicks": clicks,
 
-        "human_like": human_like,
+        "human_like": _eff_human_like,
+
+        "profile": _click_profile,
 
         "duration_ms": round(duration_ms, 2),
 
@@ -996,7 +1015,13 @@ def extra_click(
 
         try:
 
-            d_res = distill_screen(format="compact", max_elements=25)
+            if _fast_click:
+
+                d_res = distill_screen(format="compact", max_elements=25, interactive_only=True, fast=True)
+
+            else:
+
+                d_res = distill_screen(format="compact", max_elements=25)
 
             ret["distilled_ui"] = d_res.content
 
@@ -1989,6 +2014,106 @@ def extra_launch(
 
 
 
+
+
+def _extra_browser_live(
+    action: str,
+    url: Optional[str] = None,
+    selector: Optional[str] = None,
+    value: Optional[str] = None,
+    channel: Optional[str] = None,
+    url_match: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Live-tab CDP dispatch: probe, attach, act, detach. Sandbox-only actions error clearly."""
+    sandbox_only = {
+        "start_sniffing", "sniff_start", "sniff",
+        "stop_sniffing", "sniff_stop",
+        "synthesize_api", "synthesize", "export_api",
+    }
+    act = (action or "").strip().lower()
+    if act in sandbox_only:
+        return {
+            "success": False,
+            "attached": False,
+            "error": (
+                f"Browser action '{action}' is sandbox-only; live tabs support "
+                "navigate/content/click/fill/eval/screenshot/settle/close."
+            ),
+        }
+    probe = probe_cdp_endpoint()
+    if not probe["open"]:
+        err = guided_attach_error(channel=channel)
+        err["action"] = action
+        return err
+    sess = None
+    try:
+        sess = LiveBrowserSession.attach(endpoint=probe["endpoint"], url_match=url_match)
+    except RuntimeError as ex:
+        return {"success": False, "attached": False, "error": str(ex)[:600]}
+    try:
+        page = sess.page
+        if act == "navigate":
+            if not url:
+                return {"success": False, "attached": True, "error": "Missing 'url' parameter for live navigate."}
+            dest = url if url.startswith(("http://", "https://", "file://")) else f"https://{url}"
+            resp = page.goto(dest, wait_until="domcontentloaded", timeout=30000)
+            return {
+                "success": True,
+                "attached": True,
+                "url": page.url,
+                "title": page.title(),
+                "status": resp.status if resp else 200,
+            }
+        elif act in ("content", "read", "extract"):
+            text = page.evaluate("() => (document.body ? document.body.innerText : '')")
+            if len(text) > 8000:
+                text = text[:8000] + "\n\n... [Truncated]"
+            return {"success": True, "attached": True, "content": text, "url": page.url, "title": page.title()}
+        elif act == "click":
+            if not selector:
+                return {"success": False, "attached": True, "error": "Missing 'selector' parameter for live click."}
+            res = sess.click_selector(selector)
+            res["attached"] = True
+            return res
+        elif act in ("fill", "type"):
+            if not selector:
+                return {"success": False, "attached": True, "error": "Missing 'selector' parameter for live fill."}
+            res = sess.fill_many({selector: value or ""})
+            res["attached"] = True
+            return res
+        elif act in ("eval", "evaluate"):
+            if not value:
+                return {"success": False, "attached": True, "error": "Missing 'value' (script) parameter for live eval."}
+            return {"success": True, "attached": True, "result": sess.eval_js(value)}
+        elif act == "screenshot":
+            import base64 as _b64
+
+            png = page.screenshot(type="jpeg", quality=80)
+            return {"success": True, "attached": True, "screenshot_base64": _b64.b64encode(png).decode("utf-8")}
+        elif act in ("settle", "wait_for_settle", "wait_settled"):
+            page.wait_for_load_state("domcontentloaded", timeout=3000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=1500)
+            except Exception:
+                pass
+            return {"success": True, "attached": True, "settled": True, "url": page.url}
+        elif act == "close":
+            return {"success": True, "attached": False, "detached": True}
+        else:
+            return {
+                "success": False,
+                "attached": True,
+                "error": (
+                    f"Unknown live browser action: '{action}'. Supported: navigate, "
+                    "content, click, fill, eval, screenshot, settle, close."
+                ),
+            }
+    except Exception as ex:
+        return {"success": False, "attached": True, "error": str(ex)[:400]}
+    finally:
+        if sess is not None:
+            sess.close()
+
 @server.tool()
 
 def extra_browser(
@@ -2001,6 +2126,12 @@ def extra_browser(
 
     value: Optional[str] = None,
 
+    target: str = "sandbox",
+
+    channel: Optional[str] = None,
+
+    url_match: Optional[str] = None,
+
 ) -> Dict[str, Any]:
 
     """
@@ -2009,13 +2140,18 @@ def extra_browser(
 
     Supports autonomous Web-to-API network sniffing and fast-path client synthesis.
 
-    IMPORTANT: Operates within Extra's dedicated background Playwright browser instance.
+    Two targets (backward compatible — default 'sandbox' preserves existing behavior):
 
-    Does NOT attach to or control already-running browser windows on the user's desktop.
+    - 'sandbox': Extra's dedicated background Playwright browser instance.
 
-    For automating active user desktop browsers (Chrome, Edge), pilot them live via
+    - 'live': the user's running Edge/Chrome via CDP attach (EXTRA_FORM_FILL_SPEED_RFC).
+      The loopback endpoint is probed read-only first; 'channel' ('chrome'/'msedge')
+      names the browser in the guided error and 'url_match' picks the tab by URL
+      substring. When no CDP endpoint answers, returns a guided relaunch error
+      (Extra automation profile with remote debugging) instead of blind clicks.
 
-    extra_focus_window, extra_click, extra_type, extra_hotkey, and extra_batch_actions.
+    For pixel-level desktop piloting, use extra_focus_window, extra_click,
+    extra_type, extra_hotkey, and extra_batch_actions.
 
     
 
@@ -2045,7 +2181,117 @@ def extra_browser(
 
     """
 
+    if str(target or "sandbox").strip().lower() == "live":
+
+        return _extra_browser_live(
+
+            action=action, url=url, selector=selector, value=value,
+
+            channel=channel, url_match=url_match,
+
+        )
+
     return execute_browser_action(action=action, url=url, selector=selector, value=value)
+
+@server.tool()
+
+def extra_form_fill(
+
+    fields: Dict[str, str],
+
+    submit: bool = False,
+
+    target: str = "live",
+
+    url_match: Optional[str] = None,
+
+    port: int = 9222,
+
+    submit_selector: Optional[str] = None,
+
+    channel: Optional[str] = None,
+
+    title_match: Optional[str] = None,
+
+) -> Dict[str, Any]:
+
+    """
+
+    Fills a web form in one agent turn via a selector-to-value map.
+
+    Live path (default): attaches to the user's running Edge/Chrome over CDP
+
+    (loopback endpoint probed read-only first) and fills every field with
+
+    native input/change events, exactly like real typing. Never submits
+
+    unless submit=True (default False). Returns per-field results plus
+
+    fill duration.
+
+    Sandbox path (target="sandbox"): fills through Extra's dedicated
+
+    background browser instance instead.
+
+    When no live CDP endpoint answers, returns a guided relaunch error
+
+    (Extra automation profile with remote debugging) — never blind clicks.
+
+    """
+
+    if not fields or not isinstance(fields, dict):
+
+        return {"success": False, "attached": False, "error": "No fields provided: pass {selector: value}."}
+
+    clean = {str(k): ("" if v is None else str(v)) for k, v in fields.items()}
+
+    if not clean:
+
+        return {"success": False, "attached": False, "error": "No fields provided: pass {selector: value}."}
+
+    if str(target or "live").strip().lower() == "sandbox":
+
+        filled = []
+
+        failed = []
+
+        for sel, val in clean.items():
+
+            r = execute_browser_action(action="fill", selector=sel, value=val)
+
+            if r.get("success"):
+
+                filled.append(sel)
+
+            else:
+
+                failed.append({"selector": sel, "error": str(r.get("error", "fill failed"))[:200]})
+
+        return {
+            "success": len(failed) == 0,
+            "attached": False,
+            "target": "sandbox",
+            "filled": filled,
+            "failed": failed,
+        }
+
+    res = cdp_fill_form(
+        fields=clean,
+        submit=bool(submit),
+        submit_selector=submit_selector,
+        url_match=url_match,
+        title_match=title_match,
+        port=int(port or 9222),
+    )
+
+    res["target"] = "live"
+
+    if channel and not res.get("success") and not res.get("attached"):
+
+        res["browser_hint"] = channel
+
+    return res
+
 
 
 

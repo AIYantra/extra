@@ -274,6 +274,10 @@ Write-Step "Installing lightning-fast Core Tier dependencies (< 6.3 MB)..."
 & $venvPython -m pip install --quiet --prefer-binary websockets pillow mss pywin32 comtypes psutil mcp
 if (Test-Path "$installDir\pyproject.toml") {
     & $venvPython -m pip install --quiet -e $installDir --no-deps
+# Optional: live-browser CDP attach for extra_form_fill (uses installed Edge/Chrome, no browser download).
+# Best-effort only: offline machines skip this silently; core install is unaffected.
+& $venvPython -m pip install --quiet --prefer-binary "playwright>=1.40" 2>$null
+if ($LASTEXITCODE -ne 0) { Write-Warning "Optional playwright install skipped (offline?). Live-browser form-fill will report setup guidance instead." }
 }
 Write-Success "All dependencies successfully installed."
 

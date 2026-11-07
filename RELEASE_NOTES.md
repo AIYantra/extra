@@ -26,6 +26,13 @@ Version 0.3.5 delivers key cloud infrastructure reliability, OpenAI Custom Actio
    - Unified installer beacons across `install.ps1` (Windows) and `install.sh` (macOS/Linux).
    - Reconciled package manifests across PyPI (`extra-desktop`), npm (`@yantraos/extra-desktop`), Homebrew Formula, Glama, Smithery, and Model Context Protocol registries.
 
+5. **Live-Browser Form-Fill Speed (EXTRA_FORM_FILL_SPEED_RFC):**
+   - New `extra_form_fill(fields, submit=False)` 1-turn tool: CDP attach to the user's running Edge/Chrome with native input/change events (no-submit default; guided relaunch error when no endpoint answers, never blind clicks).
+   - `extra_browser(..., target="sandbox"|"live")`: live-tab DOM actions (navigate/content/click/fill/eval/screenshot/settle) over the same attach path; sandbox default preserves existing behavior.
+   - Fast click profile (`profile="fast"` on `extra_click` + batch `click`): cursor jump + 10ms dwell, zeroed reaction delays, single-capture verify, capped fast distill (`interactive_only`, fetch cap 60, no vision/work-surface parsing).
+   - Subtask compiler routes `fill form ...` intents to one attach+fill batch (`browser_fill` action in `extra_batch_actions`).
+   - Optional `playwright` dependency (`pip install "extra-desktop[livebrowser]"`); guarded import keeps the core lean when absent.
+
 ---
 
 # Extra Release Notes — v0.3.4

@@ -202,6 +202,62 @@ class SubtaskRunner:
             ])
             return actions
 
+        # 4b. Live-Browser Web Form Fill Pattern (EXTRA_FORM_FILL_SPEED_RFC):
+        # e.g. "fill form name=Ada email=ada@example.com on example.com",
+        # "fill out the login form and submit", "fill form in Checkout window".
+        # Compiles to one attach+fill batch; runtime falls back to the guided
+        # relaunch error when no CDP endpoint answers (never blind clicks).
+        fill_match = re.search(
+            r"fill\s+(?:out\s+|in\s+)?(?:the\s+)?([\w\s]*?)form\b(.*)$",
+            clean_intent,
+            flags=re.IGNORECASE,
+        )
+        if fill_match and "calculator" not in clean_intent.lower():
+            tail = (fill_match.group(2) or "").strip()
+            url_match: Optional[str] = None
+            url_m = re.search(
+                r"(?:on|at|for)\s+(https?://[^\s]+|www\.[^\s]+|[a-zA-Z0-9.\-]+\.(?:com|org|net|io|ai|gov|edu|dev)(?:/[^\s]*)?)",
+                tail,
+                flags=re.IGNORECASE,
+            )
+            parse_tail = tail
+            if url_m:
+                url_match = url_m.group(1).strip()
+                parse_tail = parse_tail[: url_m.start()] + " " + parse_tail[url_m.end() :]
+            window_title: Optional[str] = None
+            win_m = re.search(
+                r"(?:in|on)\s+(?:the\s+)?([A-Za-z0-9][A-Za-z0-9 _.\-]{1,60}?)\s+(?:window|tab)\b",
+                parse_tail,
+                flags=re.IGNORECASE,
+            )
+            if win_m:
+                window_title = win_m.group(1).strip()
+                parse_tail = parse_tail[: win_m.start()] + " " + parse_tail[win_m.end() :]
+            submit = bool(
+                re.search(r"\b(submit|send it|and send|place order)\b", tail, flags=re.IGNORECASE)
+            )
+            fields: Dict[str, str] = {}
+            for fkey, fdq, fsq, fbare in re.findall(
+                r"([A-Za-z_][\w.\-]*)\s*[:=]\s*(?:\"([^\"]*)\"|'([^']*)'|(\S+))",
+                parse_tail,
+            ):
+                if fkey.lower() in ("http", "https"):
+                    continue
+                fields[fkey] = fdq or fsq or fbare
+            fill_actions: List[Dict[str, Any]] = []
+            if window_title:
+                fill_actions.append({"action": "focus", "window_title": window_title})
+            fill_actions.append(
+                {
+                    "action": "browser_fill",
+                    "fields": fields,
+                    "url_match": url_match,
+                    "submit": submit,
+                }
+            )
+            return fill_actions
+
+
         # 5. Browser Navigation & Web Search Patterns:
         # Case A: Direct URL Navigation: e.g. "navigate to https://github.com", "open www.python.org in browser"
         url_match = re.search(

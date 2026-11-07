@@ -13,6 +13,13 @@ from extra.fastpath.browser import (
     execute_browser_action,
     get_browser_fastpath,
 )
+from extra.fastpath.cdp_attach import (
+    LiveBrowserSession,
+    fill_form,
+    guided_attach_error,
+    pick_target,
+    probe_cdp_endpoint,
+)
 from extra.fastpath.cli_harness import (
     HarnessResult,
     UniversalHarnessRunner,
@@ -70,6 +77,11 @@ __all__ = [
     "BrowserFastPath",
     "get_browser_fastpath",
     "execute_browser_action",
+    "LiveBrowserSession",
+    "fill_form",
+    "guided_attach_error",
+    "pick_target",
+    "probe_cdp_endpoint",
     "execute_fs_batch",
     "copy_files_to_clipboard",
     "send_telegram_file",
