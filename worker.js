@@ -1329,13 +1329,13 @@ export default {
         timestamp: Date.now(),
       };
 
-      // Persist in Cloudflare KV if configured
-      if (env && env.TELEMETRY_KV) {
-        try {
-          const dateStr = new Date().toISOString().slice(0, 10);
-          const key = `install:${dateStr}:${body.os || "unknown"}:${Date.now()}`;
-          await env.TELEMETRY_KV.put(key, JSON.stringify(eventRecord), { expirationTtl: 86400 * 90 });
-        } catch (_) {}
+      // Forward to AWS Lambda (DynamoDB) in the background — never blocks the response
+      if (ctx && ctx.waitUntil) {
+        ctx.waitUntil(fetch(`${AWS_MCP_HUB_ORIGIN}/api/install-success`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(eventRecord),
+        }).catch(() => {}));
       }
 
       if (ctx && ctx.waitUntil && env && env.WEBHOOK_URL) {
@@ -1381,15 +1381,13 @@ export default {
       // Bound array processing to max 25 events per request to prevent KV write exhaustion
       const events = rawEvents.slice(0, 25);
 
-      // Persist in Cloudflare KV if configured
-      if (env && env.TELEMETRY_KV) {
-        try {
-          const dateStr = new Date().toISOString().slice(0, 10);
-          for (const ev of events) {
-            const key = `telemetry:${dateStr}:${ev.event || "event"}:${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-            await env.TELEMETRY_KV.put(key, JSON.stringify({ ...ev, geo }), { expirationTtl: 86400 * 90 });
-          }
-        } catch (_) {}
+      // Forward to AWS Lambda (DynamoDB) in the background — never blocks the response
+      if (ctx && ctx.waitUntil) {
+        ctx.waitUntil(fetch(`${AWS_MCP_HUB_ORIGIN}/api/telemetry`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ events, geo }),
+        }).catch(() => {}));
       }
 
       // Async dispatch to external PostHog if configured
@@ -1426,15 +1424,15 @@ export default {
 
     // Route 4: Direct script & rule requests
     if (SCRIPT_MAP[url.pathname]) {
-      // Optional: record script download count
-      if (ctx && ctx.waitUntil && env && env.TELEMETRY_KV) {
-        ctx.waitUntil((async () => {
-          try {
-            const dateStr = new Date().toISOString().slice(0, 10);
-            const key = `download:${dateStr}:${url.pathname}:${Date.now()}`;
-            await env.TELEMETRY_KV.put(key, JSON.stringify({ script: url.pathname, time: Date.now() }), { expirationTtl: 86400 * 30 });
-          } catch (_) {}
-        })());
+      // Record script download via AWS Lambda (DynamoDB) — delivery below never waits on this
+      if (ctx && ctx.waitUntil) {
+        const dlCountry = (request.cf && request.cf.country) || "XX";
+        const dlPayload = JSON.stringify({ script: url.pathname, time: Date.now(), country: dlCountry });
+        ctx.waitUntil(fetch(`${AWS_MCP_HUB_ORIGIN}/api/download-beacon`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: dlPayload,
+        }).catch(() => {}));
       }
 
       let upstreamRes = null;
