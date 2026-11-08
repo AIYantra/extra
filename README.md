@@ -17,6 +17,7 @@
 [![Protocol: Model Context Protocol (MCP)](https://img.shields.io/badge/Protocol-MCP%20Native-orange.svg)](https://modelcontextprotocol.io)
 [![Ecosystem: yantraOS](https://img.shields.io/badge/Ecosystem-yantraOS-8A2BE2.svg)](https://yantraos.com)
 [![Status: Open Source](https://img.shields.io/badge/Open%20Source-%E2%99%A5-emerald.svg)](https://github.com/AIYantra/extra)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/AIYantra/extra)
 
 [Website](https://extra.yantraos.com) • [Quickstart](#-quickstart-1-minute) • [Linux Guide](README_LINUX.md) • [macOS Guide](README_MACOS.md) • [Architecture](docs/ARCHITECTURE.md) • [License](LICENSE)
 
