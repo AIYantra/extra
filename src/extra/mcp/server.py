@@ -5990,7 +5990,7 @@ async def _lineage_endpoint(request: Any) -> Any:
                     origin = "Verified Document PDF"
 
                 deliverables.append({
-                    "id": f"art-{hashlib.md5(str(f).encode()).hexdigest()[:8]}",
+                    "id": f"art-{hashlib.md5(str(f).encode(), usedforsecurity=False).hexdigest()[:8]}",
                     "name": f.name,
                     "path": str(f),
                     "size": size_fmt,

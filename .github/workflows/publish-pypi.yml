@@ -7,20 +7,20 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  id-token: write
-  actions: write
+  contents: read
 
 jobs:
   build:
     name: Build Universal Distribution Wheels
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: "3.12"
 
@@ -37,7 +37,7 @@ jobs:
           twine check dist/*
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: python-package-distributions
           path: dist/
@@ -52,17 +52,19 @@ jobs:
         os: [macos-latest, windows-latest, ubuntu-latest]
         python-version: ["3.11", "3.12"]
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: python-package-distributions
           path: dist/
@@ -85,9 +87,12 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     continue-on-error: true
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: python-package-distributions
           path: dist/
@@ -114,10 +119,10 @@ jobs:
       id-token: write
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
@@ -141,18 +146,21 @@ jobs:
     needs: [build, test-matrix]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      actions: write
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
         with:
           name: python-package-distributions
           path: dist/
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
         with:
           files: dist/*
           generate_release_notes: true
