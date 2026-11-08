@@ -2,7 +2,7 @@
 # Audited: Lean < 6.3 MB Core Tier for instant, frictionless installation
 
 # ── Tier 1: Protocol & Remote Transports ───────────────────────────────────────
-mcp>=1.0.0,<2                   # Official Anthropic Model Context Protocol SDK
+mcp>=1.0.0,<3                   # Official Anthropic Model Context Protocol SDK
 websockets>=13.0                 # High-speed WebSocket relay client
 requests>=2.32.2                # HTTP transport client (hardened minimum version)
 starlette>=0.40.0               # SSE transport and server routing
