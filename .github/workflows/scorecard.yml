@@ -1,0 +1,52 @@
+name: OpenSSF Scorecard Supply-Chain Security
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: '20 10 * * 0' # Every Sunday at 10:20 UTC
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+# Declare default permissions as empty to enforce least-privilege principle
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analysis:
+    name: Scorecard Supply-Chain Analysis
+    runs-on: ubuntu-latest
+    if: ${{ github.event.repository.default_branch == github.ref_name || github.event_name == 'workflow_dispatch' }}
+    permissions:
+      security-events: write  # Needed to upload SARIF to GitHub Code Scanning
+      id-token: write         # Needed for Sigstore keyless OIDC signing to publish results to api.scorecard.dev
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          persist-credentials: false
+
+      - name: Execute Scorecard Security Analysis
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload Raw SARIF Artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb99ba841c # v4.5.0
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload Results to GitHub Code Scanning
+        if: ${{ always() }}
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: results.sarif
