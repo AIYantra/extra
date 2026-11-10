@@ -102,7 +102,9 @@ class ArtifactLineageVerifier:
         creat_lower = (creator or "").lower()
 
         # 1. Check for official web download records
-        if source_url and ("docs.google.com" in source_url or "drive.google.com" in source_url):
+        from urllib.parse import urlparse
+        _host = (urlparse(source_url).netloc or "").lower()
+        if source_url and (_host == "docs.google.com" or _host == "drive.google.com" or _host.endswith(".google.com")):
             origin = ArtifactOrigin.OFFICIAL_WEB_EXPORT
             confidence = 0.98
         elif "google" in prod_lower or "google" in creat_lower:

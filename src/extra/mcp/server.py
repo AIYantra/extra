@@ -6445,7 +6445,8 @@ async def _plugin_manifest_endpoint(request: Any) -> Any:
 
     host_header = request.headers.get("host", "localhost:8000")
 
-    scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or "trycloudflare.com" in host_header else "http"
+    clean_host = (host_header or "").split(":")[0].lower()
+    scheme = "https" if request.headers.get("x-forwarded-proto") == "https" or clean_host == "trycloudflare.com" or clean_host.endswith(".trycloudflare.com") else "http"
 
     base_url = f"{scheme}://{host_header}"
 
