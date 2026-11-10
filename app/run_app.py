@@ -2098,13 +2098,17 @@ def open_url_in_user_browser(target_url: str) -> bool:
             except Exception as e:
                 print(f"[Extra] Chrome profile detection warning: {e}", flush=True)
 
+            # [OpenBot Security Hardening] Sanitize URL & prevent CLI flag injection
+            clean_url = target_url.strip()
+            if clean_url.startswith("-") or not (clean_url.startswith("http://") or clean_url.startswith("https://") or clean_url.startswith("file://")):
+                clean_url = "http://" + clean_url.lstrip("-")
             cmd = [chrome_exe]
-            if profile_dir:
+            if profile_dir and not profile_dir.startswith("-"):
                 cmd.append(f"--profile-directory={profile_dir}")
-            cmd.append(target_url)
+            cmd.extend(["--", clean_url])
 
             try:
-                subprocess.Popen(cmd)
+                subprocess.Popen(cmd, shell=False)
                 return True
             except Exception as e:
                 print(f"[Extra] Launch chrome with profile failed: {e}", flush=True)
