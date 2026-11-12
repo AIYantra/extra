@@ -125,8 +125,11 @@ class TestMCPSSETransport(unittest.TestCase):
                 "clientInfo": {"name": "chatgpt_client", "version": "1.0"},
             },
         }
-        headers = {"accept": "application/json, text/event-stream"}
-        with TestClient(unified_app) as client:
+        headers = {
+            "accept": "application/json, text/event-stream",
+            "host": "localhost:8000",
+        }
+        with TestClient(unified_app, base_url="http://localhost:8000") as client:
             for endpoint in ("/mcp", "/sse", "/"):
                 resp = client.post(endpoint, json=init_payload, headers=headers)
                 self.assertEqual(resp.status_code, 200, f"Failed on endpoint: {endpoint}")

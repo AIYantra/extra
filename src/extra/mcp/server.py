@@ -250,6 +250,11 @@ logging.basicConfig(
 
 logger = logging.getLogger("extra.mcp")
 
+try:
+    from extra import __version__ as _EXTRA_VERSION
+except ImportError:
+    _EXTRA_VERSION = "0.3.6"
+
 
 
 # Initialize Server
@@ -5779,7 +5784,7 @@ async def _root_endpoint(request: Any) -> Any:
 
         "status": "online",
 
-        "version": "0.3.5",
+        "version": _EXTRA_VERSION,
 
         "platform": _platform_tag,
 
@@ -5799,7 +5804,7 @@ async def _health_endpoint(request: Any) -> Any:
 
     from starlette.responses import JSONResponse
 
-    return JSONResponse({"status": "healthy", "version": "0.3.5", "platform": _platform_tag})
+    return JSONResponse({"status": "healthy", "version": _EXTRA_VERSION, "platform": _platform_tag})
 
 
 
@@ -6708,7 +6713,18 @@ def create_unified_mcp_app() -> Any:
 
     if hasattr(server.settings, "transport_security") and server.settings.transport_security is not None:
         allowed = list(server.settings.transport_security.allowed_hosts or [])
-        for h in ("testserver", "testserver:*", "127.0.0.1:*", "localhost:*", "[::1]:*"):
+        for h in (
+            "testserver",
+            "testserver:*",
+            "localhost",
+            "localhost:*",
+            "127.0.0.1",
+            "127.0.0.1:*",
+            "[::1]",
+            "[::1]:*",
+            "aiyantra.trycloudflare.com",
+            "*.trycloudflare.com",
+        ):
             if h not in allowed:
                 allowed.append(h)
         server.settings.transport_security.allowed_hosts = allowed
@@ -6904,7 +6920,16 @@ def run_sse_server(
 
 
 
-    effective_hosts = allowed_hosts or ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    effective_hosts = allowed_hosts or [
+        "127.0.0.1",
+        "127.0.0.1:*",
+        "localhost",
+        "localhost:*",
+        "[::1]",
+        "[::1]:*",
+        "testserver",
+        "testserver:*",
+    ]
 
     disable_dns = bool(auth_token) or host == "0.0.0.0" or tunnel
 

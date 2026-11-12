@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import type { SpeedMode } from "../../services/ipc";
 import { SPEED_MODE_META } from "../../utils/speedModes";
 import { APP_VERSION_LABEL } from "../../utils/appMeta";
+import { useUpdateStore } from "../../store/useUpdateStore";
 
 export function SettingsView() {
   const speedMode = useEngineStore((state) => state.speedMode);
@@ -161,7 +162,7 @@ export function SettingsView() {
               Settings & Preferences
             </h2>
             <span className="text-[10px] font-mono text-[#525866] bg-[#f0f2f6] border border-[#dfe4eb] px-1.5 py-0.5 rounded-md">
-              {APP_VERSION_LABEL} local
+              {useUpdateStore((s) => s.installedVersionLabel) || APP_VERSION_LABEL} local
             </span>
           </div>
           <p className="text-xs text-[#525866] mt-0.5">

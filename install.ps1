@@ -335,8 +335,9 @@ if (-not (Test-Path $runAppPy)) {
     $runAppPy = Join-Path $installDir "run_app.py"
 }
 
-# Remove legacy unsigned Extra.exe so Windows Search & Smart App Control never flag it
+# Aggressively remove legacy unsigned Extra.exe so Windows Search & Smart App Control never flag it
 $extraExe = Join-Path $appDir "Extra.exe"
+Get-Process -Name "Extra" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 if (Test-Path $extraExe) {
     try {
         Remove-Item -Path $extraExe -Force -ErrorAction SilentlyContinue
@@ -574,12 +575,13 @@ if ($env:DO_NOT_TRACK -ne "1" -and $env:EXTRA_TELEMETRY -ne "0") {
     } catch { }
 }
 
-# 12. Auto-Launch Extra Desktop Companion App
-if (-not $NoLaunch -and (Test-Path $extraExe)) {
+# 12. Auto-Launch Extra Desktop Companion App (via signed pythonw.exe)
+if (-not $NoLaunch -and (Test-Path $runAppPy)) {
     Write-Step "[5/5] Launching Extra Desktop Companion App..."
     try {
-        Start-Process -FilePath $extraExe -WorkingDirectory $appDir
-        Write-Success "Extra Companion is now running on your desktop!"
+        $runAppDir = Split-Path -Parent $runAppPy
+        Start-Process -FilePath $venvPythonW -ArgumentList "`"$runAppPy`"" -WorkingDirectory $runAppDir
+        Write-Success "Extra Companion is now running on your desktop (SAC-compliant)!"
     } catch {
         Write-WarningMsg "Could not auto-launch Extra Companion: $_"
     }

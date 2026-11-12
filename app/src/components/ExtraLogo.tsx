@@ -1,5 +1,6 @@
 import extraLogoImg from "../assets/ExtraLOGO-Square.png";
 import { APP_VERSION_LABEL, PRODUCT_BYLINE } from "../utils/appMeta";
+import { useUpdateStore } from "../store/useUpdateStore";
 
 interface ExtraLogoProps {
   className?: string;
@@ -72,7 +73,7 @@ export function ExtraLogo({
             Extra
           </span>
           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[#1677ff]/10 text-[#1677ff] leading-none uppercase tracking-wider">
-            {APP_VERSION_LABEL}
+            {useUpdateStore((s) => s.installedVersionLabel) || APP_VERSION_LABEL}
           </span>
         </div>
         <span className="text-[10px] text-[#868c98] font-medium tracking-normal mt-0.5 truncate">
