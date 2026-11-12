@@ -6762,55 +6762,49 @@ def create_unified_mcp_app() -> Any:
 
 
     class UnifiedSSEEndpoint:
-
         """
-
         Unified handler for /sse:
-
         - GET: Streams server events (SSE EventSource)
-
         - POST: Processes JSON-RPC requests via Streamable HTTP session manager
-
         """
-
         async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
-
             if scope.get("type") == "http" and scope.get("method") == "POST":
-
-                await streamable_asgi(scope, receive, send)
-
+                fwd_scope = dict(scope)
+                fwd_scope["path"] = "/mcp"
+                fwd_scope["raw_path"] = b"/mcp"
+                await streamable_asgi(fwd_scope, receive, send)
             elif sse_route:
-
                 await sse_route.app(scope, receive, send)
-
             else:
-
                 from starlette.responses import Response
-
                 res = Response(status_code=404)
-
                 await res(scope, receive, send)
 
-
+    class UnifiedRootPostEndpoint:
+        """
+        Unified handler for POST /:
+        Processes JSON-RPC requests via Streamable HTTP session manager
+        """
+        async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
+            if scope.get("type") == "http" and scope.get("method") == "POST":
+                fwd_scope = dict(scope)
+                fwd_scope["path"] = "/mcp"
+                fwd_scope["raw_path"] = b"/mcp"
+                await streamable_asgi(fwd_scope, receive, send)
+            else:
+                from starlette.responses import Response
+                res = Response(status_code=404)
+                await res(scope, receive, send)
 
     @contextlib.asynccontextmanager
-
     async def lifespan(app: Any):
-
         async with server.session_manager.run():
-
             yield
 
-
-
     routes = [
-
         Route("/mcp", endpoint=streamable_asgi, methods=["GET", "POST"]),
-
         Route("/sse", endpoint=UnifiedSSEEndpoint(), methods=["GET", "POST"]),
-
-        Route("/", endpoint=streamable_asgi, methods=["POST"]),
-
+        Route("/", endpoint=UnifiedRootPostEndpoint(), methods=["POST"]),
     ]
 
 
