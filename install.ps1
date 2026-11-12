@@ -1,20 +1,13 @@
-﻿<#
-.SYNOPSIS
-    Extra — Windows 10/11 Flashless Computer-Use Engine & MCP Server Installer
-    Safe Staged Execution:
-    iwr -useb https://extra.yantraos.com/install.ps1 -OutFile "$env:TEMP\install_extra.ps1"; & "$env:TEMP\install_extra.ps1"
-
-.DESCRIPTION
-    Automated zero-friction, Defender-compliant setup for AIYantra Extra:
-    1. Verifies 64-bit Windows 10/11 environment.
-    2. Discovers or installs Python 3.10+.
-    3. Creates isolated virtual environment (.venv).
-    4. Provisions CFA-safe scratch workspace (~/.extra/workspace).
-    5. Configures Windows Defender Controlled Folder Access allowlists.
-    6. Installs audited, enterprise-clean dependencies.
-    7. Automatically configures Claude Desktop, Cursor, and Antigravity.
-    8. Creates global 'extra' command and runs system doctor diagnostic.
-#>
+# Extra — Windows 10/11 Flashless Computer-Use Engine & MCP Server Installer
+# Automated zero-friction, Defender-compliant setup for AIYantra Extra:
+# 1. Verifies 64-bit Windows 10/11 environment.
+# 2. Discovers or installs Python 3.10+.
+# 3. Creates isolated virtual environment (.venv).
+# 4. Provisions CFA-safe scratch workspace (~/.extra/workspace).
+# 5. Configures Windows Defender Controlled Folder Access allowlists.
+# 6. Installs audited, enterprise-clean dependencies.
+# 7. Automatically configures Claude Desktop, Cursor, and Antigravity.
+# 8. Creates global 'extra' command and runs system doctor diagnostic.
 
 [CmdletBinding()]
 param(
