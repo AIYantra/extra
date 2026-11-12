@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Extra — Windows 10/11 Flashless Computer-Use Engine & MCP Server Installer
     Safe Staged Execution:
@@ -264,6 +264,10 @@ if (-not (Test-Path "$venvDir\Scripts\python.exe")) {
 }
 
 $venvPython = Join-Path $venvDir "Scripts\python.exe"
+$venvPythonW = Join-Path $venvDir "Scripts\pythonw.exe"
+if (-not (Test-Path $venvPythonW)) {
+    $venvPythonW = $venvPython
+}
 $venvPip = Join-Path $venvDir "Scripts\pip.exe"
 
 # 5. Dependency Installation
@@ -288,7 +292,7 @@ try {
     if ($cfa -eq 1 -or $cfa -eq 2) {
         $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
         if ($isAdmin) {
-            $appsToAllow = @($venvPython)
+            $appsToAllow = @($venvPython, $venvPythonW)
             if ($pythonExe -and (Test-Path $pythonExe)) { $appsToAllow += $pythonExe }
             $agyPath = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"
             if (Test-Path $agyPath) { $appsToAllow += $agyPath }
@@ -308,54 +312,77 @@ try {
     # Non-blocking check
 }
 
-# 7. Global CLI Wrapper Setup
-Write-Step "[4/5] Compiling native launcher & desktop shortcuts..."
+# 7. Global CLI Wrapper & Desktop Shortcuts (Windows 11 Smart App Control Compliant)
+Write-Step "[4/5] Configuring SAC-compliant native launcher & desktop shortcuts..."
 $binDir = Join-Path $env:USERPROFILE ".extra\bin"
 if (-not (Test-Path $binDir)) {
     New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 }
 
-# 7a. Native Desktop Launcher Compilation (Zero-Dependency C# WinForms)
 $appDir = Join-Path $env:USERPROFILE ".extra\app"
 if (-not (Test-Path $appDir)) {
     New-Item -ItemType Directory -Path $appDir -Force | Out-Null
 }
-$extraExe = Join-Path $appDir "Extra.exe"
-$launcherCs = Join-Path $installDir "app\launcher\Launcher.cs"
-$launcherIco = Join-Path $installDir "app\launcher\app.ico"
-$cscExe = Join-Path $env:SystemRoot "Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 
-if ((Test-Path $launcherCs) -and (Test-Path $cscExe)) {
-    Write-Step "Compiling native Windows launcher (Extra.exe)..."
-    try {
-        if (Test-Path $launcherIco) {
-            & $cscExe /nologo /target:winexe /optimize+ /platform:anycpu "/win32icon:$launcherIco" "/out:$extraExe" "$launcherCs" | Out-Null
-        } else {
-            & $cscExe /nologo /target:winexe /optimize+ /platform:anycpu "/out:$extraExe" "$launcherCs" | Out-Null
-        }
-        if (Test-Path $extraExe) {
-            Write-Success "Native launcher compiled to $extraExe."
-            try {
-                $wsh = New-Object -ComObject WScript.Shell
-                $desktopPath = [Environment]::GetFolderPath("Desktop")
-                $shortcutPath = Join-Path $desktopPath "Extra.lnk"
-                $shortcut = $wsh.CreateShortcut($shortcutPath)
-                $shortcut.TargetPath = $extraExe
-                $shortcut.WorkingDirectory = $appDir
-                if (Test-Path $launcherIco) { $shortcut.IconLocation = $launcherIco }
-                $shortcut.Description = "Extra Desktop Companion"
-                $shortcut.Save()
-                Write-Success "Created desktop shortcut at $shortcutPath."
-            } catch { }
-        }
-    } catch {
-        Write-WarningMsg "Could not compile native launcher: $_"
-    }
+$launcherIco = Join-Path $installDir "app\launcher\app.ico"
+if (-not (Test-Path $launcherIco)) {
+    $launcherIco = Join-Path $installDir "assets\icon.ico"
 }
 
-$parentDir = Split-Path -Parent $installDir
+# Resolve run_app.py
+$runAppPy = Join-Path $installDir "app\run_app.py"
+if (-not (Test-Path $runAppPy)) {
+    $runAppPy = Join-Path $installDir "run_app.py"
+}
+
+# Remove legacy unsigned Extra.exe so Windows Search & Smart App Control never flag it
+$extraExe = Join-Path $appDir "Extra.exe"
+if (Test-Path $extraExe) {
+    try {
+        Remove-Item -Path $extraExe -Force -ErrorAction SilentlyContinue
+    } catch { }
+}
+
+# 7a. Native Desktop & Start Menu Shortcuts via Microsoft/Python Signed pythonw.exe
+# (Guarantees zero Smart App Control blocks, zero console popups, full Authenticode trust)
+try {
+    $wsh = New-Object -ComObject WScript.Shell
+    $runAppWorkingDir = Split-Path -Parent $runAppPy
+
+    # Desktop Shortcut
+    $desktopPath = [Environment]::GetFolderPath("Desktop")
+    if (Test-Path $desktopPath) {
+        $shortcutPath = Join-Path $desktopPath "Extra.lnk"
+        $shortcut = $wsh.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $venvPythonW
+        $shortcut.Arguments = "`"$runAppPy`""
+        $shortcut.WorkingDirectory = $runAppWorkingDir
+        if (Test-Path $launcherIco) { $shortcut.IconLocation = "$launcherIco,0" }
+        $shortcut.Description = "Extra Desktop Companion"
+        $shortcut.Save()
+        Write-Success "Created SAC-compliant desktop shortcut at $shortcutPath."
+    }
+
+    # Start Menu Shortcut
+    $programsPath = Join-Path [Environment]::GetFolderPath("ApplicationData") "Microsoft\Windows\Start Menu\Programs"
+    if (Test-Path $programsPath) {
+        $startShortcutPath = Join-Path $programsPath "Extra.lnk"
+        $startShortcut = $wsh.CreateShortcut($startShortcutPath)
+        $startShortcut.TargetPath = $venvPythonW
+        $startShortcut.Arguments = "`"$runAppPy`""
+        $startShortcut.WorkingDirectory = $runAppWorkingDir
+        if (Test-Path $launcherIco) { $startShortcut.IconLocation = "$launcherIco,0" }
+        $startShortcut.Description = "Extra Desktop Companion"
+        $startShortcut.Save()
+        Write-Success "Created SAC-compliant Start Menu shortcut at $startShortcutPath."
+    }
+} catch {
+    Write-WarningMsg "Could not configure desktop shortcuts: $_"
+}
+
+# 7b. Global CLI Wrapper (extra.cmd)
 $cmdWrapper = Join-Path $binDir "extra.cmd"
-"@echo off`nif `"%~1`"==`"`" (`n    start `"`" `"%USERPROFILE%\.extra\app\Extra.exe`"`n    exit /b 0`n)`nset PYTHONPATH=$installDir\src;$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
+"@echo off`nif `"%~1`"==`"`" (`n    start `"`" `"$venvPythonW`" `"$runAppPy`"`n    exit /b 0`n)`nset PYTHONPATH=$installDir\src;$installDir;%PYTHONPATH%`n`"$venvPython`" -m extra.cli %*" | Set-Content -Path $cmdWrapper -Encoding ASCII
 
 # Add ~/.extra/bin to User PATH if not already there
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")

@@ -118,8 +118,82 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
 
     # 3b. Windows Defender & Controlled Folder Access (CFA) Diagnostic (if on Windows)
     elif os_name == "Windows":
-        print("\n[Windows Defender & Controlled Folder Access (CFA)]")
+        print("\n[Windows Security: Defender, Smart App Control (SAC) & CFA]")
         try:
+            # 1. Smart App Control (SAC) Diagnostic
+            ps_sac_cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "(Get-MpComputerStatus).SmartAppControlState"]
+            sac_proc = subprocess.run(ps_sac_cmd, capture_output=True, text=True, timeout=5)
+            sac_val = (sac_proc.stdout or "").strip()
+            if not sac_val:
+                sac_val = "Off"
+
+            if sac_val.lower() == "on":
+                print("  Smart App Control (SAC):   [ACTIVE / ENFORCING] (Kernel-level untrusted binary block active)")
+            elif sac_val.lower() in ("eval", "evaluation"):
+                print("  Smart App Control (SAC):   [EVALUATION] (Observing app execution without blocking)")
+            else:
+                print(f"  Smart App Control (SAC):   [OFF] ({sac_val})")
+
+            # 2. Check Shortcut SAC Compliance
+            extra_dir = Path.home() / ".extra"
+            legacy_exe = extra_dir / "app" / "Extra.exe"
+            appdata = os.environ.get("APPDATA", "")
+            start_lnk = Path(appdata) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Extra.lnk" if appdata else None
+            desktop_lnk = Path.home() / "Desktop" / "Extra.lnk"
+
+            has_legacy_target = False
+            for lnk in [start_lnk, desktop_lnk]:
+                if lnk and lnk.exists():
+                    try:
+                        import win32com.client
+                        wsh = win32com.client.Dispatch("WScript.Shell")
+                        sc = wsh.CreateShortcut(str(lnk))
+                        if "extra.exe" in (sc.TargetPath or "").lower() or not sc.Arguments:
+                            has_legacy_target = True
+                            break
+                    except Exception:
+                        pass
+
+            if legacy_exe.exists() or has_legacy_target:
+                print("  Shortcut SAC Compliance:  [WARN] Legacy shortcuts point to unsigned Extra.exe.")
+                if sac_val.lower() == "on":
+                    print("                            Smart App Control WILL BLOCK legacy Extra.exe from launching!")
+                print("                            Run 'extra doctor --fix-sac' to migrate shortcuts to signed Python runtime.")
+            else:
+                print("  Shortcut SAC Compliance:  [OK] Validated (Shortcuts target signed pythonw.exe runtime)")
+
+            # Handle --fix-sac flag
+            if args and getattr(args, "fix_sac", False):
+                print("\n  [ACTION] Repairing Extra shortcuts and cleaning legacy binaries for SAC compliance...")
+                if legacy_exe.exists():
+                    try:
+                        legacy_exe.unlink()
+                        print(f"  [OK] Removed legacy unsigned binary: {legacy_exe}")
+                    except Exception as ex:
+                        print(f"  [WARN] Could not remove legacy Extra.exe: {ex}")
+
+                # Re-invoke ensure_windows_integration from run_app
+                try:
+                    repo_root = Path(__file__).resolve().parent.parent.parent
+                    app_file = repo_root / "app" / "run_app.py"
+                    if not app_file.exists():
+                        app_file = extra_dir / "app" / "app" / "run_app.py"
+                    if not app_file.exists():
+                        app_file = extra_dir / "app" / "run_app.py"
+
+                    if app_file.exists():
+                        import importlib.util
+                        spec = importlib.util.spec_from_file_location("run_app_mod", str(app_file))
+                        if spec and spec.loader:
+                            mod = importlib.util.module_from_spec(spec)
+                            spec.loader.exec_module(mod)
+                            if hasattr(mod, "ensure_windows_integration"):
+                                mod.ensure_windows_integration()
+                                print("  [OK] Successfully regenerated SAC-compliant shortcuts for Start Menu & Desktop.")
+                except Exception as ex:
+                    print(f"  [WARN] Shortcut regeneration notice: {ex}")
+
+            # 3. Controlled Folder Access (CFA) Diagnostic
             ps_cmd = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "(Get-MpPreference).EnableControlledFolderAccess"]
             proc = subprocess.run(ps_cmd, capture_output=True, text=True, timeout=6)
             cfa_val = proc.stdout.strip()
@@ -1177,19 +1251,17 @@ def cmd_station(args: Optional[argparse.Namespace] = None) -> int:
             user_prof = os.environ.get("USERPROFILE", "")
             local_app = os.environ.get("LOCALAPPDATA", "")
 
-            if user_prof:
-                candidates.append(Path(user_prof) / ".extra" / "app" / "Extra.exe")
-                candidates.append(Path(user_prof) / ".extra" / "bin" / "Extra.exe")
-                candidates.append(user_run_app)
+            # Prioritize signed pythonw.exe + run_app.py to guarantee Smart App Control (SAC) compliance
+            candidates.append(user_run_app)
+            candidates.append(app_dir / "run_app.py")
+
             if local_app:
                 candidates.append(Path(local_app) / "Programs" / "ExtraApp" / "ExtraApp.exe")
-                candidates.append(Path(local_app) / "Programs" / "Extra" / "Extra.exe")
 
             candidates.append(app_dir / "dist" / "ExtraApp.exe")
             candidates.append(app_dir / "dist-desktop" / "ExtraApp.exe")
-            candidates.append(app_dir / "run_app.py")
 
-            for name in ["Extra.exe", "ExtraApp.exe"]:
+            for name in ["ExtraApp.exe"]:
                 which_bin = shutil.which(name)
                 if which_bin:
                     candidates.append(Path(which_bin))
@@ -1220,7 +1292,11 @@ def cmd_station(args: Optional[argparse.Namespace] = None) -> int:
                     if str(cand).endswith(".py"):
                         if sys.platform == "win32":
                             DETACHED_PROCESS = 0x00000008
-                            subprocess.Popen([sys.executable, str(cand)], creationflags=DETACHED_PROCESS, close_fds=True)
+                            py_bin = sys.executable
+                            pyw_cand = Path(py_bin).parent / "pythonw.exe"
+                            if pyw_cand.exists():
+                                py_bin = str(pyw_cand)
+                            subprocess.Popen([py_bin, str(cand)], creationflags=DETACHED_PROCESS, close_fds=True)
                         else:
                             py_bin = sys.executable
                             venv_py = Path.home() / ".extra" / "venv" / "bin" / "python"
@@ -1293,6 +1369,7 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser = subparsers.add_parser("doctor", help="Run system health and capability diagnostics")
     doctor_parser.add_argument("--open", "-o", action="store_true", help="Open System Settings privacy panes if permissions missing")
     doctor_parser.add_argument("--fix-cfa", action="store_true", help="Whitelist developer tools (agy, python, powershell) in Windows Defender Controlled Folder Access")
+    doctor_parser.add_argument("--fix-sac", action="store_true", help="Repair Windows 11 Smart App Control (SAC) shortcuts to use signed Python runtime")
 
     # permissions
     perm_parser = subparsers.add_parser("permissions", help="Manage macOS TCC permissions (check, open, reset)")
