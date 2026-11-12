@@ -1435,24 +1435,26 @@ export default {
         }).catch(() => {}));
       }
 
-      let upstreamRes = null;
-      try {
-        const originRes = await fetch(request);
-        if (originRes && originRes.status === 200) {
-          upstreamRes = originRes;
-        }
-      } catch (_) {}
-
-      if (!upstreamRes) {
-        upstreamRes = await fetch(SCRIPT_MAP[url.pathname]);
+      let upstreamRes = await fetch(SCRIPT_MAP[url.pathname]);
+      if (!upstreamRes || upstreamRes.status !== 200) {
+        const S3_ORIGIN = "http://extra.yantraos.com.s3-website.ap-south-1.amazonaws.com";
+        upstreamRes = await fetch(new URL(url.pathname, S3_ORIGIN).toString());
       }
+
+      let bodyText = await upstreamRes.text();
+      // Unconditionally strip UTF-8 BOM (\uFEFF) if present to guarantee clean execution in PowerShell iex
+      if (bodyText.charCodeAt(0) === 0xFEFF) {
+        bodyText = bodyText.slice(1);
+      }
+
       const headers = new Headers(upstreamRes.headers);
       headers.set("Content-Type", "text/plain; charset=utf-8");
-      headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
       headers.set("X-Content-Type-Options", "nosniff");
       headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-      return new Response(upstreamRes.body, {
+      return new Response(bodyText, {
         status: upstreamRes.status,
         headers,
       });
@@ -1461,24 +1463,25 @@ export default {
     // Route 5: Universal CLI one-liner: curl -sSL https://extra.yantraos.com/install | bash
     if (url.pathname === "/install") {
       const targetScript = isMacOrUnixUserAgent(userAgent) ? "/install.sh" : "/install.ps1";
-      let upstreamRes = null;
-      try {
-        const originRes = await fetch(new Request(new URL(targetScript, request.url), request));
-        if (originRes && originRes.status === 200) {
-          upstreamRes = originRes;
-        }
-      } catch (_) {}
-
-      if (!upstreamRes) {
-        upstreamRes = await fetch(SCRIPT_MAP[targetScript]);
+      let upstreamRes = await fetch(SCRIPT_MAP[targetScript]);
+      if (!upstreamRes || upstreamRes.status !== 200) {
+        const S3_ORIGIN = "http://extra.yantraos.com.s3-website.ap-south-1.amazonaws.com";
+        upstreamRes = await fetch(new URL(targetScript, S3_ORIGIN).toString());
       }
+
+      let bodyText = await upstreamRes.text();
+      if (bodyText.charCodeAt(0) === 0xFEFF) {
+        bodyText = bodyText.slice(1);
+      }
+
       const headers = new Headers(upstreamRes.headers);
       headers.set("Content-Type", "text/plain; charset=utf-8");
-      headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
+      headers.set("Access-Control-Allow-Origin", "*");
+      headers.set("Cache-Control", "no-cache, no-store, must-revalidate");
       headers.set("X-Content-Type-Options", "nosniff");
       headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
       headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload");
-      return new Response(upstreamRes.body, {
+      return new Response(bodyText, {
         status: upstreamRes.status,
         headers,
       });
@@ -1543,7 +1546,18 @@ export default {
       resHeaders.set("location", loc.replace(/^http:\/\//i, "https://"));
     }
 
-    if (url.pathname.startsWith("/_next/static/")) {
+    if (
+      url.pathname.startsWith("/api/") ||
+      url.pathname.endsWith(".json") ||
+      url.pathname.endsWith(".txt") ||
+      url.pathname.endsWith(".ps1") ||
+      url.pathname.endsWith(".sh")
+    ) {
+      resHeaders.set("Access-Control-Allow-Origin", "*");
+      resHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      resHeaders.set("Cache-Control", "no-cache, no-store, must-revalidate");
+      resHeaders.set("s-maxage", "0");
+    } else if (url.pathname.startsWith("/_next/static/")) {
       resHeaders.set("Cache-Control", "public, max-age=31536000, immutable");
       resHeaders.set("s-maxage", "31536000");
     } else {
