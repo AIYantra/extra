@@ -1990,9 +1990,13 @@ def ensure_windows_integration():
                 except Exception:
                     pass
 
-        # Fast path: If Extra.lnk exists in both locations, zero-cost return (< 0.1ms)
-        if shortcut_path.exists() and (desktop_shortcut is None or desktop_shortcut.exists()):
-            return
+        # Clean up legacy unsigned Extra.exe in ~/.extra/app to prevent Smart App Control (SAC) blocks
+        legacy_exe = EXTRA_DIR / "app" / "Extra.exe"
+        if legacy_exe.exists():
+            try:
+                legacy_exe.unlink()
+            except Exception:
+                pass
 
         # Guarantee persistent icon file in ~/.extra/assets/icon.ico
         extra_assets = EXTRA_DIR / "assets"
@@ -2007,17 +2011,34 @@ def ensure_windows_integration():
 
         icon_file = persistent_icon if persistent_icon.exists() else ICON_PATH
 
-        # Target executable: Prefer Extra.exe in ~/.extra/app or dist-desktop
-        exe_file = EXTRA_DIR / "app" / "Extra.exe"
-        if not exe_file.exists():
-            exe_file = EXTRA_DIR / "bin" / "Extra.exe"
-        if not exe_file.exists():
-            exe_file = BUNDLE_DIR / "dist-desktop" / "Extra.exe"
-        if not exe_file.exists():
-            exe_file = BUNDLE_DIR / "dist-desktop" / "ExtraApp.exe"
+        # Target: Use signed pythonw.exe + run_app.py to ensure 100% Smart App Control compliance
+        python_exe = Path(sys.executable)
+        pythonw_exe = python_exe.parent / "pythonw.exe"
+        if not pythonw_exe.exists():
+            pythonw_exe = python_exe
 
-        target_path = str(exe_file if exe_file.exists() else (BUNDLE_DIR / "Extra.bat"))
-        working_dir = str(Path(target_path).parent)
+        run_app_file = Path(__file__).resolve()
+        target_path = str(pythonw_exe)
+        target_args = f'"{run_app_file}"'
+        working_dir = str(run_app_file.parent)
+
+        # Fast path check: If Extra.lnk exists and already targets pythonw, nothing to do
+        def _needs_update(lnk_path):
+            if not lnk_path or not lnk_path.exists():
+                return True
+            try:
+                import win32com.client
+                wsh = win32com.client.Dispatch("WScript.Shell")
+                lnk = wsh.CreateShortcut(str(lnk_path))
+                # If pointing to legacy Extra.exe or missing arguments, update it
+                if "extra.exe" in (lnk.TargetPath or "").lower() or not lnk.Arguments:
+                    return True
+                return False
+            except Exception:
+                return False
+
+        if not _needs_update(shortcut_path) and (desktop_shortcut is None or not _needs_update(desktop_shortcut)):
+            return
 
         # Ultra-fast native COM registration (< 5ms) without spawning powershell.exe
         def _write_shortcuts():
@@ -2026,17 +2047,19 @@ def ensure_windows_integration():
                 wsh = win32com.client.Dispatch("WScript.Shell")
                 s = wsh.CreateShortcut(str(shortcut_path))
                 s.TargetPath = target_path
+                s.Arguments = target_args
                 s.WorkingDirectory = working_dir
                 s.IconLocation = f"{icon_file},0"
-                s.Description = "Extra"
+                s.Description = "Extra Desktop Companion"
                 s.Save()
 
                 if desktop_shortcut:
                     d = wsh.CreateShortcut(str(desktop_shortcut))
                     d.TargetPath = target_path
+                    d.Arguments = target_args
                     d.WorkingDirectory = working_dir
                     d.IconLocation = f"{icon_file},0"
-                    d.Description = "Extra"
+                    d.Description = "Extra Desktop Companion"
                     d.Save()
             except Exception:
                 # Background fallback if win32com is absent
@@ -2044,11 +2067,22 @@ def ensure_windows_integration():
                 $WshShell = New-Object -ComObject WScript.Shell
                 $s = $WshShell.CreateShortcut('{str(shortcut_path)}')
                 $s.TargetPath = '{target_path}'
+                $s.Arguments = '{target_args}'
                 $s.WorkingDirectory = '{working_dir}'
                 $s.IconLocation = '{icon_file},0'
-                $s.Description = 'Extra'
+                $s.Description = 'Extra Desktop Companion'
                 $s.Save()
                 """
+                if desktop_shortcut:
+                    ps_code += f"""
+                    $d = $WshShell.CreateShortcut('{str(desktop_shortcut)}')
+                    $d.TargetPath = '{target_path}'
+                    $d.Arguments = '{target_args}'
+                    $d.WorkingDirectory = '{working_dir}'
+                    $d.IconLocation = '{icon_file},0'
+                    $d.Description = 'Extra Desktop Companion'
+                    $d.Save()
+                    """
                 subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_code], capture_output=True, timeout=5)
 
         # Execute shortcut creation asynchronously if missing so main thread is not delayed
