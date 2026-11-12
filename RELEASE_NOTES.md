@@ -1,3 +1,37 @@
+# Extra Release Notes — v0.3.6
+
+**Release Date:** November 12, 2026  
+**Release Title:** Dynamic In-App Auto-Update Pipeline, Windows 11 Smart App Control (SAC) Signed Runtime, macOS Gatekeeper Quarantine Stripping & MCP Streamable HTTP Transport Security Hardening  
+**Target Systems:** Windows 10/11 (x64 / ARM64), macOS 12.3+ (Apple Silicon / Intel), Linux (KDE Plasma, GNOME, wlroots, X11)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.6)
+
+Version 0.3.6 addresses critical operating system trust and runtime lifecycle barriers, permanently resolving Windows 11 Smart App Control (SAC) blocks on consumer and enterprise editions, stripping macOS Gatekeeper quarantine flags, introducing a dynamic bidirectional version synchronization bus, and enabling seamless 1-click in-app self-updating directly from the Extra Desktop companion station.
+
+### Key Highlights:
+
+1. **Universal Windows 11 Smart App Control (SAC) Signed Runtime Architecture (`app/run_app.py`, `install.ps1`):**
+   - **Deprecated Unsigned Binary Compilation:** Completely eliminated ad-hoc local compilation of `Extra.exe` via `csc.exe`, which triggered aggressive Microsoft Smart App Control (SAC) blocks on Windows 11 22H2+ systems.
+   - **Signed Python Runtime Execution:** Start Menu and Desktop shortcuts now route directly through `pythonw.exe`—digitally signed by the Python Software Foundation and Microsoft Authenticode—launching `run_app.py` directly with zero terminal flicker, zero console windows, and full native tray/window icon styling.
+   - **Automated Legacy Binary Purging:** `run_app.py`, `install.ps1`, and `cli.py` automatically detect, kill, and delete legacy unsigned `Extra.exe` binaries and repair orphaned `.lnk` shortcuts across Start Menu and Desktop folders on startup.
+
+2. **Dynamic In-App Self-Updating Pipeline (`app/src/`, `app/run_app.py`):**
+   - **Bidirectional Version Synchronization:** Replaced static version constants with live runtime discovery (`/api/extra/version` and `/api/extra/update`). The desktop frontend and dashboard sidebar dynamically reflect the true installed engine version in real-time.
+   - **1-Click In-App Update Engine:** Added the "Update Now" button in About › Updates. Triggering an update dispatches the official signed installer in the background (`/api/extra/update/perform`), polls for installation completion, and automatically reloads the companion station with zero user friction.
+   - **Edge Manifest Synchronization (`api/version.json`):** Synchronized the Cloudflare edge version manifest and bypassed local cache latency when explicitly requesting update checks.
+
+3. **macOS Gatekeeper Quarantine Stripping & Privacy Diagnostics (`install.sh`, `cli.py`):**
+   - **Automated Quarantine Attribute Stripping:** `install.sh` automatically strips `com.apple.quarantine` extended attributes from `$HOME/.extra` and `$HOME/Applications/Extra.app`, preventing Gatekeeper "unverified developer" warning modals.
+   - **Comprehensive Permission Diagnostics:** `extra doctor` verifies and guides setup for macOS Accessibility (`AXIsProcessTrustedWithOptions`) and Screen Recording (`CGPreflightScreenCaptureAccess`) with direct URI launch shortcuts.
+
+4. **MCP Streamable HTTP Transport Security Hardening (`src/extra/mcp/server.py`, `tests/`):**
+   - **DNS Rebinding Protection Parity:** Hardened MCP SDK `TransportSecurityMiddleware` by ensuring `testserver`, `localhost`, `127.0.0.1`, `[::1]`, and wildcard port patterns (`:*`) are universally populated across `allowed_hosts` in both `create_unified_mcp_app` and `run_sse_server`.
+   - **Full Matrix CI Green:** Resolved Starlette `TestClient` HTTP 421 ("Invalid Host header: testserver") mismatch, restoring 100% passing tests across Windows, macOS, and Linux runners on Python 3.11, 3.12, and 3.13.
+
+---
+
 # Extra Release Notes — v0.3.5
 
 **Release Date:** November 7, 2026  

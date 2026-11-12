@@ -269,7 +269,9 @@ if [[ "$OS_TYPE" == "Darwin" ]]; then
     if command -v osacompile &>/dev/null; then
         mkdir -p "$HOME/Applications"
         osacompile -o "$HOME/Applications/Extra.app" -e 'do shell script "'"$BIN_DIR/extra station > /dev/null 2>&1 &"'"' 2>/dev/null || true
-        write_ok "Created macOS application bundle: $HOME/Applications/Extra.app"
+        xattr -rd com.apple.quarantine "$HOME/Applications/Extra.app" 2>/dev/null || true
+        xattr -rd com.apple.quarantine "$EXTRA_HOME" 2>/dev/null || true
+        write_ok "Created macOS application bundle: $HOME/Applications/Extra.app (quarantine stripped)"
     fi
 elif [[ "$OS_TYPE" == "Linux" ]]; then
     DESKTOP_DIR="$HOME/.local/share/applications"
@@ -536,7 +538,7 @@ fi
 if [[ "${DO_NOT_TRACK:-0}" != "1" && "${EXTRA_TELEMETRY:-1}" != "0" ]]; then
     (curl -s -m 2 -X POST "https://extra.yantraos.com/api/install-success" \
         -H "Content-Type: application/json" \
-        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.3.5\",\"method\":\"install.sh\"}" \
+        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.3.6\",\"method\":\"install.sh\"}" \
         >/dev/null 2>&1 &) || true
 fi
 

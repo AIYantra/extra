@@ -63,6 +63,42 @@ EXTRA_DIR = Path.home() / ".extra"
 LOOPBACK_TOKEN_FILE = EXTRA_DIR / ".loopback_token"
 
 
+def _resolve_runtime_version() -> str:
+    """Dynamically resolves Extra runtime version."""
+    try:
+        import extra
+        v = getattr(extra, "__version__", None)
+        if v:
+            return v
+    except Exception:
+        pass
+    try:
+        pkg_json = BUNDLE_DIR / "package.json"
+        if pkg_json.exists():
+            data = json.loads(pkg_json.read_text(encoding="utf-8"))
+            if data.get("version"):
+                return data["version"]
+    except Exception:
+        pass
+    return "0.3.6"
+
+
+_RUNTIME_VER = _resolve_runtime_version()
+
+# Aggressive Windows 11 Smart App Control (SAC) pre-flight purge
+if sys.platform == "win32":
+    for _sac_legacy in (
+        EXTRA_DIR / "app" / "Extra.exe",
+        Path.home() / ".extra" / "app" / "Extra.exe",
+    ):
+        if _sac_legacy.exists():
+            try:
+                _sac_legacy.unlink(missing_ok=True)
+                print(f"  [SAC-CLEANUP] Purged legacy unsigned {_sac_legacy}", flush=True)
+            except Exception:
+                pass
+
+
 def _load_or_create_loopback_token() -> str:
     """Load the persisted engine loopback token, creating it on first run.
 
@@ -1023,13 +1059,13 @@ ARCHETYPE_MAP = {
 _UPDATE_CACHE = {"data": None, "ts": 0.0}
 
 
-def get_app_update_info() -> dict:
+def get_app_update_info(force: bool = False) -> dict:
     """Fetches release info with caching, fallbacks, and zero unhandled exceptions."""
     now = time.time()
-    if _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 900:
+    if not force and _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 900:
         return _UPDATE_CACHE["data"]
 
-    current_ver = "0.3.5"
+    current_ver = _RUNTIME_VER
     result = {
         "current": current_ver,
         "latest": current_ver,
@@ -1038,8 +1074,8 @@ def get_app_update_info() -> dict:
         "publishedAt": None,
         "releaseUrl": "https://github.com/AIYantra/extra/releases",
         "notes": f"Extra v{current_ver} is installed and up to date.",
-        "downloadUrl": "https://extra.yantraos.com/download/Extra.exe",
-        "assetName": "Extra.exe",
+        "downloadUrl": "https://extra.yantraos.com/install.ps1" if sys.platform == "win32" else "https://extra.yantraos.com/install.sh",
+        "assetName": "install.ps1" if sys.platform == "win32" else "install.sh",
         "installable": True,
         "offline": False,
     }
@@ -1059,7 +1095,7 @@ def get_app_update_info() -> dict:
                 asset_name = None
                 for a in assets:
                     name = a.get("name", "")
-                    if name.endswith((".exe", ".msi")):
+                    if name.endswith((".exe", ".msi", ".ps1", ".sh")):
                         download_url = a.get("browser_download_url")
                         asset_name = name
                         break
@@ -1090,9 +1126,9 @@ def get_app_update_info() -> dict:
     try:
         req = urllib.request.Request(
             "https://extra.yantraos.com/api/version.json",
-            headers={"User-Agent": f"ExtraApp/{current_ver}"}
+            headers={"User-Agent": f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) ExtraApp/{current_ver}"}
         )
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
             if resp.status == 200:
                 data = json.loads(resp.read().decode("utf-8"))
                 tag = data.get("tag_name", f"v{current_ver}")
@@ -1118,6 +1154,26 @@ def get_app_update_info() -> dict:
     _UPDATE_CACHE["data"] = result
     _UPDATE_CACHE["ts"] = now
     return result
+
+
+def perform_in_app_update() -> dict:
+    """Executes the official online installer in the background to seamlessly update Extra."""
+    try:
+        if sys.platform == "win32":
+            ps_cmd = (
+                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
+                "$s = (Invoke-RestMethod -Uri 'https://extra.yantraos.com/install.ps1' -UseBasicParsing); "
+                "Invoke-Expression $s"
+            )
+            cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", ps_cmd]
+            proc = subprocess.Popen(cmd, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            return {"success": True, "pid": proc.pid, "message": "Windows signed runtime installer dispatched in background."}
+        else:
+            cmd = "curl -sSL https://extra.yantraos.com/install.sh | bash"
+            proc = subprocess.Popen(cmd, shell=True)
+            return {"success": True, "pid": proc.pid, "message": "Unix installer dispatched in background."}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 def get_operator_info():
@@ -1730,7 +1786,12 @@ class SPAHandler(SimpleHTTPRequestHandler):
         clean_path = self.path.split("?")[0]
 
         # REST API Endpoints
-        if clean_path in ("/api/extra/telemetry", "/api/telemetry"):
+        if clean_path in ("/api/extra/version", "/api/version"):
+            return self._send_json({"version": _RUNTIME_VER, "label": f"v{_RUNTIME_VER}", "sac_compliant": True})
+        elif clean_path in ("/api/extra/update", "/api/update"):
+            force = "force" in self.path
+            return self._send_json(get_app_update_info(force=force))
+        elif clean_path in ("/api/extra/telemetry", "/api/telemetry"):
             return self._send_json(get_real_telemetry())
         elif clean_path in ("/api/extra/skills", "/api/skills"):
             return self._send_json(get_real_skills())
@@ -1913,6 +1974,9 @@ class SPAHandler(SimpleHTTPRequestHandler):
                 "token_accepted": True
             })
 
+        elif clean_path in ("/api/extra/update/perform", "/api/update/perform"):
+            return self._send_json(perform_in_app_update())
+
         if clean_path in ("/api/extra/engine/restart", "/api/engine/restart"):
             return self._send_json(restart_extra_server())
 
@@ -2030,12 +2094,13 @@ def ensure_windows_integration():
                 import win32com.client
                 wsh = win32com.client.Dispatch("WScript.Shell")
                 lnk = wsh.CreateShortcut(str(lnk_path))
-                # If pointing to legacy Extra.exe or missing arguments, update it
-                if "extra.exe" in (lnk.TargetPath or "").lower() or not lnk.Arguments:
+                target = (lnk.TargetPath or "").lower()
+                # If pointing to legacy Extra.exe or missing arguments or not pythonw, update it
+                if "extra.exe" in target or not lnk.Arguments or "pythonw" not in target:
                     return True
                 return False
             except Exception:
-                return False
+                return True
 
         if not _needs_update(shortcut_path) and (desktop_shortcut is None or not _needs_update(desktop_shortcut)):
             return

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Info,
   ShieldCheck,
@@ -9,6 +9,7 @@ import {
   Globe,
   ExternalLink,
   Download,
+  Sparkles,
 } from "lucide-react";
 import { Switch } from "../ui/switch";
 import {
@@ -74,18 +75,28 @@ function formatCheckedAt(ts: number | null): string {
 
 function UpdatesTab() {
   const {
+    installedVersionLabel,
     autoCheck,
     autoUpdate,
     lastCheckedAt,
     latestTag,
     updateAvailable,
     checking,
+    updating,
     error,
     lastResult,
     setAutoCheck,
     setAutoUpdate,
+    syncInstalledVersion,
     checkNow,
+    performUpdateNow,
   } = useUpdateStore();
+
+  useEffect(() => {
+    void syncInstalledVersion();
+  }, [syncInstalledVersion]);
+
+  const activeLabel = installedVersionLabel || APP_VERSION_LABEL;
 
   return (
     <div className="space-y-4">
@@ -96,13 +107,13 @@ function UpdatesTab() {
               Extra {PRODUCT_BYLINE}
             </span>
             <span className="font-mono text-[11px] tabular-nums text-[#525866]">
-              {APP_VERSION_LABEL} local
+              {activeLabel} local
             </span>
           </div>
           <button
             type="button"
             onClick={() => void checkNow()}
-            disabled={checking}
+            disabled={checking || updating}
             className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] bg-[#1677ff] px-4 text-xs font-medium text-white transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#0958d9] disabled:opacity-50"
           >
             {checking ? (
@@ -127,7 +138,7 @@ function UpdatesTab() {
         {error && <p className="text-xs text-[#e11d48]">{error}</p>}
         {!error && lastCheckedAt && !updateAvailable && (
           <p className="text-xs text-[#525866]">
-            You&apos;re up to date on {APP_VERSION_LABEL}.
+            You&apos;re up to date on {activeLabel}.
           </p>
         )}
       </Section>
@@ -143,9 +154,27 @@ function UpdatesTab() {
                 <span className="font-mono font-medium tabular-nums">
                   {latestTag}
                 </span>{" "}
-                is out. Installed {APP_VERSION_LABEL}.
+                is out. Installed {activeLabel}.
               </p>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void performUpdateNow()}
+                  disabled={updating}
+                  className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] bg-[#0e8345] px-4 text-xs font-medium text-white transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#0b6b37] disabled:opacity-50"
+                >
+                  {updating ? (
+                    <>
+                      <RefreshCw className="size-4 animate-spin" strokeWidth={1.5} />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4" strokeWidth={1.5} />
+                      Update Now
+                    </>
+                  )}
+                </button>
                 {lastResult?.downloadUrl && lastResult.assetName && (
                   <button
                     type="button"
@@ -155,9 +184,9 @@ function UpdatesTab() {
                         lastResult.assetName as string,
                       )
                     }
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] bg-[#0e8345] px-4 text-xs font-medium text-white transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#0b6b37]"
+                    className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] border border-[#bbf0cf] bg-white px-3 text-xs font-medium text-[#0e8345] transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#f4f5f8]"
                   >
-                    <Download className="size-4" strokeWidth={1.5} />
+                    <Download className="size-3.5" strokeWidth={1.5} />
                     Download
                   </button>
                 )}
@@ -165,10 +194,10 @@ function UpdatesTab() {
                   <button
                     type="button"
                     onClick={() => void openExternal(lastResult.releaseUrl)}
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] border border-[#bbf0cf] bg-white px-4 text-xs font-medium text-[#0e8345] transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#f4f5f8]"
+                    className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] border border-[#bbf0cf] bg-white px-3 text-xs font-medium text-[#0e8345] transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#f4f5f8]"
                   >
                     View release
-                    <ExternalLink className="size-4" strokeWidth={1.5} />
+                    <ExternalLink className="size-3.5" strokeWidth={1.5} />
                   </button>
                 )}
               </div>
@@ -215,23 +244,35 @@ function UpdatesTab() {
       </Section>
 
       <Section title="Release history">
-        <div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-medium text-[#1a1a1c]">v0.3.4</p>
-            <p className="font-mono text-[11px] tabular-nums text-[#868c98]">
-              2026-10-25
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-medium text-[#1a1a1c]">v0.3.6</p>
+              <p className="font-mono text-[11px] tabular-nums text-[#868c98]">
+                2026-11-12
+              </p>
+            </div>
+            <p className="mt-1">
+              Dynamic App Versioning, In-App Self-Updating Engine, Windows 11 Smart App Control (SAC) Signed Runtime &amp; macOS Gatekeeper Quarantine Stripping.
             </p>
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              <WebsiteLink
+                href="https://github.com/AIYantra/extra/compare/v0.3.5...v0.3.6"
+                label="Full changelog"
+              />
+              <WebsiteLink href={UPDATE_RELEASES_URL} label="All releases" />
+            </div>
           </div>
-          <p className="mt-2">
-            Plane Streaming, Universal Console and Terminal Buffer
-            Synthesis.
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-4">
-            <WebsiteLink
-              href="https://github.com/AIYantra/extra/compare/v0.3.3...v0.3.4"
-              label="Full changelog"
-            />
-            <WebsiteLink href={UPDATE_RELEASES_URL} label="All releases" />
+          <div className="border-t border-[#dfe4eb] pt-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-medium text-[#1a1a1c]">v0.3.5</p>
+              <p className="font-mono text-[11px] tabular-nums text-[#868c98]">
+                2026-11-07
+              </p>
+            </div>
+            <p className="mt-1">
+              Cloudflare Worker MCP Stream Fix, OpenAI DestructiveHint Compliance &amp; 1-Turn Live-Browser Form Fill.
+            </p>
           </div>
         </div>
       </Section>
@@ -241,6 +282,7 @@ function UpdatesTab() {
 
 export function AboutView() {
   const [tab, setTab] = useState<AboutTab>("about");
+  const installedVersionLabel = useUpdateStore((s) => s.installedVersionLabel) || APP_VERSION_LABEL;
 
   return (
     <div className="max-w-4xl space-y-6 pb-16 animate-in fade-in duration-150">
@@ -251,7 +293,7 @@ export function AboutView() {
               About Extra
             </h2>
             <span className="rounded-md border border-[#dfe4eb] bg-[#f0f2f6] px-1.5 py-0.5 font-mono text-[10px] text-[#525866]">
-              {APP_VERSION_LABEL} local
+              {installedVersionLabel} local
             </span>
           </div>
           <p className="mt-0.5 text-xs text-[#525866]">

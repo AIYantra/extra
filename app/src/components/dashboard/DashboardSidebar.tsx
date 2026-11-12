@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { ExtraLogoIcon } from "../ExtraLogo";
 import { APP_VERSION_LABEL, PRODUCT_BYLINE } from "../../utils/appMeta";
+import { useUpdateStore } from "../../store/useUpdateStore";
 import { ExtraAvatar } from "../ExtraAvatar";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -99,7 +100,7 @@ export function DashboardSidebar({
                     Extra
                   </h1>
                   <span className="text-[10px] font-mono text-[#868c98] leading-none">
-                    {APP_VERSION_LABEL}
+                    {useUpdateStore((s) => s.installedVersionLabel) || APP_VERSION_LABEL}
                   </span>
                 </div>
                 <p className="text-[10px] text-[#868c98] font-medium truncate mt-1 leading-none">

@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "extra-desktop",
   "display_name": "Extra — Computer Use Engine",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Flashless Windows, Mac & Linux desktop control for Claude Desktop and MCP agents.",
   "author": {
     "name": "yantraOS",
