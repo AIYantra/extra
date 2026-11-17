@@ -13,6 +13,11 @@ import multiprocessing
 from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+# Ensure extra src is in sys.path
+_src_cand = Path(__file__).resolve().parent.parent / "src"
+if _src_cand.exists() and str(_src_cand) not in sys.path:
+    sys.path.insert(0, str(_src_cand))
+
 # Force unbuffered stdout/stderr (and safely guard pythonw.exe where stdout/stderr are None)
 if sys.stdout is None:
     try:
@@ -214,16 +219,27 @@ _RELAY_THREAD = None
 _RELAY_RUNNING = False
 _RELAY_LOCK = threading.Lock()
 _RELAY_LOOP = None
+_ACTIVE_RELAY_TOKEN = None
 
 
 def start_background_relay(relay_token: str):
     """Maintains a background WebSocket tunnel to Extra Cloud Hub for ChatGPT, Claude, and Gemini."""
-    global _RELAY_THREAD, _RELAY_RUNNING, _RELAY_LOOP
+    global _RELAY_THREAD, _RELAY_RUNNING, _RELAY_LOOP, _ACTIVE_RELAY_TOKEN
     if not relay_token or relay_token == "anonymous":
         return
     with _RELAY_LOCK:
         if _RELAY_RUNNING and _RELAY_THREAD and _RELAY_THREAD.is_alive():
-            return
+            if _ACTIVE_RELAY_TOKEN == relay_token:
+                return
+            print(f"[ExtraApp] Relay passkey changed while running. Reconnecting...", flush=True)
+            if _RELAY_LOOP and _RELAY_LOOP.is_running():
+                try:
+                    _RELAY_LOOP.call_soon_threadsafe(_RELAY_LOOP.stop)
+                except Exception:
+                    pass
+            _RELAY_RUNNING = False
+
+        _ACTIVE_RELAY_TOKEN = relay_token
 
         def _relay_worker():
             global _RELAY_RUNNING, _RELAY_LOOP
@@ -1156,24 +1172,167 @@ def get_app_update_info(force: bool = False) -> dict:
     return result
 
 
-def perform_in_app_update() -> dict:
-    """Executes the official online installer in the background to seamlessly update Extra."""
+_UPDATE_STATUS_LOCK = threading.Lock()
+_UPDATE_STATUS = {
+    "state": "idle",  # "idle" | "checking" | "downloading" | "installing" | "restarting" | "completed" | "failed"
+    "progress_percent": 0,
+    "status_text": "Up to date",
+    "target_version": _RUNTIME_VER,
+    "error": None,
+    "started_at": None,
+    "completed_at": None,
+}
+
+
+def get_update_status() -> dict:
+    """Returns a snapshot of the current background update progress."""
+    with _UPDATE_STATUS_LOCK:
+        return dict(_UPDATE_STATUS)
+
+
+def _set_update_status(
+    state: str,
+    progress_percent: int,
+    status_text: str,
+    error: str = None,
+    target_version: str = None,
+):
+    with _UPDATE_STATUS_LOCK:
+        _UPDATE_STATUS["state"] = state
+        _UPDATE_STATUS["progress_percent"] = max(0, min(100, progress_percent))
+        _UPDATE_STATUS["status_text"] = status_text
+        if error is not None:
+            _UPDATE_STATUS["error"] = error
+        if target_version:
+            _UPDATE_STATUS["target_version"] = target_version
+        if state in ("completed", "failed"):
+            _UPDATE_STATUS["completed_at"] = time.time()
+
+
+def _run_update_worker(target_version: str = None):
+    """Background update execution worker supporting git, pip/uv, and standalone installers."""
     try:
-        if sys.platform == "win32":
-            ps_cmd = (
-                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
-                "$s = (Invoke-RestMethod -Uri 'https://extra.yantraos.com/install.ps1' -UseBasicParsing); "
-                "Invoke-Expression $s"
+        _set_update_status("downloading", 15, "Inspecting deployment environment...", target_version=target_version)
+        time.sleep(0.4)
+
+        repo_root = Path(__file__).resolve().parent.parent
+        git_cmd = shutil.which("git")
+        is_git_repo = (repo_root / ".git").exists() and git_cmd is not None
+        req_file = repo_root / "requirements.txt"
+
+        if is_git_repo:
+            _set_update_status("downloading", 35, "Pulling latest upstream updates from GitHub...")
+            try:
+                subprocess.run(
+                    [git_cmd, "-C", str(repo_root), "stash", "push", "-m", "extra-autoupdate-stash"],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+            except Exception:
+                pass
+
+            pull_res = subprocess.run(
+                [git_cmd, "-C", str(repo_root), "pull", "origin", "main"],
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
-            cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", ps_cmd]
-            proc = subprocess.Popen(cmd, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            return {"success": True, "pid": proc.pid, "message": "Windows signed runtime installer dispatched in background."}
+            if pull_res.returncode != 0:
+                print(f"  [UPDATE] Git pull notice: {pull_res.stderr.strip()}", flush=True)
+
+            _set_update_status("installing", 65, "Upgrading core Python dependencies...")
+            if req_file.exists():
+                subprocess.run(
+                    [sys.executable, "-m", "pip", "install", "--quiet", "--upgrade", "-r", str(req_file)],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "-e", str(repo_root)],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+
+        elif sys.prefix != sys.base_prefix or "site-packages" in str(Path(__file__).resolve()):
+            _set_update_status("installing", 60, "Upgrading extra-desktop package via pip...")
+            pip_res = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade", "extra-desktop"],
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+            if pip_res.returncode != 0:
+                uv_cmd = shutil.which("uv")
+                if uv_cmd:
+                    subprocess.run(
+                        [uv_cmd, "pip", "install", "--upgrade", "extra-desktop"],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                    )
+
         else:
-            cmd = "curl -sSL https://extra.yantraos.com/install.sh | bash"
-            proc = subprocess.Popen(cmd, shell=True)
-            return {"success": True, "pid": proc.pid, "message": "Unix installer dispatched in background."}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+            _set_update_status("downloading", 40, "Downloading official signed installer...")
+            if sys.platform == "win32":
+                ps_cmd = (
+                    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
+                    "$s = (Invoke-RestMethod -Uri 'https://extra.yantraos.com/install.ps1' -UseBasicParsing); "
+                    "Invoke-Expression $s"
+                )
+                cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", ps_cmd]
+                _set_update_status("installing", 75, "Applying signed Windows runtime update...")
+                subprocess.run(cmd, timeout=300)
+            else:
+                cmd = "curl -sSL https://extra.yantraos.com/install.sh | bash"
+                _set_update_status("installing", 75, "Applying signed Unix runtime update...")
+                subprocess.run(cmd, shell=True, timeout=300)
+
+        _set_update_status("restarting", 90, "Hot-reloading Extra engine daemon...")
+        try:
+            restart_extra_server(wait_sec=15.0)
+        except Exception:
+            pass
+
+        final_ver = target_version or _RUNTIME_VER
+        _set_update_status("completed", 100, f"Extra successfully updated to v{final_ver}!")
+
+        # Invalidate update check cache
+        _UPDATE_CACHE["data"] = None
+        _UPDATE_CACHE["ts"] = 0.0
+
+    except Exception as ex:
+        _set_update_status("failed", 0, "Update failed.", error=str(ex))
+
+
+def perform_in_app_update(target_version: str = None) -> dict:
+    """Dispatches background update worker with live progress tracking and zero freeze."""
+    with _UPDATE_STATUS_LOCK:
+        if _UPDATE_STATUS["state"] in ("checking", "downloading", "installing", "restarting"):
+            return {
+                "success": True,
+                "already_in_progress": True,
+                "status": dict(_UPDATE_STATUS),
+                "message": "Update already in progress.",
+            }
+        _UPDATE_STATUS["state"] = "checking"
+        _UPDATE_STATUS["progress_percent"] = 5
+        _UPDATE_STATUS["status_text"] = "Initiating update worker..."
+        _UPDATE_STATUS["error"] = None
+        _UPDATE_STATUS["started_at"] = time.time()
+        _UPDATE_STATUS["completed_at"] = None
+        if target_version:
+            _UPDATE_STATUS["target_version"] = target_version
+
+    worker = threading.Thread(target=_run_update_worker, args=(target_version,), daemon=True)
+    worker.start()
+    return {
+        "success": True,
+        "message": "Update worker dispatched in background.",
+        "status": get_update_status(),
+    }
 
 
 def get_operator_info():
@@ -1791,6 +1950,8 @@ class SPAHandler(SimpleHTTPRequestHandler):
         elif clean_path in ("/api/extra/update", "/api/update"):
             force = "force" in self.path
             return self._send_json(get_app_update_info(force=force))
+        elif clean_path in ("/api/extra/update/status", "/api/update/status"):
+            return self._send_json(get_update_status())
         elif clean_path in ("/api/extra/telemetry", "/api/telemetry"):
             return self._send_json(get_real_telemetry())
         elif clean_path in ("/api/extra/skills", "/api/skills"):
@@ -1945,6 +2106,19 @@ class SPAHandler(SimpleHTTPRequestHandler):
                 saved = save_stored_credentials(creds)
                 return self._send_json({"success": saved})
 
+        elif clean_path in ("/api/extra/update-passkey", "/api/update-passkey"):
+            passkey = req_data.get("passkey") or req_data.get("relay_token")
+            if passkey:
+                creds = get_stored_credentials()
+                creds["relay_token"] = passkey
+                if "user" in creds and isinstance(creds["user"], dict):
+                    creds["user"]["relay_token"] = passkey
+                    creds["user"]["token_rotated_at"] = int(time.time())
+                saved = save_stored_credentials(creds)
+                start_background_relay(passkey)
+                return self._send_json({"success": saved, "passkey": passkey})
+            return self._send_json({"success": False, "error": "No passkey provided"}, 400)
+
         elif clean_path in ("/api/extra/relay/start", "/api/relay/start"):
             creds = get_stored_credentials()
             r_tok = creds.get("relay_token") or (creds.get("user") or {}).get("relay_token")
@@ -1975,7 +2149,8 @@ class SPAHandler(SimpleHTTPRequestHandler):
             })
 
         elif clean_path in ("/api/extra/update/perform", "/api/update/perform"):
-            return self._send_json(perform_in_app_update())
+            target_ver = req_data.get("version") or req_data.get("target_version")
+            return self._send_json(perform_in_app_update(target_version=target_ver))
 
         if clean_path in ("/api/extra/engine/restart", "/api/engine/restart"):
             return self._send_json(restart_extra_server())
