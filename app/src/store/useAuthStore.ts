@@ -4,6 +4,7 @@ import {
   authClient,
   type ExtraUser,
 } from "../services/authClient";
+import { extraDataService } from "../services/extraDataService";
 
 interface AuthStoreState {
   user: ExtraUser | null;
@@ -23,7 +24,8 @@ interface AuthStoreState {
   reopenOnboarding: () => void;
   openAuthModal: () => void;
   closeAuthModal: () => void;
-  updatePasskey: (newPasskey: string) => void;
+  updatePasskey: (newPasskey: string, tokenRotatedAt?: number) => void;
+  rotatePasskey: () => Promise<string>;
   refreshProfile: () => Promise<void>;
   logout: () => void;
   setError: (error: string | null) => void;
@@ -84,21 +86,39 @@ export const useAuthStore = create<AuthStoreState>()(
         set({ isAuthModalOpen: true, isOnboardingDismissed: false });
       },
 
-      updatePasskey: (newPasskey: string) => {
+      updatePasskey: (newPasskey: string, tokenRotatedAt?: number) => {
         const currentUser = get().user;
         const currentToken = get().token;
         if (currentUser && currentToken) {
           const updatedUser: ExtraUser = {
             ...currentUser,
             relay_token: newPasskey,
-            token_rotated_at: Math.floor(Date.now() / 1000),
+            token_rotated_at: tokenRotatedAt || Math.floor(Date.now() / 1000),
           };
           authClient.saveSessionLocally(currentToken, updatedUser);
           authClient.syncToLocalDaemon(currentToken, updatedUser).catch(() => {});
+          extraDataService.startRelay(newPasskey).catch(() => {});
           set({
             user: updatedUser,
             relayToken: newPasskey,
           });
+        }
+      },
+
+      rotatePasskey: async (): Promise<string> => {
+        const currentToken = get().token;
+        if (!currentToken) {
+          throw new Error("Not authenticated. Please sign in first.");
+        }
+        set({ isLoading: true, error: null });
+        try {
+          const res = await authClient.rotateRelayPasskey(currentToken);
+          get().updatePasskey(res.relay_token, res.token_rotated_at);
+          set({ isLoading: false });
+          return res.relay_token;
+        } catch (err: any) {
+          set({ isLoading: false, error: err.message || "Failed to rotate passkey" });
+          throw err;
         }
       },
 
@@ -109,9 +129,19 @@ export const useAuthStore = create<AuthStoreState>()(
         try {
           const user = await authClient.fetchProfile(token);
           if (user) {
+            authClient.saveSessionLocally(token, user);
+            authClient.syncToLocalDaemon(token, user).catch(() => {});
+
+            const oldRelayToken = get().relayToken;
+            const newRelayToken = user.relay_token || null;
+            if (newRelayToken && newRelayToken !== oldRelayToken) {
+              console.log("[useAuthStore] Detected updated relay passkey from cloud:", newRelayToken.slice(0, 14) + "...");
+              extraDataService.startRelay(newRelayToken).catch(() => {});
+            }
+
             set({
               user,
-              relayToken: user.relay_token || null,
+              relayToken: newRelayToken,
               isAuthenticated: true,
               isLoading: false,
             });
@@ -135,6 +165,8 @@ export const useAuthStore = create<AuthStoreState>()(
 
       logout: () => {
         authClient.clearSessionLocally();
+        extraDataService.stopRelay().catch(() => {});
+        authClient.syncToLocalDaemon("", { id: "", email: "", plan: "community", is_local_mode: true } as any).catch(() => {});
         set({
           user: null,
           token: null,
@@ -161,6 +193,8 @@ export const useAuthStore = create<AuthStoreState>()(
               isAuthenticated: true,
               isLocalOfflineMode: false,
             });
+            // Automatically refresh profile from cloud in background to reconcile any keys rotated on web!
+            get().refreshProfile().catch(() => {});
           }
         } catch (e) {
           console.warn("[useAuthStore] Secure credential hydration error:", e);

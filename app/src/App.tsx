@@ -15,6 +15,33 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // When window regains focus or becomes visible, reconcile auth state with cloud
+    const handleReconcile = () => {
+      const state = useAuthStore.getState();
+      if (state.isAuthenticated && state.token) {
+        state.refreshProfile().catch(() => {});
+      }
+    };
+
+    window.addEventListener("focus", handleReconcile);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleReconcile();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Reconcile on periodic 60s background pulse
+    const interval = window.setInterval(handleReconcile, 60 * 1000);
+
+    return () => {
+      window.removeEventListener("focus", handleReconcile);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
     void useUpdateStore.getState().autoCheckIfDue();
     const timer = window.setInterval(() => {
       void useUpdateStore.getState().autoCheckIfDue();

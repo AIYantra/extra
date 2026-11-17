@@ -24,7 +24,7 @@ function planLabel(plan?: string | null) {
 }
 
 export function ProfileView() {
-  const { user, relayToken, logout, openAuthModal, refreshProfile } = useAuthStore();
+  const { user, relayToken, logout, openAuthModal, rotatePasskey } = useAuthStore();
   const [showRelay, setShowRelay] = useState(false);
   const [copied, setCopied] = useState(false);
   const [rotating, setRotating] = useState(false);
@@ -90,8 +90,7 @@ export function ProfileView() {
     setArmRotate(false);
     setRotating(true);
     try {
-      await authClient.rotateRelayPasskey();
-      await refreshProfile();
+      await rotatePasskey();
       soundEngine.playSuccessChime();
       toast.success("New passkey generated and saved. Old keys stop working now.");
     } catch (err: any) {
@@ -209,9 +208,14 @@ export function ProfileView() {
               {rotating ? "Rotating" : armRotate ? "Confirm rotate?" : "Rotate"}
             </button>
           </div>
-          <p className="text-[11px] text-[#868c98] mt-2.5 leading-relaxed">
-            Rotating mints a fresh key and saves it to this machine. Old keys stop working immediately.
-          </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-[#868c98] mt-2.5 leading-relaxed">
+            <span>Rotating mints a fresh key and saves it to this machine. Old keys stop working immediately.</span>
+            {user.token_rotated_at && (
+              <span className="font-mono text-[10px] text-[#525866] shrink-0">
+                Rotated: {new Date(user.token_rotated_at * 1000).toLocaleString()}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Paired devices */}

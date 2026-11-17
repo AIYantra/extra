@@ -235,6 +235,7 @@ async def run_relay_loop(
     device_id: Optional[str] = None,
     device_name: Optional[str] = None,
     reconnect_delay: float = 3.0,
+    on_state_change: Optional[Any] = None,
 ) -> None:
     """
     Main background event loop maintaining the outbound WebSocket relay.
@@ -259,6 +260,11 @@ async def run_relay_loop(
         try:
             logger.info("Connecting to Extra Cloud Hub: %s...", hub_url)
             print(f"[*] Connecting to Extra Cloud Hub ({device_name})...", flush=True)
+            if on_state_change:
+                try:
+                    on_state_change("connecting", None)
+                except Exception:
+                    pass
 
             async with websockets.connect(encoded_url) as ws:
                 banner = f"""
@@ -275,6 +281,11 @@ async def run_relay_loop(
 """
                 print(banner, flush=True)
                 logger.info("Connected to relay hub successfully as %s", device_name)
+                if on_state_change:
+                    try:
+                        on_state_change("connected", None)
+                    except Exception:
+                        pass
 
                 # Keep heartbeat & message listener
                 while True:
@@ -326,13 +337,28 @@ async def run_relay_loop(
         except (websockets.ConnectionClosed, ConnectionResetError, OSError) as e:
             logger.warning("Relay connection lost: %s. Reconnecting in %ss...", e, reconnect_delay)
             print(f"[!] Connection dropped. Reconnecting in {reconnect_delay}s...", flush=True)
+            if on_state_change:
+                try:
+                    on_state_change("reconnecting", str(e))
+                except Exception:
+                    pass
             await asyncio.sleep(reconnect_delay)
         except asyncio.CancelledError:
             logger.info("Relay loop cancelled, shutting down.")
+            if on_state_change:
+                try:
+                    on_state_change("stopped", None)
+                except Exception:
+                    pass
             break
         except Exception as e:
             logger.error("Unexpected error in relay loop: %s", e)
             print(f"[!] Relay error: {e}. Reconnecting in {reconnect_delay}s...", flush=True)
+            if on_state_change:
+                try:
+                    on_state_change("reconnecting", str(e))
+                except Exception:
+                    pass
             await asyncio.sleep(reconnect_delay)
 
 

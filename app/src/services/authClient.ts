@@ -143,32 +143,72 @@ class AuthClient {
     }
   }
 
+  private inMemoryToken: string | null = null;
+
+  setInMemoryToken(token: string | null) {
+    this.inMemoryToken = token;
+  }
+
   /**
-   * Mint a fresh relay passkey from the cloud, then persist it locally.
-   * Returns the new passkey.
+   * Generates a new Extra Passkey (relay_token) from the cloud and persists it everywhere locally.
+   * Calls /api/auth/rotate-token, saves to DPAPI + localStorage, syncs to local daemon,
+   * and triggers local runtime reconnection.
    */
-  async rotateRelayPasskey(): Promise<string> {
-    const token = this.getLocalToken();
+  async rotateRelayPasskey(overrideToken?: string): Promise<{
+    success: boolean;
+    relay_token: string;
+    token_rotated_at: number;
+    message: string;
+  }> {
+    const token = overrideToken || this.getLocalToken();
     if (!token) {
       throw new Error("Not authenticated. Please sign in first.");
     }
-    const gen = await fetch(`${this.apiBase}/api/auth/generate-passkey`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const res = await fetch(`${this.apiBase}/api/auth/rotate-token`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
     });
-    const genData = await gen.json().catch(() => ({}));
-    if (!gen.ok || !genData.success || !genData.passkey) {
-      throw new Error(genData.error || "Could not generate a new passkey.");
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success || !data.relay_token) {
+      throw new Error(data.error || "Could not rotate computer link key.");
     }
-    const save = await fetch("/api/extra/update-passkey", {
+
+    const newPasskey = data.relay_token as string;
+    const rotatedAt = Number(data.token_rotated_at) || Math.floor(Date.now() / 1000);
+
+    // Update locally cached user and secure DPAPI store
+    const user = this.getLocalCachedUser() || ({ id: "", email: "", plan: "community" } as any);
+    user.relay_token = newPasskey;
+    user.token_rotated_at = rotatedAt;
+
+    this.saveSessionLocally(token, user);
+    this.syncToLocalDaemon(token, user).catch(() => {});
+
+    // Also notify local app runtime
+    fetch("/api/extra/update-passkey", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ passkey: genData.passkey as string }),
-    });
-    const saveData = await save.json().catch(() => ({}));
-    if (!save.ok || !saveData.success) {
-      throw new Error(saveData.error || "Could not save the new passkey locally.");
-    }
-    return genData.passkey as string;
+      body: JSON.stringify({ passkey: newPasskey }),
+    }).catch(() => {});
+
+    return {
+      success: true,
+      relay_token: newPasskey,
+      token_rotated_at: rotatedAt,
+      message: data.message || "Computer link key rotated successfully.",
+    };
+  }
+
+  /**
+   * Alias for rotateRelayPasskey
+   */
+  async rotatePasskey(token: string): Promise<{ success: boolean; relay_token: string; token_rotated_at?: number }> {
+    return this.rotateRelayPasskey(token);
   }
 
   /**
@@ -331,6 +371,7 @@ class AuthClient {
       const data = await res.json();
       if (data.success && data.user) {
         this.saveSessionLocally(token, data.user);
+        this.syncToLocalDaemon(token, data.user).catch(() => {});
         return data.user;
       }
       return null;
@@ -338,35 +379,6 @@ class AuthClient {
       console.warn("[AuthClient] fetchProfile offline, returning local cache:", err);
       return this.getLocalCachedUser();
     }
-  }
-
-  /**
-   * Generates a new Extra Passkey (relay_token) in one tap.
-   */
-  async rotatePasskey(token: string): Promise<{ success: boolean; relay_token: string }> {
-    const res = await fetch(`${this.apiBase}/api/auth/rotate-token`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || "Failed to generate new passkey.");
-    }
-
-    // Update locally cached user
-    const user = this.getLocalCachedUser();
-    if (user) {
-      user.relay_token = data.relay_token;
-      this.saveSessionLocally(token, user);
-      this.syncToLocalDaemon(token, user).catch(() => {});
-    }
-
-    return data;
   }
 
   /**
@@ -452,6 +464,7 @@ class AuthClient {
   saveSessionLocally(token: string, user: ExtraUser): void {
     if (typeof window === "undefined") return;
     try {
+      this.inMemoryToken = token;
       // Encrypt and persist credentials to Windows DPAPI protected storage
       fetch("/api/extra/credentials", {
         method: "POST",
@@ -472,6 +485,7 @@ class AuthClient {
           username: user.username,
           plan: user.plan,
           relay_token: user.relay_token || "",
+          token_rotated_at: user.token_rotated_at,
         })
       );
     } catch (e) {
@@ -485,6 +499,9 @@ class AuthClient {
       if (res.ok) {
         const data = await res.json();
         if (data && (data.token || data.user)) {
+          if (data.token) {
+            this.inMemoryToken = data.token;
+          }
           return data;
         }
       }
@@ -493,6 +510,7 @@ class AuthClient {
   }
 
   getLocalToken(): string | null {
+    if (this.inMemoryToken) return this.inMemoryToken;
     if (typeof window === "undefined") return null;
     try {
       return localStorage.getItem(STORAGE_TOKEN_KEY);
@@ -512,6 +530,7 @@ class AuthClient {
   }
 
   clearSessionLocally(): void {
+    this.inMemoryToken = null;
     if (typeof window === "undefined") return;
     try {
       fetch("/api/extra/credentials", {

@@ -3,6 +3,8 @@
  * Queries live telemetry, real skills playbooks, connected clients, session logs, and doctor diagnostics.
  */
 
+import { telemetryClient } from "./telemetryClient";
+
 export interface ActivityChartItem {
   id: string;
   label: string;
@@ -148,6 +150,30 @@ export interface MemoryGraphData {
   };
   quirks: RealQuirk[];
   decisions: RealSoulDecision[];
+}
+
+export interface LiveRelayStatus {
+  running: boolean;
+  status: "stopped" | "connecting" | "connected" | "reconnecting" | "disabled";
+  connected: boolean;
+  token_configured: boolean;
+  device_name: string;
+  hub_url: string;
+  cloud_mcp_url: string | null;
+  cloud_sse_url: string;
+  last_heartbeat: number;
+  last_error: string | null;
+}
+
+export interface AutostartInfo {
+  supported: boolean;
+  enabled: boolean;
+  current_command?: string;
+  command?: string;
+  recommended_command?: string;
+  registry_key?: string;
+  success?: boolean;
+  error?: string;
 }
 
 export interface CloudRelayInfo {
@@ -584,6 +610,106 @@ export class ExtraDataService {
     }
     window.open(url, "_blank");
     return true;
+  }
+
+  async fetchRelayStatus(): Promise<LiveRelayStatus> {
+    try {
+      const headers = await telemetryClient.authHeaders();
+      const res = await fetch("http://127.0.0.1:8000/api/relay/status", { headers });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      // daemon standby fallback
+    }
+    return {
+      running: false,
+      status: "stopped",
+      connected: false,
+      token_configured: false,
+      device_name: "Local Workstation",
+      hub_url: "wss://extra.yantraos.com",
+      cloud_mcp_url: null,
+      cloud_sse_url: "https://extra.yantraos.com/sse",
+      last_heartbeat: 0,
+      last_error: null,
+    };
+  }
+
+  async startRelay(relayToken?: string): Promise<{ success: boolean; status?: LiveRelayStatus }> {
+    try {
+      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
+      const res = await fetch("http://127.0.0.1:8000/api/relay/start", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ relay_token: relayToken }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn("[ExtraDataService] startRelay error:", e);
+    }
+    return { success: false };
+  }
+
+  async stopRelay(): Promise<boolean> {
+    try {
+      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
+      const res = await fetch("http://127.0.0.1:8000/api/relay/stop", {
+        method: "POST",
+        headers,
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async pingRelay(): Promise<{ ok: boolean; latency_ms: number; error?: string }> {
+    try {
+      const t0 = performance.now();
+      const headers = await telemetryClient.authHeaders();
+      const res = await fetch("http://127.0.0.1:8000/api/relay/ping", { headers });
+      const elapsed = Math.round(performance.now() - t0);
+      if (res.ok) {
+        const data = await res.json();
+        return { ok: !!data.ok, latency_ms: data.latency_ms || elapsed };
+      }
+    } catch (e: any) {
+      return { ok: false, latency_ms: 0, error: e?.message || "Unreachable" };
+    }
+    return { ok: false, latency_ms: 0, error: "Cloud hub ping failed" };
+  }
+
+  async fetchAutostartStatus(): Promise<AutostartInfo> {
+    try {
+      const headers = await telemetryClient.authHeaders();
+      const res = await fetch("http://127.0.0.1:8000/api/autostart", { headers });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn("[ExtraDataService] fetchAutostartStatus error:", e);
+    }
+    return { supported: true, enabled: false };
+  }
+
+  async setAutostart(enabled: boolean, minimized: boolean = true): Promise<AutostartInfo> {
+    try {
+      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
+      const res = await fetch("http://127.0.0.1:8000/api/autostart", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ enabled, minimized }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn("[ExtraDataService] setAutostart error:", e);
+    }
+    return { supported: true, enabled };
   }
 }
 

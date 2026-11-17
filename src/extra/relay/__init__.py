@@ -22,6 +22,7 @@ from extra.relay.tunnel import (
     start_tunnel,
     stop_tunnel,
 )
+from extra.relay.manager import RelayManager
 
 __all__ = [
     "DEFAULT_ALLOWED_RELAY_TOOLS",
@@ -32,6 +33,7 @@ __all__ = [
     "register_tool_executor",
     "run_relay_loop",
     "start_relay",
+    "RelayManager",
     "ensure_cloudflared_installed",
     "find_cloudflared_binary",
     "format_chatgpt_banner",
