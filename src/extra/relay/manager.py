@@ -110,7 +110,7 @@ class RelayManager:
             except Exception:
                 pass
 
-    def start(self, token: Optional[str] = None, device_name: Optional[str] = None) -> bool:
+    def start(self, token: Optional[str] = None, device_name: Optional[str] = None, force: bool = False) -> bool:
         """
         Starts the background WebSocket relay tunnel.
         """
@@ -136,13 +136,30 @@ class RelayManager:
             if device_name:
                 self._device_name = device_name
 
-            if self._running and self._thread and self._thread.is_alive():
-                if token_changed:
-                    logger.info("RelayManager token changed while running; restarting tunnel...")
-                    self._stop_locked()
-                else:
-                    logger.info("RelayManager already running.")
-                    return True
+            # Check if running and already connected with the same token
+            is_active = self._running and self._thread and self._thread.is_alive()
+            needs_restart = (
+                not is_active
+                or token_changed
+                or force
+                or self._status != "connected"
+            )
+
+            if not needs_restart:
+                logger.info("RelayManager already running and connected.")
+                return True
+
+            if is_active:
+                logger.info("RelayManager restarting tunnel (token_changed=%s, status=%s)...", token_changed, self._status)
+                self._stop_locked()
+
+            # Wait briefly for old thread to finish if still alive to prevent state race condition
+            old_thread = self._thread
+            if old_thread and old_thread.is_alive() and threading.current_thread() != old_thread:
+                try:
+                    old_thread.join(timeout=1.0)
+                except Exception:
+                    pass
 
             self._running = True
             self._status = "connecting"

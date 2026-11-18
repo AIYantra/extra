@@ -2115,6 +2115,31 @@ class SPAHandler(SimpleHTTPRequestHandler):
                     creds["user"]["relay_token"] = passkey
                     creds["user"]["token_rotated_at"] = int(time.time())
                 saved = save_stored_credentials(creds)
+                # Also update config.json and notify local MCP daemon on port 8000
+                try:
+                    cfg_path = Path.home() / ".extra" / "config.json"
+                    if cfg_path.exists():
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            cfg_data = json.load(f)
+                    else:
+                        cfg_data = {}
+                    cfg_data["relay_token"] = passkey
+                    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(cfg_path, "w", encoding="utf-8") as f:
+                        json.dump(cfg_data, f, indent=2)
+                except Exception as ce:
+                    print(f"[ExtraApp] Error updating config.json: {ce}", flush=True)
+
+                try:
+                    sync_req = urllib.request.Request(
+                        "http://127.0.0.1:8000/api/relay/start",
+                        data=json.dumps({"relay_token": passkey}).encode("utf-8"),
+                        headers={"Content-Type": "application/json", "Authorization": f"Bearer {EXTRA_LOOPBACK_TOKEN}"}
+                    )
+                    urllib.request.urlopen(sync_req, timeout=1.5)
+                except Exception:
+                    pass
+
                 start_background_relay(passkey)
                 return self._send_json({"success": saved, "passkey": passkey})
             return self._send_json({"success": False, "error": "No passkey provided"}, 400)

@@ -249,15 +249,29 @@ async def run_relay_loop(
     if not device_name:
         device_name = get_default_device_name()
 
-    params = {
-        "token": token,
-        "device_id": device_id,
-        "device_name": device_name,
-    }
-    encoded_url = f"{hub_url}?{urllib.parse.urlencode(params)}"
+    from pathlib import Path
 
+    current_token = token
     while True:
         try:
+            # Dynamically check if ~/.extra/config.json has an updated passkey (e.g. rotated on web or in app)
+            try:
+                cfg_path = Path.home() / ".extra" / "config.json"
+                if cfg_path.exists():
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        disk_cfg = json.load(f)
+                    disk_token = disk_cfg.get("relay_token")
+                    if disk_token and disk_token != "anonymous" and len(disk_token) > 10:
+                        current_token = disk_token
+            except Exception:
+                pass
+
+            params = {
+                "token": current_token,
+                "device_id": device_id,
+                "device_name": device_name,
+            }
+            encoded_url = f"{hub_url}?{urllib.parse.urlencode(params)}"
             logger.info("Connecting to Extra Cloud Hub: %s...", hub_url)
             print(f"[*] Connecting to Extra Cloud Hub ({device_name})...", flush=True)
             if on_state_change:
@@ -352,11 +366,16 @@ async def run_relay_loop(
                     pass
             break
         except Exception as e:
-            logger.error("Unexpected error in relay loop: %s", e)
-            print(f"[!] Relay error: {e}. Reconnecting in {reconnect_delay}s...", flush=True)
+            err_str = str(e)
+            if "403" in err_str:
+                logger.warning("Relay connection rejected (HTTP 403 Forbidden). Token may be invalid or rotated; rechecking local configuration...")
+                print(f"[!] Relay passkey rejected (HTTP 403 Forbidden). Rechecking local config in {reconnect_delay}s...", flush=True)
+            else:
+                logger.error("Unexpected error in relay loop: %s", e)
+                print(f"[!] Relay error: {e}. Reconnecting in {reconnect_delay}s...", flush=True)
             if on_state_change:
                 try:
-                    on_state_change("reconnecting", str(e))
+                    on_state_change("reconnecting", err_str)
                 except Exception:
                     pass
             await asyncio.sleep(reconnect_delay)
