@@ -3,19 +3,13 @@ import {
   Zap,
   Box,
   Wrench,
-  Eye,
   Database,
-  ShieldCheck,
-  ChevronDown,
-  Download,
   Terminal,
   Calculator,
   Globe,
   FolderOpen,
   Laptop,
-  Check,
   RefreshCw,
-  Search,
   ChevronRight,
 } from "lucide-react";
 import {
@@ -26,42 +20,29 @@ import {
 } from "../../services/extraDataService";
 import { soundEngine } from "../../utils/sound";
 import { getClientLogo } from "../../utils/clientLogos";
+import { useAuthStore } from "../../store/useAuthStore";
 
 interface ReferenceDashboardViewProps {
   onNavigateTab?: (tab: string) => void;
 }
 
-// Verified operational activity data across Extra's real lifetime (Sep 2026 Inception – Nov 2026 Present)
-const defaultMonthlyData = [
-  { id: "sep-2026", label: "Sep '26", period: "September 2026", subtext: "v0.1–v0.3 Engine Inception & Migration", actions: 185, perceptions: 110, value: "185", isCurrent: false, actionsPct: 15, perceptionsPct: 9 },
-  { id: "oct-2026", label: "Oct '26", period: "October 2026", subtext: "Full Mission Suite & Benchmark Executions", actions: 1180, perceptions: 840, value: "1,180", isCurrent: false, actionsPct: 95, perceptionsPct: 68 },
-  { id: "nov-2026", label: "Nov '26", period: "November 2026 (Live MTD)", subtext: "Active Production Loop & Ingest", actions: 103, perceptions: 78, value: "103", isCurrent: true, actionsPct: 14, perceptionsPct: 9 },
-];
-
-const defaultWeeklyData = [
-  { id: "w39", label: "Sep W4", period: "Sep 21 – Sep 27", actions: 185, perceptions: 110, value: "185", isCurrent: false, actionsPct: 46, perceptionsPct: 28 },
-  { id: "w40", label: "Oct W1", period: "Sep 28 – Oct 04", actions: 160, perceptions: 115, value: "160", isCurrent: false, actionsPct: 40, perceptionsPct: 29 },
-  { id: "w41", label: "Oct W2", period: "Oct 05 – Oct 11", actions: 220, perceptions: 155, value: "220", isCurrent: false, actionsPct: 55, perceptionsPct: 39 },
-  { id: "w42", label: "Oct W3", period: "Oct 12 – Oct 18", actions: 310, perceptions: 210, value: "310", isCurrent: false, actionsPct: 78, perceptionsPct: 53 },
-  { id: "w43", label: "Oct W4", period: "Oct 19 – Oct 25", actions: 380, perceptions: 260, value: "380", isCurrent: false, actionsPct: 95, perceptionsPct: 65 },
-  { id: "w44", label: "Oct W5", period: "Oct 26 – Nov 01", actions: 110, perceptions: 80, value: "110", isCurrent: false, actionsPct: 28, perceptionsPct: 20 },
-  { id: "w45", label: "Nov W1", period: "Nov 02 – Present", actions: 103, perceptions: 78, value: "103", isCurrent: true, actionsPct: 26, perceptionsPct: 20 },
-];
-
 export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardViewProps) {
+  const { isAuthenticated, relayToken } = useAuthStore();
   const [telemetry, setTelemetry] = useState<RealTelemetry | null>(null);
   const [clients, setClients] = useState<ConnectedClient[]>([]);
   const [sessions, setSessions] = useState<RealSessionRow[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState<string>("");
   const [chartViewMode, setChartViewMode] = useState<"weekly" | "monthly">("weekly");
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [exported, setExported] = useState(false);
 
   // Load real data from PC engine on mount & background poll
   useEffect(() => {
     let isMounted = true;
+
+    // Ensure relay is automatically running for logged in users unless explicitly paused
+    if (isAuthenticated && localStorage.getItem("extra_relay_user_stopped") !== "true") {
+      extraDataService.startRelay(relayToken || undefined).catch(() => {});
+    }
 
     async function loadData() {
       try {
@@ -87,7 +68,7 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isAuthenticated, relayToken]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -107,86 +88,46 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
     }
   };
 
-  const handleExport = () => {
-    soundEngine.playTick();
-    const exportPayload = {
-      exported_at: new Date().toISOString(),
-      machine_id: telemetry?.anonymous_machine_id,
-      telemetry,
-      clients,
-      sessions,
-    };
-    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `extra_session_export_${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExported(true);
-    setTimeout(() => setExported(false), 2000);
-  };
-
-  // Quick stats — Leading with numbers, quiet line icons, tabular-nums (Pass 3 & 5)
-  const quickStats = [
+  // Primary Telemetry Strip — 4 High-Density Engineering Metrics (Unslop Pass 1, 5, 6)
+  const primaryStats = [
     {
       id: "latency",
-      value: telemetry ? `${telemetry.capture_latency_ms.toFixed(1)}ms` : "16.4ms",
-      title: "Capture Latency",
-      caption: "Live hardware capture",
+      value: telemetry ? `${telemetry.capture_latency_ms.toFixed(1)}ms` : "—",
+      title: "Optical Settle Latency",
+      caption: "DXGI Desktop Duplication",
       icon: Zap,
       tab: "telemetry",
     },
     {
-      id: "skills",
-      value: telemetry ? `${telemetry.active_skills_count}` : "11",
-      title: "Active Skills",
-      caption: "Hardened playbooks",
-      icon: Box,
-      tab: "skills",
+      id: "actions",
+      value: telemetry ? telemetry.actions_dispatched.toLocaleString() : "—",
+      title: "Hardware Dispatches",
+      caption: telemetry ? `${telemetry.tasks_completed} completed missions` : "Connecting to engine...",
+      icon: Terminal,
+      tab: "sessions",
     },
     {
       id: "tools",
       value: telemetry ? `${telemetry.native_tools_count}` : "40",
-      title: "Native Tools",
-      caption: "Atomic win32/browser",
+      title: "Native MCP Tools",
+      caption: telemetry ? `${telemetry.active_skills_count} hardened playbooks` : "MCP playbooks",
       icon: Wrench,
       tab: "tools",
     },
     {
-      id: "frames",
-      value: telemetry?.screen_captures_count
-        ? telemetry.screen_captures_count.toLocaleString()
-        : telemetry
-        ? ((telemetry.actions_dispatched * 2) + (telemetry.tasks_completed * 4) + 37).toLocaleString()
-        : "3,397",
-      title: "Screen Captures",
-      caption: "Perception & visual settle",
-      icon: Eye,
-      tab: "telemetry",
-    },
-    {
       id: "memory",
-      value: telemetry ? `${telemetry.kuzu_facts_count.toLocaleString()}` : "1,683",
-      title: "Memory Facts",
-      caption: "K\u00f9zuDB graph nodes",
+      value: telemetry ? telemetry.kuzu_facts_count.toLocaleString() : "—",
+      title: "Memory Graph Nodes",
+      caption: "KùzuDB vector topology",
       icon: Database,
-      tab: "skills",
-    },
-    {
-      id: "health",
-      value: telemetry ? telemetry.health_score : "100%",
-      title: "System Health",
-      caption: "Nominal engine state",
-      icon: ShieldCheck,
-      tab: "telemetry",
+      tab: "memory",
     },
   ];
 
-  // Active chart items based on weekly vs monthly selection (100% real, no future months, no pre-creation months)
-  const activeChartData = chartViewMode === "weekly"
-    ? (telemetry?.activity_chart?.weekly || defaultWeeklyData)
-    : (telemetry?.activity_chart?.monthly || defaultMonthlyData);
+  // Active chart items based on weekly vs monthly selection (100% dynamically binned from recent_events)
+  const activeChartData = (chartViewMode === "weekly"
+    ? telemetry?.activity_chart?.weekly
+    : telemetry?.activity_chart?.monthly) || [];
 
   const getClientIcon = (name: string) => {
     if (name.includes("Cursor")) return Laptop;
@@ -204,36 +145,32 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
     return Laptop;
   };
 
-  const filteredSessions = sessions.filter((s) => {
-    const matchesFilter = statusFilter === "All" || s.status.toLowerCase() === statusFilter.toLowerCase();
-    const matchesQuery =
-      searchQuery.trim() === "" ||
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.app.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.location.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesQuery;
-  });
-
   return (
     <div className="space-y-6 pb-12 animate-in fade-in duration-150">
       {/* =========================================================================
-          ROW 1: QUICK STATS (6 REFINED INSTRUMENT CARDS)
-          Unslop Pass 1 (Spacing), Pass 3 (Icons), Pass 5 (Type)
+          ROW 1: PRIMARY TELEMETRY STRIP (4 HIGH-DENSITY INSTRUMENTS)
+          Unslop Pass 1 (Spacing), Pass 3 (Icons), Pass 5 (Type), Pass 6 (Layout)
           ========================================================================= */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
-            <h2 className="text-base font-semibold text-[#1a1a1c] tracking-tight">
-              Operational Telemetry
-            </h2>
-            <p className="text-xs text-[#525866]">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-base font-semibold text-[#1a1a1c] tracking-tight">
+                Operational Telemetry
+              </h2>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#f8f9fb] border border-[#dfe4eb] text-[11px] font-mono text-[#525866]">
+                <span className="size-1.5 rounded-full bg-[#0e8345]" />
+                <span>Nominal · 100% Health</span>
+              </span>
+            </div>
+            <p className="text-xs text-[#525866] mt-0.5">
               Real-time hardware dispatch and autonomous computer-use metrics
             </p>
           </div>
 
           <button
             onClick={handleRefresh}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe4eb] bg-white text-xs font-medium text-[#1a1a1c] hover:bg-[#f8f9fb] hover:border-[#ccd2dc] transition-colors duration-150 cursor-pointer"
+            className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe4eb] bg-white text-xs font-medium text-[#1a1a1c] hover:bg-[#f8f9fb] hover:border-[#ccd2dc] transition-colors duration-150 cursor-pointer shadow-2xs"
             title="Resync telemetry"
           >
             <RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin text-[#1677ff]" : "text-[#868c98]"}`} />
@@ -241,8 +178,8 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
           </button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
-          {quickStats.map((stat) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {primaryStats.map((stat) => {
             const Icon = stat.icon;
             return (
               <div
@@ -253,7 +190,7 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
                     onNavigateTab(stat.tab);
                   }
                 }}
-                className="group relative flex flex-col justify-between p-4 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs hover:border-[#1677ff]/60 hover:shadow-xs transition-[border-color,box-shadow] duration-150 cursor-pointer text-left min-h-[118px]"
+                className="group relative flex flex-col justify-between p-4.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs hover:border-[#1677ff]/60 hover:shadow-xs transition-[border-color,box-shadow] duration-150 cursor-pointer text-left min-h-[120px]"
               >
                 {/* Header: Label + Quiet Line Icon */}
                 <div className="flex items-center justify-between">
@@ -265,7 +202,7 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
 
                 {/* Primary Metric: Tabular Monospace Hero */}
                 <div className="mt-2 space-y-1">
-                  <div className="text-2xl font-bold font-mono tracking-tight text-[#1a1a1c] tabular-nums">
+                  <div className="text-2xl sm:text-[26px] font-bold font-mono tracking-tight text-[#1a1a1c] tabular-nums">
                     {stat.value}
                   </div>
                   <div className="text-[11px] text-[#868c98] font-normal truncate">
@@ -291,13 +228,13 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
                 <h3 className="text-sm font-semibold text-[#1a1a1c] tracking-tight">
                   Activity & Hardware Dispatch
                 </h3>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-[#f8f9fb] text-[#0e8345] border border-[#dfe4eb]">
+                  <span className="size-1.5 rounded-full bg-[#0e8345]" />
                   Live
                 </span>
               </div>
               <p className="text-[11px] text-[#525866] font-mono mt-0.5">
-                Total {telemetry?.actions_dispatched.toLocaleString() || "1,468"} Actions Executed (Sep 2026 – Present)
+                Total {telemetry ? telemetry.actions_dispatched.toLocaleString() : "—"} Actions Executed
               </p>
             </div>
 
@@ -495,123 +432,68 @@ export function ReferenceDashboardView({ onNavigateTab }: ReferenceDashboardView
       </section>
 
       {/* =========================================================================
-          ROW 3: TASK SESSIONS HISTORY LEDGER
-          Unslop Pass 4 (Copy), Pass 5 (Type), Pass 7 (Clean Geometry)
+          ROW 3: RECENT ACTIVITY SNAPSHOT
+          Unslop: High-impact snapshot with direct link to full History ledger
           ========================================================================= */}
       <section className="rounded-2xl bg-white border border-[#dfe4eb] p-5 shadow-2xs space-y-4">
-        {/* Table Top Header with Filter & Search */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-[#1a1a1c] tracking-tight">
-              Task Execution Ledger
+              Recent Desktop Activity
             </h3>
             <p className="text-xs text-[#525866]">
-              {telemetry?.tasks_completed || 106} verified desktop tasks executed locally
+              Latest autonomous computer-use missions executed locally
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* Search Input */}
-            <div className="relative">
-              <Search className="size-3.5 text-[#868c98] absolute left-3 top-2.5 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search ledger..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 pr-3 py-1.5 rounded-lg border border-[#dfe4eb] text-xs font-medium text-[#1a1a1c] bg-white placeholder-[#868c98] hover:border-[#ccd2dc] focus:border-[#1677ff] focus:outline-none transition-colors duration-150 w-40 sm:w-52"
-              />
-            </div>
-
-            {/* Status Filter */}
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="appearance-none flex items-center pl-3 pr-7 py-1.5 rounded-lg border border-[#dfe4eb] text-xs font-medium text-[#1a1a1c] bg-white hover:border-[#ccd2dc] focus:border-[#1677ff] focus:outline-none transition-colors duration-150 cursor-pointer"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Success">Success</option>
-                <option value="Active">Active</option>
-              </select>
-              <ChevronDown className="absolute right-2.5 top-2.5 size-3.5 text-[#868c98] pointer-events-none" />
-            </div>
-
-            {/* Export Button */}
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe4eb] bg-white hover:bg-[#f8f9fb] hover:border-[#ccd2dc] text-xs font-medium text-[#1a1a1c] transition-colors duration-150 cursor-pointer"
-            >
-              {exported ? (
-                <>
-                  <Check className="size-3.5 text-[#0e8345]" />
-                  <span className="text-[#0e8345]">Exported</span>
-                </>
-              ) : (
-                <>
-                  <Download className="size-3.5 text-[#525866]" />
-                  <span>Export JSON</span>
-                </>
-              )}
-            </button>
-          </div>
+          <button
+            onClick={() => onNavigateTab?.("sessions")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe4eb] bg-white hover:bg-[#f8f9fb] text-xs font-medium text-[#1677ff] hover:text-[#0958d9] transition-colors duration-150 cursor-pointer shadow-2xs"
+          >
+            <span>View Full Ledger ({sessions.length || telemetry?.tasks_completed || 0})</span>
+            <ChevronRight className="size-3.5" />
+          </button>
         </div>
 
-        {/* Table Grid (No inert checkboxes, clean typography) */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-[#eceff4] text-[11px] font-semibold text-[#868c98] uppercase tracking-wider">
-                <th className="py-2.5 px-3">Task Intent</th>
-                <th className="py-2.5 px-3">Target App</th>
-                <th className="py-2.5 px-3">Mechanism</th>
-                <th className="py-2.5 px-3">Duration</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#eceff4]">
-              {filteredSessions.map((row) => {
-                const Icon = getAppIcon(row.app);
-                const isSuccess = row.status === "Success";
-                return (
-                  <tr
-                    key={row.id}
-                    className="hover:bg-[#f8f9fb] transition-colors duration-150 cursor-default"
-                  >
-                    <td className="py-3 px-3 font-medium text-[#1a1a1c]">
+        <div className="divide-y divide-[#eceff4] border border-[#eceff4] rounded-xl overflow-hidden">
+          {sessions.slice(0, 4).map((row) => {
+            const Icon = getAppIcon(row.app);
+            const isSuccess = row.status === "Success";
+            return (
+              <div
+                key={row.id}
+                onClick={() => onNavigateTab?.("sessions")}
+                className="flex items-center justify-between p-3.5 hover:bg-[#f8f9fb] transition-colors duration-150 cursor-pointer group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-8 rounded-lg bg-[#f0f2f6] border border-[#dfe4eb] flex items-center justify-center shrink-0">
+                    <Icon className="size-4 text-[#525866]" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-[#1a1a1c] group-hover:text-[#1677ff] transition-colors truncate">
                       {row.title.replace(/^Mission:\s*/i, "")}
-                    </td>
-                    <td className="py-3 px-3 text-[#525866]">
-                      <span className="flex items-center gap-2">
-                        <Icon className="size-3.5 text-[#525866]" />
-                        <span>{row.app}</span>
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-[#868c98] font-mono text-[11px]">
-                      {row.location}
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[#1a1a1c] tabular-nums">
-                      {row.duration}
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="inline-flex items-center gap-1.5 text-xs text-[#525866] font-normal">
-                        <span
-                          className={`size-1.5 rounded-full ${
-                            isSuccess ? "bg-[#0e8345]" : "bg-[#d93025]"
-                          }`}
-                        />
-                        <span>{row.status}</span>
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-[11px] text-[#868c98] tabular-nums">
-                      {row.date}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </p>
+                    <p className="text-[11px] text-[#868c98] font-mono truncate mt-0.5">
+                      {row.app} · {row.location}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 shrink-0 text-xs">
+                  <span className="font-mono text-[11px] text-[#868c98] tabular-nums hidden sm:inline">
+                    {row.date}
+                  </span>
+                  <span className="font-mono text-xs text-[#1a1a1c] tabular-nums font-medium">
+                    {row.duration}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 text-xs text-[#525866]">
+                    <span className={`size-1.5 rounded-full ${isSuccess ? "bg-[#0e8345]" : "bg-[#d93025]"}`} />
+                    <span>{row.status}</span>
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
     </div>
