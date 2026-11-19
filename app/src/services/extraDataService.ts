@@ -152,6 +152,80 @@ export interface MemoryGraphData {
   decisions: RealSoulDecision[];
 }
 
+export interface KuzuTopologyNode {
+  id: string;
+  type: "Task" | "App" | "ActionStep" | "Artifact" | "StallEvent" | "AppQuirk" | "SoulDecision" | "AppSession";
+  label: string;
+  cluster: string;
+  properties: Record<string, any>;
+  radius?: number;
+  x?: number;
+  y?: number;
+}
+
+export interface KuzuTopologyEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: string;
+  label?: string;
+}
+
+export interface LiveKuzuGraphResponse {
+  nodes: KuzuTopologyNode[];
+  edges: KuzuTopologyEdge[];
+  stats: {
+    tasks: number;
+    decisions: number;
+    quirks: number;
+    apps: number;
+    facts: number;
+  };
+}
+
+export interface KuzuQueryResult {
+  success: boolean;
+  mode: "cypher" | "recall";
+  columns?: string[];
+  rows?: (string | null)[][];
+  matches?: Array<{
+    node_id: string;
+    type: string;
+    score: number;
+    issue: string;
+    workaround: string;
+  }>;
+  count: number;
+  latency_ms: number;
+  error?: string;
+  fallback?: string;
+}
+
+export interface SkillVerificationResult {
+  success: boolean;
+  verified: boolean;
+  skill_id: string;
+  skill_name: string;
+  playbook_path?: string | null;
+  playbook_found: boolean;
+  executable_path?: string | null;
+  executable_found: boolean;
+  harness_available: boolean;
+  latency_ms: number;
+  message: string;
+  error?: string;
+}
+
+export interface ToolTestResult {
+  success: boolean;
+  tool_name: string;
+  hardware_verified: boolean;
+  latency_ms: number;
+  telemetry?: Record<string, any>;
+  message?: string;
+  error?: string;
+}
+
 export interface LiveRelayStatus {
   running: boolean;
   status: "stopped" | "connecting" | "connected" | "reconnecting" | "disabled";
@@ -213,46 +287,26 @@ export class ExtraDataService {
     }
 
     return {
-      tasks_completed: 106,
-      actions_dispatched: 1468,
-      total_tokens_saved: 38061324,
-      cost_saved_usd: 7.49,
-      average_speedup: 3083.3,
-      capture_latency_ms: 16.4,
-      screen_captures_count: 3397,
-      active_skills_count: 11,
+      tasks_completed: 0,
+      actions_dispatched: 0,
+      total_tokens_saved: 0,
+      cost_saved_usd: 0,
+      average_speedup: 0,
+      capture_latency_ms: 0,
+      screen_captures_count: 0,
+      active_skills_count: 0,
       native_tools_count: 40,
-      kuzu_facts_count: 1683,
-      blueprints_count: 58,
+      kuzu_facts_count: 0,
+      blueprints_count: 0,
       health_score: "100%",
-      speed_mode: "turbo",
+      speed_mode: "balanced",
       telemetry_enabled: false,
-      anonymous_machine_id: "4b048fc826fd654834ff7e5719890efdbe00f293310f51d822ece97f519736fd",
-      top_apps: {
-        canvas_inking: 35,
-        generic_automation: 39,
-        web_research: 12,
-        document_creation: 9,
-        math_calculation: 8,
-        window_snapping: 5,
-        calculator: 1,
-      },
-      server_online: true,
+      anonymous_machine_id: "",
+      top_apps: {},
+      server_online: false,
       activity_chart: {
-        monthly: [
-          { id: "sep-2026", label: "Sep '26", period: "September 2026", subtext: "v0.1–v0.3 Engine Inception & Migration", actions: 185, perceptions: 110, value: "185", isCurrent: false, actionsPct: 15, perceptionsPct: 9 },
-          { id: "oct-2026", label: "Oct '26", period: "October 2026", subtext: "Mission Suite & Benchmark Executions", actions: 1180, perceptions: 840, value: "1,180", isCurrent: false, actionsPct: 95, perceptionsPct: 68 },
-          { id: "nov-2026", label: "Nov '26", period: "November 2026 (Live MTD)", subtext: "Active Production Loop & Ingest", actions: 103, perceptions: 78, value: "103", isCurrent: true, actionsPct: 14, perceptionsPct: 9 },
-        ],
-        weekly: [
-          { id: "w39", label: "Sep W4", period: "Sep 21 – Sep 27", actions: 185, perceptions: 110, value: "185", isCurrent: false, actionsPct: 46, perceptionsPct: 28 },
-          { id: "w40", label: "Oct W1", period: "Sep 28 – Oct 04", actions: 160, perceptions: 115, value: "160", isCurrent: false, actionsPct: 40, perceptionsPct: 29 },
-          { id: "w41", label: "Oct W2", period: "Oct 05 – Oct 11", actions: 220, perceptions: 155, value: "220", isCurrent: false, actionsPct: 55, perceptionsPct: 39 },
-          { id: "w42", label: "Oct W3", period: "Oct 12 – Oct 18", actions: 310, perceptions: 210, value: "310", isCurrent: false, actionsPct: 78, perceptionsPct: 53 },
-          { id: "w43", label: "Oct W4", period: "Oct 19 – Oct 25", actions: 380, perceptions: 260, value: "380", isCurrent: false, actionsPct: 95, perceptionsPct: 65 },
-          { id: "w44", label: "Oct W5", period: "Oct 26 – Nov 01", actions: 110, perceptions: 80, value: "110", isCurrent: false, actionsPct: 28, perceptionsPct: 20 },
-          { id: "w45", label: "Nov W1", period: "Nov 02 – Present", actions: 103, perceptions: 78, value: "103", isCurrent: true, actionsPct: 26, perceptionsPct: 20 },
-        ],
+        monthly: [],
+        weekly: [],
       },
     };
   }
@@ -313,12 +367,7 @@ export class ExtraDataService {
       console.warn("[ExtraDataService] Using fallback sessions:", e);
     }
 
-    return [
-      { id: "sess-1", title: "Mission: Canvas Inking & Art", app: "MS Paint", location: "Local Win32", status: "Success", duration: "0.42s", date: "2026-10-29 14:59", tokens_saved: 188000, cost_saved: 0.032 },
-      { id: "sess-2", title: "Mission: Generic Automation", app: "Windows Desktop", location: "SetWindowPos", status: "Success", duration: "0.18s", date: "2026-10-28 11:20", tokens_saved: 42000, cost_saved: 0.015 },
-      { id: "sess-3", title: "Mission: Web Research & Scrape", app: "Google Chrome", location: "CDP Bridge", status: "Success", duration: "1.12s", date: "2026-10-25 09:40", tokens_saved: 95000, cost_saved: 0.024 },
-      { id: "sess-4", title: "Mission: Math Calculation", app: "Calculator", location: "calc.exe", status: "Success", duration: "0.08s", date: "2026-10-22 16:15", tokens_saved: 15000, cost_saved: 0.004 },
-    ];
+    return [];
   }
 
   async fetchDoctor(): Promise<DoctorDiagnostic> {
@@ -332,11 +381,11 @@ export class ExtraDataService {
     }
 
     return {
-      screen_capture: { status: "ok", backend: "DirectX Desktop Duplication (DXGI)", latency_ms: 11.8 },
-      dpi_awareness: { status: "ok", mode: "PerMonitorV2", scaling: "1.0x" },
-      controlled_folder_access: { status: "ok", safe_workspace: "~/.extra/workspace", probe_passed: true },
-      python_runtime: { status: "ok", path: "~/.extra/venv/Scripts/python.exe", version: "3.13" },
-      memory_graph: { status: "ok", path: "~/.extra/memory/graph.kuzu", connected: true },
+      screen_capture: { status: "offline", backend: "DirectX Desktop Duplication (DXGI)", latency_ms: 0 },
+      dpi_awareness: { status: "offline", mode: "PerMonitorV2", scaling: "1.0x" },
+      controlled_folder_access: { status: "offline", safe_workspace: "~/.extra/workspace", probe_passed: false },
+      python_runtime: { status: "offline", path: "Python Runtime", version: "3.13" },
+      memory_graph: { status: "offline", path: "Memory Store", connected: false },
     };
   }
 
@@ -571,10 +620,10 @@ export class ExtraDataService {
         const data = await res.json();
         return { success: true, latency_ms: latency, message: data.message };
       }
-    } catch (e) {
-      console.warn("[ExtraDataService] Test connection fallback:", e);
+      return { success: false, latency_ms: latency, message: `Bridge test returned HTTP ${res.status}` };
+    } catch (e: any) {
+      return { success: false, latency_ms: 0, message: e?.message || "Loopback connection failed" };
     }
-    return { success: true, latency_ms: 2, message: "Loopback test verified" };
   }
 
   async runLiveDemo(): Promise<{ success: boolean; result?: string; message?: string; error?: string }> {
@@ -587,11 +636,11 @@ export class ExtraDataService {
       if (res.ok) {
         return await res.json();
       }
+      const errData = await res.json().catch(() => ({}));
+      return { success: false, error: errData.error || `Demo run failed with HTTP ${res.status}` };
     } catch (e: any) {
-      console.warn("[ExtraDataService] Demo run fallback:", e);
       return { success: false, error: e?.message || "Failed to trigger live demo" };
     }
-    return { success: true, result: "1,000", message: "Calculator demonstration verified" };
   }
 
   async openBrowserUrl(url: string): Promise<boolean> {
@@ -711,6 +760,75 @@ export class ExtraDataService {
     }
     return { supported: true, enabled };
   }
+
+  async fetchLiveKuzuGraph(): Promise<LiveKuzuGraphResponse> {
+    const res = await fetch(`${API_BASE}/api/extra/memory/graph`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch live Kùzu graph: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async queryKuzuGraph(mode: "cypher" | "recall", query: string): Promise<KuzuQueryResult> {
+    const res = await fetch(`${API_BASE}/api/extra/memory/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, query }),
+    });
+    if (!res.ok) {
+      throw new Error(`Kùzu query failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async ingestKuzuQuirk(data: { app: string; issue: string; workaround: string; playbook?: string }): Promise<{ success: boolean; id?: string; message?: string; error?: string }> {
+    const res = await fetch(`${API_BASE}/api/extra/memory/ingest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      throw new Error(`Quirk ingestion failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async verifySkill(skillId: string): Promise<SkillVerificationResult> {
+    const res = await fetch(`${API_BASE}/api/extra/skills/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ skill_id: skillId }),
+    });
+    if (!res.ok) {
+      throw new Error(`Skill verification failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async testMcpTool(toolName: string, payload: Record<string, any> = {}): Promise<ToolTestResult> {
+    const res = await fetch(`${API_BASE}/api/extra/tools/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool_name: toolName, payload }),
+    });
+    if (!res.ok) {
+      throw new Error(`Tool benchmark failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  async triggerSystemBeep(): Promise<{ success: boolean; hardware_audio?: string }> {
+    const res = await fetch(`${API_BASE}/api/extra/action/beep`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      throw new Error(`System beep failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
 }
 
 export const extraDataService = new ExtraDataService();

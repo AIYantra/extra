@@ -57,16 +57,11 @@ export function ReportsAndDoctorView() {
     }
   };
 
-  const topApps = telemetry?.top_apps || {
-    canvas_inking: 35,
-    generic_automation: 38,
-    web_research: 12,
-    document_creation: 9,
-    math_calculation: 8,
-    window_snapping: 5,
-  };
+  const topApps = telemetry?.top_apps && Object.keys(telemetry.top_apps).length > 0
+    ? telemetry.top_apps
+    : {};
 
-  const totalTasks = telemetry?.tasks_completed || Object.values(topApps).reduce((a, b) => Number(a) + Number(b), 0) || 106;
+  const totalTasks = telemetry?.tasks_completed || Object.values(topApps).reduce((a, b) => Number(a) + Number(b), 0) || 0;
 
   const segmentColors: Record<string, string> = {
     canvas_inking: "#1677ff",
@@ -75,13 +70,16 @@ export function ReportsAndDoctorView() {
     document_creation: "#fa8c16",
     math_calculation: "#722ed1",
     window_snapping: "#13c2c2",
+    calculator: "#eb2f96",
+    file_batch: "#faad14",
+    generic: "#8c8c8c",
   };
 
   const diagnosticChecks = [
     {
       title: "Screen Capture Pipeline",
       backend: doctor?.screen_capture.backend || "DXGI Desktop Duplication (DirectX 11)",
-      latency: `${(doctor?.screen_capture.latency_ms || telemetry?.capture_latency_ms || 11.8).toFixed(1)}ms`,
+      latency: (doctor?.screen_capture.latency_ms || telemetry?.capture_latency_ms) ? `${(doctor?.screen_capture.latency_ms || telemetry?.capture_latency_ms || 0).toFixed(1)}ms` : "—",
       status: "Healthy",
       subtext: "Sub-15ms optical visual frame settling",
     },
@@ -111,7 +109,7 @@ export function ReportsAndDoctorView() {
       backend: "KùzuDB Vector Store + FastEmbed",
       latency: "< 3ms",
       status: "Healthy",
-      subtext: `${telemetry?.kuzu_facts_count ? telemetry.kuzu_facts_count.toLocaleString() : "1,683"} knowledge graph nodes and learned quirks`,
+      subtext: `${telemetry?.kuzu_facts_count ? telemetry.kuzu_facts_count.toLocaleString() : "0"} knowledge graph nodes and learned quirks`,
     },
     {
       title: "Platform Composite Integrity",

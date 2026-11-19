@@ -5,12 +5,15 @@ import {
   RefreshCw,
   CheckCircle2,
   Zap,
-  Coins,
   Cpu,
   Monitor,
   Check,
   ChevronDown,
+  FileCheck2,
+  FolderArchive,
+  ShieldCheck,
 } from "lucide-react";
+import { LineageVaultCard } from "./LineageVaultCard";
 import {
   extraDataService,
   type RealSessionRow,
@@ -20,6 +23,7 @@ import { soundEngine } from "../../utils/sound";
 import { toast } from "sonner";
 
 export function TaskSessionsView() {
+  const [activeHistoryTab, setActiveHistoryTab] = useState<"ledger" | "deliverables">("ledger");
   const [sessions, setSessions] = useState<RealSessionRow[]>([]);
   const [telemetry, setTelemetry] = useState<RealTelemetry | null>(null);
   const [search, setSearch] = useState("");
@@ -77,26 +81,29 @@ export function TaskSessionsView() {
     return matchesSearch && matchesStatus;
   });
 
+  const successCount = sessions.filter((s) => s.status.toLowerCase() === "success").length;
+  const successRate = sessions.length > 0 ? `${((successCount / sessions.length) * 100).toFixed(1)}%` : "100%";
+
   const metrics = [
     {
-      title: "Tasks Completed",
-      value: telemetry ? telemetry.tasks_completed.toLocaleString() : "106",
+      title: "Missions Completed",
+      value: telemetry ? telemetry.tasks_completed.toLocaleString() : (sessions.length ? sessions.length.toLocaleString() : "—"),
       icon: CheckCircle2,
     },
     {
-      title: "Actions Dispatched",
-      value: telemetry ? telemetry.actions_dispatched.toLocaleString() : "1,468",
+      title: "Hardware Dispatches",
+      value: telemetry ? telemetry.actions_dispatched.toLocaleString() : "—",
       icon: Zap,
     },
     {
-      title: "Tokens Saved",
-      value: telemetry ? `${(telemetry.total_tokens_saved / 1000000).toFixed(1)}M` : "38.1M",
+      title: "Context Tokens Saved",
+      value: telemetry ? `${(telemetry.total_tokens_saved / 1000000).toFixed(1)}M` : "—",
       icon: Cpu,
     },
     {
-      title: "Estimated Saved",
-      value: telemetry ? `$${telemetry.cost_saved_usd.toFixed(2)}` : "$7.49",
-      icon: Coins,
+      title: "Success Reliability",
+      value: successRate,
+      icon: ShieldCheck,
     },
   ];
 
@@ -112,7 +119,7 @@ export function TaskSessionsView() {
             <span className="text-[10px] font-mono text-[#525866] bg-[#f8f9fb] border border-[#dfe4eb] px-1.5 py-0.5 rounded-md tabular-nums">
               {filteredSessions.length !== sessions.length
                 ? `${filteredSessions.length} of ${sessions.length}`
-                : `${sessions.length || telemetry?.tasks_completed || 106} tasks`}
+                : `${sessions.length || telemetry?.tasks_completed || 0} tasks`}
             </span>
           </div>
           <p className="text-xs text-[#525866] mt-0.5">
@@ -187,8 +194,49 @@ export function TaskSessionsView() {
         })}
       </div>
 
-      {/* Main Table Card */}
-      <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs space-y-3">
+      {/* Sub-tab Switcher: Sessions Ledger vs Deliverables Vault */}
+      <div className="flex items-center gap-2 border-b border-[#dfe4eb] pb-2">
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playTick();
+            setActiveHistoryTab("ledger");
+          }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            activeHistoryTab === "ledger"
+              ? "bg-[#1a1a1c] text-white shadow-xs"
+              : "text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8]"
+          }`}
+        >
+          <FileCheck2 className="size-3.5" />
+          <span>Execution Ledger</span>
+          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${activeHistoryTab === "ledger" ? "bg-white/20 text-white" : "bg-[#f4f5f8] text-[#868c98]"}`}>
+            {filteredSessions.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playTick();
+            setActiveHistoryTab("deliverables");
+          }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            activeHistoryTab === "deliverables"
+              ? "bg-[#1a1a1c] text-white shadow-xs"
+              : "text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8]"
+          }`}
+        >
+          <FolderArchive className="size-3.5" />
+          <span>Deliverables Vault</span>
+        </button>
+      </div>
+
+      {activeHistoryTab === "deliverables" ? (
+        <LineageVaultCard />
+      ) : (
+        /* Main Table Card */
+        <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs space-y-3">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -261,6 +309,7 @@ export function TaskSessionsView() {
           </table>
         </div>
       </div>
+    )}
 
       {/* Selected Session Modal */}
       {selectedSession && (

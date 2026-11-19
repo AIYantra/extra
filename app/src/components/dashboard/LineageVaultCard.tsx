@@ -84,11 +84,8 @@ export function LineageVaultCard() {
   };
 
   const handleOpenRootWorkspace = async () => {
-    if (deliverables.length > 0) {
-      await telemetryClient.revealFile(deliverables[0].path);
-    } else {
-      toast.info("Opening ~/.extra/workspace...");
-    }
+    toast.info("Opening workspace in Explorer...");
+    await telemetryClient.revealFile(deliverables.length > 0 ? deliverables[0].path : "~/.extra/workspace");
   };
 
   return (
