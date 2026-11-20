@@ -67,6 +67,13 @@ export const useAuthStore = create<AuthStoreState>()(
         const currentUser = get().user || authClient.getLocalCachedUser();
         const currentRelayToken = get().relayToken || currentUser?.relay_token || "";
 
+        // Optimistically update store flag immediately so the UI responds without delay
+        set({
+          isLocalOfflineMode: enabled,
+          isOnboardingDismissed: true,
+          isAuthModalOpen: false,
+        });
+
         if (enabled) {
           // Sever outbound WebSocket tunnel immediately
           await extraDataService.stopRelay().catch(() => {});
@@ -80,12 +87,6 @@ export const useAuthStore = create<AuthStoreState>()(
             authClient.syncToLocalDaemon(currentToken, currentUser, false).catch(() => {});
           }
         }
-
-        set({
-          isLocalOfflineMode: enabled,
-          isOnboardingDismissed: true,
-          isAuthModalOpen: false,
-        });
       },
 
       dismissOnboarding: () => {

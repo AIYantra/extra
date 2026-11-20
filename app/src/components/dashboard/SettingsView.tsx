@@ -273,11 +273,12 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
   const handleStartRelay = async () => {
     setLoadingRelayAction(true);
     soundEngine.playTick();
+    setRelayStatus((prev) => prev ? { ...prev, running: true, status: "connecting", connected: false } : null);
     try {
       await setLocalOffline(false);
       let finalStat: LiveRelayStatus | null = null;
-      for (let i = 0; i < 6; i++) {
-        await new Promise((r) => setTimeout(r, 450));
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 400));
         finalStat = await extraDataService.fetchRelayStatus();
         setRelayStatus(finalStat);
         if (finalStat.connected) break;
