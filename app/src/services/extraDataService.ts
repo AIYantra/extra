@@ -664,8 +664,22 @@ export class ExtraDataService {
   async fetchRelayStatus(): Promise<LiveRelayStatus> {
     try {
       const headers = await telemetryClient.authHeaders();
-      const res = await fetch("http://127.0.0.1:8000/api/relay/status", { headers });
-      if (res.ok) {
+      let res: Response | null = null;
+      try {
+        const c8000 = new AbortController();
+        const t8000 = setTimeout(() => c8000.abort(), 1200);
+        res = await fetch("http://127.0.0.1:8000/api/relay/status", { headers, signal: c8000.signal });
+        clearTimeout(t8000);
+      } catch {}
+
+      if (!res || !res.ok) {
+        const cLocal = new AbortController();
+        const tLocal = setTimeout(() => cLocal.abort(), 1200);
+        res = await fetch(`${API_BASE}/api/extra/relay/status`, { headers, signal: cLocal.signal });
+        clearTimeout(tLocal);
+      }
+
+      if (res && res.ok) {
         return await res.json();
       }
     } catch (e) {
@@ -688,14 +702,28 @@ export class ExtraDataService {
   async startRelay(relayToken?: string): Promise<{ success: boolean; status?: LiveRelayStatus }> {
     try {
       const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
-      const res = await fetch("http://127.0.0.1:8000/api/relay/start", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ relay_token: relayToken }),
-      });
-      if (res.ok) {
+      const payload = JSON.stringify({ relay_token: relayToken });
+      let res: Response | null = null;
+      try {
+        res = await fetch("http://127.0.0.1:8000/api/relay/start", {
+          method: "POST",
+          headers,
+          body: payload,
+        });
+      } catch {}
+
+      try {
+        await fetch(`${API_BASE}/api/extra/relay/start`, {
+          method: "POST",
+          headers,
+          body: payload,
+        });
+      } catch {}
+
+      if (res && res.ok) {
         return await res.json();
       }
+      return { success: true };
     } catch (e) {
       console.warn("[ExtraDataService] startRelay error:", e);
     }
@@ -705,11 +733,24 @@ export class ExtraDataService {
   async stopRelay(): Promise<boolean> {
     try {
       const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
-      const res = await fetch("http://127.0.0.1:8000/api/relay/stop", {
-        method: "POST",
-        headers,
-      });
-      return res.ok;
+      let ok = false;
+      try {
+        const res = await fetch("http://127.0.0.1:8000/api/relay/stop", {
+          method: "POST",
+          headers,
+        });
+        if (res.ok) ok = true;
+      } catch {}
+
+      try {
+        const res2 = await fetch(`${API_BASE}/api/extra/relay/stop`, {
+          method: "POST",
+          headers,
+        });
+        if (res2.ok) ok = true;
+      } catch {}
+
+      return ok;
     } catch (e) {
       return false;
     }

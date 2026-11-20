@@ -429,7 +429,7 @@ class AuthClient {
    * Synchronizes active token and relay passkey to the local Extra MCP daemon
    * (http://127.0.0.1:8000/api/config/sync) and persists it in ~/.extra/config.json.
    */
-  async syncToLocalDaemon(token: string, user: ExtraUser): Promise<boolean> {
+  async syncToLocalDaemon(token: string, user: ExtraUser, isLocalMode?: boolean): Promise<boolean> {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 1200);
@@ -440,16 +440,19 @@ class AuthClient {
         headers["Authorization"] = `Bearer ${loopbackToken}`;
       }
 
+      const bodyPayload = {
+        auth_token: token,
+        relay_token: user?.relay_token || "",
+        user_id: user?.id || "",
+        email: user?.email || "",
+        plan: user?.plan || "community",
+        ...(isLocalMode !== undefined ? { is_local_mode: isLocalMode } : {}),
+      };
+
       const res = await fetch(`${this.localBase}/api/config/sync`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          auth_token: token,
-          relay_token: user.relay_token || "",
-          user_id: user.id,
-          email: user.email,
-          plan: user.plan,
-        }),
+        body: JSON.stringify(bodyPayload),
         signal: controller.signal,
       });
 

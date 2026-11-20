@@ -19,7 +19,7 @@ interface AuthStoreState {
 
   // Actions
   setAuth: (token: string, user: ExtraUser) => void;
-  setLocalOffline: (enabled: boolean) => void;
+  setLocalOffline: (enabled: boolean) => Promise<void>;
   dismissOnboarding: () => void;
   reopenOnboarding: () => void;
   openAuthModal: () => void;
@@ -62,7 +62,27 @@ export const useAuthStore = create<AuthStoreState>()(
         });
       },
 
-      setLocalOffline: (enabled: boolean) => {
+      setLocalOffline: async (enabled: boolean) => {
+        const currentToken = get().token || "";
+        const currentUser = get().user;
+        const currentRelayToken = get().relayToken || currentUser?.relay_token || "";
+
+        if (enabled) {
+          // Sever outbound WebSocket tunnel immediately
+          await extraDataService.stopRelay().catch(() => {});
+          if (currentUser) {
+            authClient.syncToLocalDaemon(currentToken, currentUser, true).catch(() => {});
+          }
+        } else {
+          // Reconnect outbound WebSocket tunnel
+          if (currentRelayToken) {
+            await extraDataService.startRelay(currentRelayToken).catch(() => {});
+          }
+          if (currentUser) {
+            authClient.syncToLocalDaemon(currentToken, currentUser, false).catch(() => {});
+          }
+        }
+
         set({
           isLocalOfflineMode: enabled,
           isOnboardingDismissed: true,

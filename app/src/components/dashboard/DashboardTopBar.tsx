@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Search,
-  OctagonAlert,
   Laptop,
   KeyRound,
   ChevronRight,
@@ -13,17 +12,17 @@ import {
   Globe,
   User,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DesktopWindowControls } from "./DesktopWindowControls";
 import { ExtraAvatar } from "../ExtraAvatar";
 import { useEngineStore } from "../../store/useEngineStore";
 import { useAuthStore } from "../../store/useAuthStore";
-import { useOnboardingStore } from "../../store/useOnboardingStore";
+import { useUpdateStore } from "../../store/useUpdateStore";
 import { soundEngine } from "../../utils/sound";
 import { toast } from "sonner";
 import { telemetryClient } from "../../services/telemetryClient";
+import { extraDataService, type LiveRelayStatus } from "../../services/extraDataService";
 
 interface DashboardTopBarProps {
   currentTab?: string;
@@ -34,13 +33,11 @@ interface DashboardTopBarProps {
 
 const TAB_TITLES: Record<string, string> = {
   overview: "Dashboard",
-  tools: "MCP Tools",
-  sessions: "Task Sessions",
-  apps: "Connected Apps",
-  skills: "Skills & Memory Graph",
-  keys: "API Keys & Relay",
-  telemetry: "Reports & Doctor",
-  settings: "Settings",
+  tools: "Tools & Skills",
+  sessions: "Execution History",
+  integrations: "AI Integrations",
+  settings: "Settings & Health",
+  profile: "Profile",
   about: "About",
 };
 
@@ -51,7 +48,6 @@ export function DashboardTopBar({
 }: DashboardTopBarProps) {
   const isServerOnline = useEngineStore((state) => state.isServerOnline);
   const isPanicActive = useEngineStore((state) => state.isPanicActive);
-  const panicStop = useEngineStore((state) => state.panicStop);
   const resumePilot = useEngineStore((state) => state.resumePilot);
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
@@ -62,11 +58,33 @@ export function DashboardTopBar({
   const logout = useAuthStore((state) => state.logout);
   const setLocalOffline = useAuthStore((state) => state.setLocalOffline);
 
+  const updateAvailable = useUpdateStore((state) => state.updateAvailable);
+  const latestTag = useUpdateStore((state) => state.latestTag);
+  const installedVersionLabel = useUpdateStore((state) => state.installedVersionLabel);
+
   const [isMac, setIsMac] = useState(false);
   const [isAccountDropdownOpen, setIsAccountDropdownOpen] = useState(false);
   const [copiedRelay, setCopiedRelay] = useState(false);
   const [restartingEngine, setRestartingEngine] = useState(false);
+  const [relayStatus, setRelayStatus] = useState<LiveRelayStatus | null>(null);
+  const [togglingOffline, setTogglingOffline] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const updateRelay = async () => {
+      try {
+        const stat = await extraDataService.fetchRelayStatus();
+        if (mounted) setRelayStatus(stat);
+      } catch {}
+    };
+    updateRelay();
+    const interval = setInterval(updateRelay, 4000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleRestartEngine = async () => {
     if (restartingEngine) return;
@@ -122,17 +140,10 @@ export function DashboardTopBar({
           </span>
         </div>
 
-        {/* Engine Daemon Health Status — Offline pill restarts the daemon */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {isServerOnline ? (
-              <div className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#f8f9fb] border border-[#dfe4eb] hover:border-[#ccd2dc] transition-colors duration-150 cursor-help">
-                <span className="size-1.5 rounded-full shrink-0 bg-[#0e8345]" />
-                <span className="text-[11px] font-mono text-[#525866] tabular-nums">
-                  Port 8000
-                </span>
-              </div>
-            ) : (
+        {/* Engine Daemon Health Status — Only shown when offline or reconnecting */}
+        {!isServerOnline && (
+          <Tooltip>
+            <TooltipTrigger asChild>
               <button
                 onClick={handleRestartEngine}
                 disabled={restartingEngine}
@@ -140,20 +151,18 @@ export function DashboardTopBar({
               >
                 <span className="size-1.5 rounded-full shrink-0 bg-amber-500" />
                 <span className="text-[11px] font-mono text-[#525866] tabular-nums">
-                  {restartingEngine ? "Restarting..." : "Offline — Restart"}
+                  {restartingEngine ? "Restarting..." : "Engine Offline — Restart"}
                 </span>
                 <RefreshCw
                   className={`size-3 text-[#b7791f] ${restartingEngine ? "animate-spin" : ""}`}
                 />
               </button>
-            )}
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            {isServerOnline
-              ? "Extra Sovereign Engine Daemon active at http://127.0.0.1:8000"
-              : "Engine daemon unreachable — click to restart it with this app's token"}
-          </TooltipContent>
-        </Tooltip>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              Engine daemon unreachable — click to restart it with this app's token
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* Center: Command Palette Trigger with Platform-Aware Keycap (Unslop Pass 4 & 7) */}
@@ -179,6 +188,26 @@ export function DashboardTopBar({
 
       {/* Right: Account Status, Theme Switcher & Calm Emergency Pause */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* Subtle Update Available Pill */}
+        {updateAvailable && (
+          <button
+            onClick={() => {
+              soundEngine.playTick();
+              onNavigateTab?.("about");
+            }}
+            className="hidden sm:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-[#edfcf2] hover:bg-[#dcfce7] border border-[#bbf0cf] text-[#0e8345] text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+            title="A newer version of Extra is available — click to view release notes"
+          >
+            <span className="size-1.5 rounded-full bg-[#0e8345] animate-pulse" />
+            <span>Update Available</span>
+            {latestTag && (
+              <span className="font-mono text-[10px] tabular-nums font-semibold px-1 py-0.2 rounded bg-white text-[#0e8345] border border-[#bbf0cf]">
+                {latestTag}
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Account / Cloud Status */}
         {isAuthenticated && user ? (
           <div className="relative" ref={dropdownRef}>
@@ -193,8 +222,14 @@ export function DashboardTopBar({
               <span className="font-medium text-xs max-w-[100px] truncate">
                 {user.username || user.email.split("@")[0]}
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#f8f9fb] text-[#525866] border border-[#dfe4eb]">
-                {user.plan || "Free"}
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                  isLocalOfflineMode || (!relayStatus?.connected && relayStatus?.status === "stopped")
+                    ? "bg-zinc-100 text-zinc-600 border-zinc-200"
+                    : "bg-[#f8f9fb] text-[#525866] border-[#dfe4eb]"
+                }`}
+              >
+                {isLocalOfflineMode ? "offline" : (user.plan || "Free")}
               </span>
               <ChevronDown className="size-3 text-[#868c98]" />
             </button>
@@ -224,15 +259,27 @@ export function DashboardTopBar({
                 <div className="my-2 p-2 rounded-lg bg-[#f8f9fb] border border-[#dfe4eb] text-[11px] space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="text-[#868c98]">Cloud Relay</span>
-                    <span className="inline-flex items-center gap-1 font-medium text-[#0e8345]">
-                      <span className="size-1.5 rounded-full bg-[#0e8345]" />
-                      Active (ap-south-1)
-                    </span>
+                    {relayStatus?.connected && !isLocalOfflineMode ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-[#0e8345]">
+                        <span className="size-1.5 rounded-full bg-[#0e8345] animate-pulse" />
+                        Active (ap-south-1)
+                      </span>
+                    ) : relayStatus?.status === "connecting" && !isLocalOfflineMode ? (
+                      <span className="inline-flex items-center gap-1 font-medium text-amber-600">
+                        <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Connecting...
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 font-medium text-[#525866]">
+                        <span className="size-1.5 rounded-full bg-[#868c98]" />
+                        Sovereign Offline
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-[#868c98]">Paired Workstation</span>
-                    <span className="font-mono text-[#1a1a1c] text-[10px] truncate max-w-[130px]">
-                      Windows 11
+                    <span className="text-[#868c98]">Workstation</span>
+                    <span className="font-mono text-[#1a1a1c] text-[10px] truncate max-w-[140px]" title={relayStatus?.device_name || "Windows PC"}>
+                      {relayStatus?.device_name || "Windows PC"}
                     </span>
                   </div>
                 </div>
@@ -252,6 +299,22 @@ export function DashboardTopBar({
                       <span>View Profile</span>
                     </span>
                     <ChevronRight className="size-3 text-[#868c98]" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      soundEngine.playTick();
+                      setIsAccountDropdownOpen(false);
+                      onNavigateTab?.("about");
+                    }}
+                    className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-[#f8f9fb] text-xs text-[#1a1a1c] transition-colors cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <RefreshCw className="size-3.5 text-[#868c98]" />
+                      <span>Software Updates</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-[#868c98]">
+                      {installedVersionLabel || "v0.3.6"}
+                    </span>
                   </button>
                   <button
                     onClick={() => {
@@ -302,18 +365,58 @@ export function DashboardTopBar({
                     </span>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      soundEngine.playTick();
-                      setLocalOffline(true);
-                      setIsAccountDropdownOpen(false);
-                      toast.info("Operating in Sovereign Offline Mode (~/.extra)");
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-[#f8f9fb] text-xs text-[#525866] hover:text-[#1a1a1c] transition-colors cursor-pointer"
-                  >
-                    <Laptop className="size-3.5 text-[#868c98]" />
-                    <span>Switch to Offline Mode</span>
-                  </button>
+                  {isLocalOfflineMode || (!relayStatus?.connected && relayStatus?.status === "stopped") ? (
+                    <button
+                      disabled={togglingOffline}
+                      onClick={async () => {
+                        setTogglingOffline(true);
+                        soundEngine.playTick();
+                        try {
+                          await setLocalOffline(false);
+                          const updated = await extraDataService.fetchRelayStatus();
+                          setRelayStatus(updated);
+                          soundEngine.playSuccessChime();
+                          toast.success("Cloud Relay connected. Live agent commands enabled.");
+                        } catch {
+                          toast.error("Failed to connect Cloud Relay");
+                        } finally {
+                          setTogglingOffline(false);
+                          setIsAccountDropdownOpen(false);
+                        }
+                      }}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-[#f8f9fb] text-xs text-[#1677ff] font-medium transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Globe className="size-3.5 text-[#1677ff]" />
+                        <span>Switch to Online (Cloud Relay)</span>
+                      </span>
+                      <ChevronRight className="size-3 text-[#1677ff]" />
+                    </button>
+                  ) : (
+                    <button
+                      disabled={togglingOffline}
+                      onClick={async () => {
+                        setTogglingOffline(true);
+                        soundEngine.playTick();
+                        try {
+                          await setLocalOffline(true);
+                          const updated = await extraDataService.fetchRelayStatus();
+                          setRelayStatus(updated);
+                          soundEngine.playSuccessChime();
+                          toast.info("Operating in Sovereign Offline Mode. Cloud Relay tunnel closed.");
+                        } catch {
+                          toast.error("Failed to disconnect Cloud Relay");
+                        } finally {
+                          setTogglingOffline(false);
+                          setIsAccountDropdownOpen(false);
+                        }
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-[#f8f9fb] text-xs text-[#525866] hover:text-[#1a1a1c] transition-colors cursor-pointer"
+                    >
+                      <Laptop className="size-3.5 text-[#868c98]" />
+                      <span>Switch to Offline Mode</span>
+                    </button>
+                  )}
 
                   <div className="pt-1 border-t border-[#dfe4eb]">
                     <button
@@ -364,48 +467,8 @@ export function DashboardTopBar({
           </button>
         )}
 
-        {/* First Flight Onboarding Setup Trigger */}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              onClick={() => {
-                soundEngine.playTick();
-                useOnboardingStore.getState().openOnboarding("welcome");
-              }}
-              className="h-8 px-2.5 rounded-lg border border-[#1677ff]/30 bg-[#1677ff]/5 hover:bg-[#1677ff]/10 text-[#1677ff] transition-colors duration-150 flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-2xs"
-            >
-              <Sparkles className="size-3.5 text-[#1677ff]" />
-              <span className="hidden sm:inline">First Flight</span>
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className="text-xs">
-            Open the 1-click AI Connect &amp; Magic Test Setup Wizard
-          </TooltipContent>
-        </Tooltip>
-
-        {/* Emergency Panic Pause / Resume Indicator (Unslopped & Deduplicated) */}
-        {!isPanicActive ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => {
-                  soundEngine.playPanicAlert();
-                  panicStop();
-                }}
-                className="h-8 px-2.5 rounded-lg border border-[#dfe4eb] bg-white hover:bg-[#f8f9fb] hover:border-[#ccd2dc] text-[#525866] hover:text-[#1a1a1c] transition-colors duration-150 flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-2xs"
-              >
-                <OctagonAlert className="size-3.5 text-[#868c98] shrink-0" />
-                <span className="hidden sm:inline font-medium text-xs">Pause</span>
-                <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 rounded border border-[#dfe4eb] bg-[#f8f9fb] text-[10px] font-mono text-[#868c98]">
-                  Esc
-                </kbd>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
-              Emergency Stop: Instantly freezes desktop automation (Press Esc)
-            </TooltipContent>
-          </Tooltip>
-        ) : (
+        {/* Emergency Panic Pause: Quiet and only visible when pilot is actually paused */}
+        {isPanicActive && (
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -413,17 +476,17 @@ export function DashboardTopBar({
                   soundEngine.playSuccessChime();
                   resumePilot();
                 }}
-                className="h-8 px-2.5 rounded-lg border border-[#f5d99b] dark:border-amber-800/60 bg-[#fffbf0] hover:bg-[#fef3c7] dark:bg-[#1a1714] dark:hover:bg-[#251d16] text-[#78350f] dark:text-amber-200 transition-colors duration-150 flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-2xs"
+                className="h-8 px-2.5 rounded-lg border border-[#f5d99b] bg-[#fffbf0] hover:bg-[#fef3c7] text-[#78350f] transition-colors duration-150 flex items-center gap-1.5 text-xs font-medium cursor-pointer shadow-2xs"
               >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#d97706] animate-pulse" />
-                <span className="font-medium text-xs">Paused</span>
-                <kbd className="hidden sm:inline-flex items-center px-1 py-0.2 rounded border border-[#f5d99b] dark:border-amber-800/60 bg-white dark:bg-zinc-800 text-[10px] font-mono text-[#b45309] dark:text-amber-300">
+                <span className="size-2 rounded-full bg-[#d97706] animate-pulse" />
+                <span className="font-medium text-xs">Pilot Paused</span>
+                <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded border border-[#f5d99b] bg-white text-[10px] font-mono text-[#b45309]">
                   Esc
                 </kbd>
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="text-xs">
-              Paused: Click or press Esc to resume pilot
+              Pilot Paused: Click or press Esc to resume
             </TooltipContent>
           </Tooltip>
         )}
