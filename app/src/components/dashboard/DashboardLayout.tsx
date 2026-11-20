@@ -2,21 +2,15 @@ import { useState, useEffect } from "react";
 import { AlertTriangle, Play } from "lucide-react";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { DashboardTopBar } from "./DashboardTopBar";
-import { DashboardOverview } from "./DashboardOverview";
+import { ReferenceDashboardView } from "./ReferenceDashboardView";
 import { McpToolsView } from "./McpToolsView";
+import { KuzuGraphSimulatorView } from "./KuzuGraphSimulatorView";
 import { TaskSessionsView } from "./TaskSessionsView";
-import { ConnectedAppsView } from "./ConnectedAppsView";
-import { PluginConnectorsSetupView } from "./PluginConnectorsSetupView";
-import { SkillsCatalogView } from "./SkillsCatalogView";
-import { ApiKeysAndRelayView } from "./ApiKeysAndRelayView";
+import { IntegrationsView } from "./IntegrationsView";
 import { ReportsAndDoctorView } from "./ReportsAndDoctorView";
 import { SettingsView } from "./SettingsView";
 import { LivePilotGlass } from "./LivePilotGlass";
 import { LineageVaultCard } from "./LineageVaultCard";
-import { BrowsersView } from "./BrowsersView";
-import { DualPlaneView } from "./DualPlaneView";
-import { OpticalRadarView } from "./OpticalRadarView";
-import { TerminalView } from "./TerminalView";
 import { ProfileView } from "./ProfileView";
 import { AboutView } from "./AboutView";
 import { CommandPaletteModal } from "../CommandPaletteModal";
@@ -96,13 +90,10 @@ export function DashboardLayout() {
         const tabMap: Record<string, string> = {
           "1": "overview",
           "2": "tools",
-          "3": "sessions",
-          "4": "apps",
-          "5": "skills",
-          "6": "keys",
-          "7": "telemetry",
-          "8": "settings",
-          "9": "about",
+          "3": "memory",
+          "4": "sessions",
+          "5": "integrations",
+          "6": "settings",
         };
         if (tabMap[e.key]) {
           e.preventDefault();
@@ -118,42 +109,40 @@ export function DashboardLayout() {
   const renderActiveView = () => {
     switch (currentTab) {
       case "tools":
+      case "skills":
         return <McpToolsView />;
+      case "memory":
+      case "kuzu":
+      case "graph":
+        return <KuzuGraphSimulatorView />;
       case "sessions":
+      case "history":
       case "automations":
         return <TaskSessionsView />;
+      case "integrations":
       case "apps":
-        return <ConnectedAppsView onNavigateTab={setCurrentTab} />;
       case "connectors":
       case "plugins":
-        return <PluginConnectorsSetupView />;
-      case "skills":
-        return <SkillsCatalogView />;
+        return <IntegrationsView onNavigateTab={setCurrentTab} />;
       case "keys":
-        return <ApiKeysAndRelayView />;
+        return <SettingsView onNavigateTab={setCurrentTab} />;
       case "telemetry":
         return <ReportsAndDoctorView />;
       case "settings":
-        return <SettingsView />;
+        return <SettingsView onNavigateTab={setCurrentTab} />;
       case "pilot":
         return <LivePilotGlass />;
-      case "browsers":
-        return <BrowsersView />;
-      case "dualplane":
-        return <DualPlaneView />;
-      case "radar":
-        return <OpticalRadarView />;
-      case "terminal":
-        return <TerminalView />;
       case "lineage":
         return <LineageVaultCard />;
       case "profile":
         return <ProfileView />;
       case "about":
-        return <AboutView />;
+        return <AboutView defaultTab="about" />;
+      case "updates":
+        return <AboutView defaultTab="updates" />;
       case "overview":
       default:
-        return <DashboardOverview onNavigateTab={setCurrentTab} />;
+        return <ReferenceDashboardView onNavigateTab={setCurrentTab} />;
     }
   };
 
@@ -237,12 +226,15 @@ export function DashboardLayout() {
         isOpen={isCommandOpen}
         onClose={() => setIsCommandOpen(false)}
         onRunAction={(action) => {
-          console.log("Action triggered:", action);
           if (action.includes("pilot")) setCurrentTab("pilot");
           else if (action.includes("connectors") || action.includes("plugin") || action.includes("chatgpt") || action.includes("claude")) setCurrentTab("connectors");
           else if (action.includes("settings")) setCurrentTab("settings");
+          else if (action.includes("sessions") || action.includes("history")) setCurrentTab("sessions");
+          else if (action.includes("tools")) setCurrentTab("tools");
           else if (action.includes("lineage")) setCurrentTab("lineage");
-          else if (action.includes("macro") || action.includes("automation")) setCurrentTab("automations");
+          else if (action.includes("memory") || action.includes("kuzu") || action.includes("graph")) setCurrentTab("memory");
+          else if (action.includes("macro") || action.includes("automation")) setCurrentTab("sessions");
+          else if (action.includes("update") || action.includes("about")) setCurrentTab("about");
         }}
       />
     </div>

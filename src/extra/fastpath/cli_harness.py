@@ -25,6 +25,13 @@ _EXTRA_HOME = Path(os.environ.get("USERPROFILE") or os.environ.get("HOME") or ".
 _HARNESS_WORKSPACE = _EXTRA_HOME / "workspace" / "harness"
 _HARNESS_WORKSPACE.mkdir(parents=True, exist_ok=True)
 
+ALLOWED_HARNESSES = frozenset({
+    "blender", "gimp", "inkscape", "audacity", "kdenlive",
+    "freecad", "krita", "shotcut", "calibre", "qgis",
+    "paint", "drawio", "libreoffice", "canva", "calc",
+    "notepad", "vlc", "obsidian", "godot",
+})
+
 
 @dataclass
 class HarnessResult:
@@ -222,6 +229,21 @@ class UniversalHarnessRunner:
         """
         t0 = time.perf_counter()
         slug = self.normalize_harness_name(harness)
+
+        # Allowlist Security Check: Only verified creative/CAD applications can be invoked
+        if slug not in ALLOWED_HARNESSES:
+            latency_ms = (time.perf_counter() - t0) * 1000.0
+            return HarnessResult(
+                harness=slug,
+                success=False,
+                returncode=-1,
+                stdout="",
+                stderr=f"Security Policy Violation: Harness '{harness}' is not in the allowed application harness catalog. Permitted: {sorted(ALLOWED_HARNESSES)}",
+                error=f"Unauthorized harness binary '{harness}' blocked by security policy.",
+                latency_ms=latency_ms,
+                metadata={"security_blocked": True},
+            )
+
         cmd_base = self.resolve_harness(slug)
 
         if not cmd_base:
@@ -255,8 +277,28 @@ class UniversalHarnessRunner:
 
         files_before = _get_files(cwd)
 
-        # Prepare environment
-        run_env = os.environ.copy()
+        # Prepare environment: scrub ambient sensitive tokens unless explicitly supplied
+        BASELINE_SYSTEM_VARS = {
+            "SYSTEMROOT", "PATH", "TEMP", "TMP", "COMSPEC", "PATHEXT",
+            "WINDIR", "USERPROFILE", "HOMEPATH", "HOMEDRIVE", "ALLUSERSPROFILE",
+            "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+            "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
+            "OS", "TERM", "LANG", "LC_ALL", "SHELL", "HOME", "USER", "LOGNAME",
+        }
+        SENSITIVE_KEY_PATTERNS = (
+            "KEY", "SECRET", "TOKEN", "PASSWORD", "AUTH", "CREDENTIAL", "PRIVATE",
+            "PAT", "ACCESS_KEY", "WEBHOOK", "SIG", "API_KEY", "PASSKEY", "BEARER", "RELAY"
+        )
+        run_env = {}
+        for k, v in os.environ.items():
+            k_upper = k.upper()
+            if k_upper in BASELINE_SYSTEM_VARS:
+                run_env[k] = v
+            elif any(pattern in k_upper for pattern in SENSITIVE_KEY_PATTERNS):
+                continue
+            else:
+                run_env[k] = v
+
         if env:
             run_env.update(env)
 

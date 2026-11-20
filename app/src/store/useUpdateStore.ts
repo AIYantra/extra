@@ -5,9 +5,11 @@ import {
   checkForUpdates,
   fetchInstalledVersion,
   performAppUpdate,
+  fetchUpdateProgress,
   type UpdateCheckResult,
 } from "../services/updateService";
 import { getAppVersion, getAppVersionLabel, setAppVersion } from "../utils/appMeta";
+import { soundEngine } from "../utils/sound";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -23,6 +25,9 @@ interface UpdateStoreState {
   notifiedTag: string | null;
   checking: boolean;
   updating: boolean;
+  progressPercent: number;
+  statusMessage: string;
+  updateState: "idle" | "checking" | "downloading" | "installing" | "restarting" | "completed" | "failed";
   error: string | null;
   lastResult: UpdateCheckResult | null;
 
@@ -47,6 +52,9 @@ export const useUpdateStore = create<UpdateStoreState>()(
       notifiedTag: null,
       checking: false,
       updating: false,
+      progressPercent: 0,
+      statusMessage: "Up to date",
+      updateState: "idle",
       error: null,
       lastResult: null,
 
@@ -135,22 +143,69 @@ export const useUpdateStore = create<UpdateStoreState>()(
 
       performUpdateNow: async () => {
         if (get().updating) return false;
-        set({ updating: true, error: null });
+        const targetTag = get().latestTag?.replace(/^[vV]/, "") || "";
+        set({
+          updating: true,
+          error: null,
+          progressPercent: 5,
+          updateState: "checking",
+          statusMessage: "Contacting update worker...",
+        });
+
+        soundEngine.playTick();
         toast.info("Starting Extra update...", {
-          description: "Running background installer. Extra will refresh automatically once updated.",
+          description: "Applying verified updates. Extra will refresh automatically once updated.",
         });
 
         try {
-          const res = await performAppUpdate();
+          const res = await performAppUpdate(targetTag);
           if (res.success) {
-            toast.success("Update initiated successfully!", {
-              description: "Downloading and applying latest signed runtime...",
-            });
-
-            // Poll for version upgrade in background
+            // Poll for background worker progress
             let pollCount = 0;
             const poller = setInterval(async () => {
               pollCount++;
+              const progress = await fetchUpdateProgress();
+              if (progress) {
+                set({
+                  progressPercent: progress.progress_percent,
+                  statusMessage: progress.status_text,
+                  updateState: progress.state,
+                });
+
+                if (progress.state === "completed") {
+                  clearInterval(poller);
+                  const newVer = await fetchInstalledVersion();
+                  set({
+                    updating: false,
+                    installedVersion: newVer || targetTag || get().installedVersion,
+                    installedVersionLabel: `v${newVer || targetTag || get().installedVersion}`,
+                    updateAvailable: false,
+                    updateState: "completed",
+                    progressPercent: 100,
+                  });
+                  soundEngine.playSuccessChime();
+                  toast.success(`Updated to Extra v${newVer || targetTag}!`, {
+                    description: "All engine modules and security fixes are active.",
+                  });
+                  setTimeout(() => window.location.reload(), 1800);
+                  return;
+                }
+
+                if (progress.state === "failed") {
+                  clearInterval(poller);
+                  set({
+                    updating: false,
+                    updateState: "failed",
+                    error: progress.error || "Update worker reported an error",
+                  });
+                  toast.error("Update failed", {
+                    description: progress.error || "Review local logs in ~/.extra/logs",
+                  });
+                  return;
+                }
+              }
+
+              // Fallback version polling in case progress endpoint is transient
               const newVer = await fetchInstalledVersion();
               if (newVer && newVer !== get().installedVersion) {
                 clearInterval(poller);
@@ -159,27 +214,36 @@ export const useUpdateStore = create<UpdateStoreState>()(
                   installedVersion: newVer,
                   installedVersionLabel: `v${newVer}`,
                   updateAvailable: false,
+                  updateState: "completed",
+                  progressPercent: 100,
                 });
-                toast.success(`Updated to Extra v${newVer}!`, {
-                  description: "Newest features and SAC security fixes active.",
-                });
+                soundEngine.playSuccessChime();
+                toast.success(`Updated to Extra v${newVer}!`);
                 setTimeout(() => window.location.reload(), 1500);
-              } else if (pollCount > 25) {
-                clearInterval(poller);
-                set({ updating: false });
+                return;
               }
-            }, 3000);
+
+              if (pollCount > 60) {
+                // Timeout after ~60s
+                clearInterval(poller);
+                set({ updating: false, updateState: "idle" });
+              }
+            }, 1000);
 
             return true;
           } else {
-            set({ updating: false, error: res.error || "Failed to trigger update" });
+            set({
+              updating: false,
+              updateState: "failed",
+              error: res.error || "Failed to trigger update",
+            });
             toast.error("Update failed to trigger", {
-              description: res.error || "Check terminal permissions or run 'irm https://extra.yantraos.com/install.ps1 | iex'",
+              description: res.error || "Check terminal permissions or run 'extra update'",
             });
             return false;
           }
         } catch (err: any) {
-          set({ updating: false, error: err.message });
+          set({ updating: false, updateState: "failed", error: err.message });
           toast.error("Update error", { description: err.message });
           return false;
         }

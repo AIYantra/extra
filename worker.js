@@ -41,26 +41,65 @@ function isMacOrUnixUserAgent(userAgent) {
 }
 
 
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeHref(urlStr) {
+  if (!urlStr) return "#";
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return escapeHtml(urlStr);
+    }
+  } catch (_) {}
+  return "#";
+}
+
+const OAUTH_ACCESS_TOKEN_TTL = 86400; // 24 hours (reduced from excessive 30 days)
+const OAUTH_REFRESH_TOKEN_TTL = 86400 * 90; // 90 days
+
+
 function isValidRedirectUri(uri, clientRecord) {
   if (!uri) return false;
   try {
     const parsed = new URL(uri);
-    const allowedHosts = [
-      "chatgpt.com",
-      "chat.openai.com",
-      "vertexaisearch.cloud.google.com",
-      "claude.ai",
-      "localhost",
-      "127.0.0.1"
-    ];
-    if (allowedHosts.some(host => parsed.hostname === host || parsed.hostname.endsWith("." + host))) {
-      return true;
+    // Disallow non-http/https schemes (e.g. javascript:, data:, file:)
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return false;
     }
+    // Loopback allows http, all other destinations strictly require https
+    if (parsed.protocol === "http:" && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+      return false;
+    }
+
+    // Exact string match against pre-registered client redirect_uris
     if (clientRecord && Array.isArray(clientRecord.redirect_uris)) {
       if (clientRecord.redirect_uris.includes(uri)) return true;
-      if (clientRecord.redirect_uris.some(u => {
-        try { return new URL(u).origin === parsed.origin; } catch (_) { return false; }
-      })) return true;
+    }
+
+    // Standard AI platform pre-approved callback destinations
+    const allowedExactUris = [
+      "https://chatgpt.com/api/aip/callback",
+      "https://chat.openai.com/api/aip/callback",
+      "https://chatgpt.com/auth/callback",
+      "https://chat.openai.com/auth/callback",
+      "https://chatgpt.com/aip/test/oauth/callback",
+      "https://claude.ai/api/connectors/callback",
+      "https://vertexaisearch.cloud.google.com/oauth-redirect",
+      "https://vertexaisearch.cloud.google.com/callback",
+    ];
+    if (allowedExactUris.includes(uri)) return true;
+
+    // Localhost loopback development callbacks
+    if ((parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") && (parsed.pathname === "/api/auth/callback" || parsed.pathname.startsWith("/api/auth/callback/"))) {
+      return true;
     }
   } catch (_) {
     return false;
@@ -96,11 +135,12 @@ export default {
         issuer: "https://extra.yantraos.com",
         authorization_endpoint: "https://extra.yantraos.com/oauth/authorize",
         token_endpoint: "https://extra.yantraos.com/oauth/token",
+        revocation_endpoint: "https://extra.yantraos.com/oauth/revoke",
         registration_endpoint: "https://extra.yantraos.com/oauth/register",
         token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
-        code_challenge_methods_supported: ["S256", "plain"],
+        code_challenge_methods_supported: ["S256"],
         scopes_supported: ["mcp", "offline_access"]
       };
       return new Response(JSON.stringify(oauthMetadata), {
@@ -265,6 +305,14 @@ export default {
           });
         }
 
+        // Mandate PKCE code_challenge
+        if (!postCodeChallenge) {
+          return new Response(JSON.stringify({ error: "invalid_request", error_description: "PKCE code_challenge is required" }), {
+            status: 400,
+            headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS }
+          });
+        }
+
         const authCode = (submittedKey === "extra_rel_chatgpt_reviewer")
           ? "auth_reviewer_" + crypto.randomUUID().replace(/-/g, "")
           : "auth_" + crypto.randomUUID().replace(/-/g, "");
@@ -302,6 +350,28 @@ export default {
       }
 
       // GET: Render clean, luminous consent & pairing UI with dynamic AI branding
+      if (!codeChallenge) {
+        return new Response(JSON.stringify({ error: "invalid_request", error_description: "PKCE code_challenge is required" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS }
+        });
+      }
+
+      let getClientRecord = null;
+      if (clientId && env && env.TELEMETRY_KV) {
+        try {
+          const rawClient = await env.TELEMETRY_KV.get(`oauth_client:${clientId}`);
+          if (rawClient) getClientRecord = JSON.parse(rawClient);
+        } catch (_) {}
+      }
+
+      if (redirectUri && !isValidRedirectUri(redirectUri, getClientRecord)) {
+        return new Response(JSON.stringify({ error: "invalid_request", error_description: "Invalid or unauthorized redirect_uri" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS }
+        });
+      }
+
       let clientName = "ChatGPT";
       let clientLogo = "/logos/openai.svg";
       let isChatGPT = true;
@@ -335,7 +405,7 @@ export default {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Connect Extra to ${clientName}</title>
+  <title>Connect Extra to ${escapeHtml(clientName)}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="/icon.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -714,13 +784,13 @@ export default {
         <div class="bridge-line"></div>
         <span class="bridge-pill">MCP</span>
       </div>
-      <div class="avatar-box" title="${clientName}">
-        <img src="${clientLogo}" alt="${clientName}">
+      <div class="avatar-box" title="${escapeHtml(clientName)}">
+        <img src="${escapeHtml(clientLogo)}" alt="${escapeHtml(clientName)}">
       </div>
     </div>
 
-    <h1 class="title">Connect Extra to ${clientName}</h1>
-    <p class="subtitle">Pair your desktop workstation with ${clientName} to inspect windows, click buttons, and run local tools.</p>
+    <h1 class="title">Connect Extra to ${escapeHtml(clientName)}</h1>
+    <p class="subtitle">Pair your desktop workstation with ${escapeHtml(clientName)} to inspect windows, click buttons, and run local tools.</p>
 
     <!-- Reviewer & Demo Fast-Track (Zero Setup) -->
     <div class="reviewer-card">
@@ -741,16 +811,16 @@ export default {
     <div class="divider">or connect your workstation</div>
 
     <form id="oauth-form" method="POST" action="/oauth/authorize">
-      <input type="hidden" name="client_id" value="${clientId}">
-      <input type="hidden" name="redirect_uri" value="${redirectUri}">
-      <input type="hidden" name="state" value="${state}">
-      <input type="hidden" name="code_challenge" value="${codeChallenge}">
-      <input type="hidden" name="code_challenge_method" value="${codeChallengeMethod}">
+      <input type="hidden" name="client_id" value="${escapeHtml(clientId)}">
+      <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}">
+      <input type="hidden" name="state" value="${escapeHtml(state)}">
+      <input type="hidden" name="code_challenge" value="${escapeHtml(codeChallenge)}">
+      <input type="hidden" name="code_challenge_method" value="${escapeHtml(codeChallengeMethod)}">
 
       <div class="form-group">
         <label for="relay_key" class="field-label">Workstation Setup Key</label>
         <div class="input-wrapper">
-          <input type="text" id="relay_key" name="relay_key" value="${initialKey}" placeholder="extra_rel_... (or leave blank for reviewer sandbox)" spellcheck="false" autocomplete="off">
+          <input type="text" id="relay_key" name="relay_key" value="${escapeHtml(initialKey)}" placeholder="extra_rel_... (or leave blank for reviewer sandbox)" spellcheck="false" autocomplete="off">
         </div>
         <span class="hint">Run <code class="code-chip">extra connect</code> in your terminal, or use test key <code class="code-chip" style="cursor:pointer;" onclick="setReviewerKey()">extra_rel_chatgpt_reviewer</code>.</span>
       </div>
@@ -782,7 +852,7 @@ export default {
       <button type="submit" class="btn-submit">Allow Connection</button>
       
       <div class="cancel-row">
-        <a href="${cancelHref}" class="cancel-link">Cancel</a>
+        <a href="${sanitizeHref(cancelHref)}" class="cancel-link">Cancel</a>
       </div>
     </form>
 
@@ -897,19 +967,10 @@ export default {
           }
 
           if (!codeRecord) {
-            if (code === "auth_chatgpt_reviewer" || code.startsWith("auth_reviewer_")) {
-              codeRecord = {
-                relay_key: "extra_rel_chatgpt_reviewer",
-                client_id: clientId || "chatgpt",
-                redirect_uri: redirectUri,
-                created_at: Date.now(),
-              };
-            } else {
-              return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Authorization code is invalid or expired" }), {
-                status: 400,
-                headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
-              });
-            }
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Authorization code is invalid or expired" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
           }
 
           if (codeRecord.client_id && clientId && codeRecord.client_id !== clientId) {
@@ -919,35 +980,33 @@ export default {
             });
           }
 
-          // PKCE S256 verification if challenge was set
-          if (codeRecord.code_challenge) {
-            if (!codeVerifier) {
-              return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Missing PKCE code_verifier" }), {
+          // Mandate PKCE code_verifier validation (RFC 7636 / OAuth 2.1)
+          if (!codeRecord.code_challenge || !codeVerifier) {
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "Missing PKCE code_verifier" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
+          }
+
+          if (codeRecord.code_challenge_method === "S256") {
+            const encoder = new TextEncoder();
+            const digest = await crypto.subtle.digest("SHA-256", encoder.encode(codeVerifier));
+            const computedChallenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+              .replace(/\+/g, "-")
+              .replace(/\//g, "_")
+              .replace(/=+$/, "");
+
+            if (computedChallenge !== codeRecord.code_challenge) {
+              return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }), {
                 status: 400,
                 headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
               });
             }
-
-            if (codeRecord.code_challenge_method === "S256") {
-              const encoder = new TextEncoder();
-              const digest = await crypto.subtle.digest("SHA-256", encoder.encode(codeVerifier));
-              const computedChallenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-                .replace(/\+/g, "-")
-                .replace(/\//g, "_")
-                .replace(/=+$/, "");
-
-              if (computedChallenge !== codeRecord.code_challenge) {
-                return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE verification failed" }), {
-                  status: 400,
-                  headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
-                });
-              }
-            } else if (codeVerifier !== codeRecord.code_challenge) {
-              return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE plain verification failed" }), {
-                status: 400,
-                headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
-              });
-            }
+          } else if (codeVerifier !== codeRecord.code_challenge) {
+            return new Response(JSON.stringify({ error: "invalid_grant", error_description: "PKCE plain verification failed" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+            });
           }
 
           // Issue access token and refresh token
@@ -962,17 +1021,17 @@ export default {
 
           if (env && env.TELEMETRY_KV) {
             try {
-              // 30 days access token
-              await env.TELEMETRY_KV.put(`oauth_token:${accessToken}`, JSON.stringify(tokenRecord), { expirationTtl: 86400 * 30 });
+              // 24 hours access token
+              await env.TELEMETRY_KV.put(`oauth_token:${accessToken}`, JSON.stringify(tokenRecord), { expirationTtl: OAUTH_ACCESS_TOKEN_TTL });
               // 90 days refresh token
-              await env.TELEMETRY_KV.put(`oauth_refresh:${newRefreshToken}`, JSON.stringify(tokenRecord), { expirationTtl: 86400 * 90 });
+              await env.TELEMETRY_KV.put(`oauth_refresh:${newRefreshToken}`, JSON.stringify(tokenRecord), { expirationTtl: OAUTH_REFRESH_TOKEN_TTL });
             } catch (_) {}
           }
 
           return new Response(JSON.stringify({
             access_token: accessToken,
             token_type: "Bearer",
-            expires_in: 86400 * 30,
+            expires_in: OAUTH_ACCESS_TOKEN_TTL,
             refresh_token: newRefreshToken,
             scope: "mcp offline_access",
           }), {
@@ -1025,15 +1084,15 @@ export default {
             try {
               // Revoke old refresh token to prevent replay
               await env.TELEMETRY_KV.delete(`oauth_refresh:${refreshToken}`);
-              await env.TELEMETRY_KV.put(`oauth_token:${newAccessToken}`, JSON.stringify(refreshRecord), { expirationTtl: 86400 * 30 });
-              await env.TELEMETRY_KV.put(`oauth_refresh:${rotatedRefreshToken}`, JSON.stringify(refreshRecord), { expirationTtl: 86400 * 90 });
+              await env.TELEMETRY_KV.put(`oauth_token:${newAccessToken}`, JSON.stringify(refreshRecord), { expirationTtl: OAUTH_ACCESS_TOKEN_TTL });
+              await env.TELEMETRY_KV.put(`oauth_refresh:${rotatedRefreshToken}`, JSON.stringify(refreshRecord), { expirationTtl: OAUTH_REFRESH_TOKEN_TTL });
             } catch (_) {}
           }
 
           return new Response(JSON.stringify({
             access_token: newAccessToken,
             token_type: "Bearer",
-            expires_in: 86400 * 30,
+            expires_in: OAUTH_ACCESS_TOKEN_TTL,
             refresh_token: rotatedRefreshToken,
             scope: "mcp offline_access",
           }), {
@@ -1066,6 +1125,48 @@ export default {
           },
         });
       }
+    }
+
+    // Route RFC 7009 OAuth 2.0 Token Revocation Endpoint
+    if (url.pathname === "/oauth/revoke") {
+      if (request.method === "POST") {
+        let tokenToRevoke = "";
+        let tokenTypeHint = "";
+        try {
+          const contentType = request.headers.get("content-type") || "";
+          if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
+            const formData = await request.formData();
+            tokenToRevoke = (formData.get("token") || "").trim();
+            tokenTypeHint = (formData.get("token_type_hint") || "").trim();
+          } else if (contentType.includes("application/json")) {
+            const jsonBody = await request.json();
+            tokenToRevoke = (jsonBody.token || "").trim();
+            tokenTypeHint = (jsonBody.token_type_hint || "").trim();
+          }
+        } catch (_) {}
+
+        if (tokenToRevoke && env && env.TELEMETRY_KV) {
+          try {
+            if (tokenTypeHint === "refresh_token") {
+              await env.TELEMETRY_KV.delete(`oauth_refresh:${tokenToRevoke}`);
+              await env.TELEMETRY_KV.delete(`oauth_token:${tokenToRevoke}`);
+            } else {
+              await env.TELEMETRY_KV.delete(`oauth_token:${tokenToRevoke}`);
+              await env.TELEMETRY_KV.delete(`oauth_refresh:${tokenToRevoke}`);
+            }
+          } catch (_) {}
+        }
+
+        return new Response(JSON.stringify({ status: "revoked" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: "method_not_allowed" }), {
+        status: 405,
+        headers: { "Content-Type": "application/json; charset=utf-8", ...CORS_HEADERS },
+      });
     }
 
     // Route 0: Universal CORS Preflight
@@ -1437,7 +1538,7 @@ export default {
 
       let upstreamRes = await fetch(SCRIPT_MAP[url.pathname]);
       if (!upstreamRes || upstreamRes.status !== 200) {
-        const S3_ORIGIN = "http://extra.yantraos.com.s3-website.ap-south-1.amazonaws.com";
+        const S3_ORIGIN = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com";
         upstreamRes = await fetch(new URL(url.pathname, S3_ORIGIN).toString());
       }
 
@@ -1465,7 +1566,7 @@ export default {
       const targetScript = isMacOrUnixUserAgent(userAgent) ? "/install.sh" : "/install.ps1";
       let upstreamRes = await fetch(SCRIPT_MAP[targetScript]);
       if (!upstreamRes || upstreamRes.status !== 200) {
-        const S3_ORIGIN = "http://extra.yantraos.com.s3-website.ap-south-1.amazonaws.com";
+        const S3_ORIGIN = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com";
         upstreamRes = await fetch(new URL(targetScript, S3_ORIGIN).toString());
       }
 
@@ -1488,8 +1589,16 @@ export default {
     }
 
     // Route 6: Web Browser UI / Assets fallback to S3 Origin with Edge Caching
+    const cleanSearch = new URLSearchParams(url.search);
+    cleanSearch.delete("key");
+    cleanSearch.delete("token");
+    cleanSearch.delete("passkey");
+    cleanSearch.delete("relay_key");
+    const sanitizedSearch = cleanSearch.toString() ? `?${cleanSearch.toString()}` : "";
+    const sanitizedUrlStr = `${url.origin}${url.pathname}${sanitizedSearch}`;
+
     const cache = caches.default;
-    const cacheKey = new Request(url.toString(), request);
+    const cacheKey = new Request(sanitizedUrlStr, request);
     
     // Attempt edge cache lookup for GET / HEAD
     if (request.method === "GET" || request.method === "HEAD") {
@@ -1505,8 +1614,8 @@ export default {
       }
     }
 
-    const S3_ORIGIN = "http://extra.yantraos.com.s3-website.ap-south-1.amazonaws.com";
-    const targetUrl = new URL(url.pathname + url.search, S3_ORIGIN);
+    const S3_ORIGIN = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com";
+    const targetUrl = new URL(url.pathname + sanitizedSearch, S3_ORIGIN);
 
     const reqHeaders = new Headers(request.headers);
     reqHeaders.delete("host");

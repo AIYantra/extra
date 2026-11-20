@@ -10,8 +10,10 @@ import json
 import logging
 import os
 import platform
+import secrets
 import socket
 import sys
+import threading
 import time
 import urllib.parse
 from typing import Dict, Any, Optional, Set
@@ -27,7 +29,6 @@ DEFAULT_ALLOWED_RELAY_TOOLS = frozenset({
     "extra_mouse_move",
     "extra_type",
     "extra_hotkey",
-    "extra_launch",
     "extra_focus_window",
     "extra_snap_layout",
     "extra_scroll",
@@ -40,7 +41,11 @@ DEFAULT_ALLOWED_RELAY_TOOLS = frozenset({
     "extra_indicate_status",
     "extra_task_start",
     "extra_task_complete",
-    "extra_fs_batch",
+})
+
+DANGEROUS_REMOTE_TOOLS = frozenset({
+    "extra_execute_bridge",
+    "extra_harness_run",
 })
 
 
@@ -52,11 +57,9 @@ def get_allowed_relay_tools() -> frozenset:
     else:
         tools = set(DEFAULT_ALLOWED_RELAY_TOOLS)
 
-    # Bridge execution (Plane 2 code execution) is strictly disabled unless explicitly enabled
-    if os.environ.get("EXTRA_RELAY_ENABLE_BRIDGE") == "1":
-        tools.add("extra_execute_bridge")
-    else:
-        tools.discard("extra_execute_bridge")
+    # Dangerous remote execution tools are permanently disabled over Cloud Relay
+    for dangerous in DANGEROUS_REMOTE_TOOLS:
+        tools.discard(dangerous)
 
     return frozenset(tools)
 
@@ -113,7 +116,12 @@ def generate_relay_safe_b64(file_path: str, max_b64_len: int = 18000) -> Optiona
         return None
 
 
-async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]] = None, action_id: Optional[str] = None) -> Dict[str, Any]:
+async def execute_local_tool(
+    tool_name: str,
+    arguments: Optional[Dict[str, Any]] = None,
+    action_id: Optional[str] = None,
+    relay_token: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Executes an Extra tool locally on the glass and returns the outcome.
     Enforces a strict tool allowlist to prevent unauthorized remote code execution.
@@ -124,6 +132,14 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
     # Block dunder methods, private functions, and reflection attempts
     if tool_name.startswith("_"):
         return {"success": False, "error": f"Tool '{tool_name}' is not permitted."}
+
+    # Dangerous remote tools (bridge code execution, arbitrary CLI harnesses) are permanently forbidden
+    if tool_name in DANGEROUS_REMOTE_TOOLS:
+        logger.warning("Remote tool execution rejected: '%s' is permanently disabled over Cloud Relay", tool_name)
+        return {
+            "success": False,
+            "error": f"Security Policy Violation: Tool '{tool_name}' is permanently restricted from remote cloud execution."
+        }
 
     # Enforce strict remote execution allowlist
     allowed_tools = get_allowed_relay_tools()
@@ -136,6 +152,10 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
 
     try:
         safe_args = dict(arguments) if isinstance(arguments, dict) else {}
+
+        # 0. Clean routing and auth metadata keys defensively
+        for meta_k in ("relay_key", "relay_token", "key", "token", "sandbox", "device_id", "user_id", "auth", "authorization"):
+            safe_args.pop(meta_k, None)
 
         # 1. Pluggable tool executor callback (decoupled from mcp.server)
         if _CUSTOM_TOOL_EXECUTOR is not None:
@@ -153,6 +173,14 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
             if not tool_func or not callable(tool_func):
                 return {"success": False, "error": f"Tool '{tool_name}' not found on local Extra engine."}
 
+            # Filter arguments to match the tool function signature
+            import inspect
+            sig = inspect.signature(tool_func)
+            has_varkw = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+            if not has_varkw:
+                valid_params = set(sig.parameters.keys())
+                safe_args = {k: v for k, v in safe_args.items() if k in valid_params}
+
             # Handle async vs sync tool calls
             if asyncio.iscoroutinefunction(tool_func):
                 res = await tool_func(**safe_args)
@@ -168,7 +196,7 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
         if tool_name == "extra_screenshot" and isinstance(outcome.get("result"), dict):
             inner_res = outcome["result"]
             fp = inner_res.get("file_path")
-            act_id = action_id or f"act_{int(time.time() * 1000)}"
+            act_id = action_id or f"act_{secrets.token_hex(16)}"
             uploaded = False
             if fp and os.path.exists(fp):
                 try:
@@ -187,12 +215,19 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
                     img_data = buf.getvalue()
 
                     up_url = f"https://extra.yantraos.com/api/action/upload?action_id={act_id}"
+                    up_headers = {
+                        "Content-Type": "image/jpeg",
+                        "User-Agent": "Extra-Client/0.3.6",
+                    }
+                    if relay_token and relay_token != "anonymous":
+                        up_headers["X-Extra-Passkey"] = relay_token
+
                     session = get_upload_session()
                     if session is not None:
                         up_resp = session.post(
                             up_url,
                             data=img_data,
-                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.6"},
+                            headers=up_headers,
                             timeout=6
                         )
                         if up_resp.status_code == 200:
@@ -204,7 +239,7 @@ async def execute_local_tool(tool_name: str, arguments: Optional[Dict[str, Any]]
                         up_req = urllib.request.Request(
                             up_url,
                             data=img_data,
-                            headers={"Content-Type": "image/jpeg", "User-Agent": "Extra-Client/0.3.6"},
+                            headers=up_headers,
                             method="POST"
                         )
                         with urllib.request.urlopen(up_req, timeout=6) as up_resp:
@@ -236,9 +271,11 @@ async def run_relay_loop(
     device_name: Optional[str] = None,
     reconnect_delay: float = 3.0,
     on_state_change: Optional[Any] = None,
+    stop_event: Optional[Any] = None,
 ) -> None:
     """
     Main background event loop maintaining the outbound WebSocket relay.
+    Supports graceful termination and sovereign air-gap isolation via stop_event.
     """
     import websockets
 
@@ -252,19 +289,30 @@ async def run_relay_loop(
     from pathlib import Path
 
     current_token = token
-    while True:
+    while not (stop_event and stop_event.is_set()):
         try:
-            # Dynamically check if ~/.extra/config.json has an updated passkey (e.g. rotated on web or in app)
+            # Dynamically check if ~/.extra/config.json has an updated passkey or offline mode
             try:
                 cfg_path = Path.home() / ".extra" / "config.json"
                 if cfg_path.exists():
                     with open(cfg_path, "r", encoding="utf-8") as f:
                         disk_cfg = json.load(f)
+                    if disk_cfg.get("is_local_mode", False):
+                        logger.info("Local air-gapped mode active; halting relay loop.")
+                        if on_state_change:
+                            try:
+                                on_state_change("disabled", None)
+                            except Exception:
+                                pass
+                        break
                     disk_token = disk_cfg.get("relay_token")
                     if disk_token and disk_token != "anonymous" and len(disk_token) > 10:
                         current_token = disk_token
             except Exception:
                 pass
+
+            if stop_event and stop_event.is_set():
+                break
 
             params = {
                 "token": current_token,
@@ -301,11 +349,11 @@ async def run_relay_loop(
                     except Exception:
                         pass
 
-                # Keep heartbeat & message listener
-                while True:
+                last_ping_time = time.time()
+                while not (stop_event and stop_event.is_set()):
                     try:
-                        # Wait for incoming command with timeout to send ping
-                        message_raw = await asyncio.wait_for(ws.recv(), timeout=25.0)
+                        # Short timeout to allow timely checking of stop_event
+                        message_raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
                         data = json.loads(message_raw)
 
                         action = data.get("action")
@@ -317,8 +365,13 @@ async def run_relay_loop(
                             logger.info("Executing remote tool: %s (%s)", tool_name, action_id)
                             print(f"[ACTION] Received: {tool_name} -> executing on glass...", flush=True)
 
-                            # Run tool locally
-                            outcome = await execute_local_tool(tool_name, tool_args, action_id=action_id)
+                            # Run tool locally with token passed for screenshot upload authentication
+                            outcome = await execute_local_tool(
+                                tool_name,
+                                tool_args,
+                                action_id=action_id,
+                                relay_token=current_token,
+                            )
 
                             # Send result back across relay
                             resp = {
@@ -340,15 +393,22 @@ async def run_relay_loop(
                             print(f"[ACTION] Completed: {tool_name} (success={outcome.get('success')})", flush=True)
 
                     except asyncio.TimeoutError:
-                        # Send ping heartbeat
-                        try:
-                            pong_waiter = await ws.ping()
-                            await asyncio.wait_for(pong_waiter, timeout=10.0)
-                        except Exception:
-                            logger.warning("Heartbeat ping timed out, reconnecting...")
+                        if stop_event and stop_event.is_set():
                             break
+                        now = time.time()
+                        if now - last_ping_time > 20.0:
+                            try:
+                                pong_waiter = await ws.ping()
+                                await asyncio.wait_for(pong_waiter, timeout=8.0)
+                                last_ping_time = now
+                            except Exception:
+                                logger.warning("Heartbeat ping timed out, reconnecting...")
+                                break
 
         except (websockets.ConnectionClosed, ConnectionResetError, OSError) as e:
+            if stop_event and stop_event.is_set():
+                logger.info("Relay loop interrupted by stop_event during connection.")
+                break
             logger.warning("Relay connection lost: %s. Reconnecting in %ss...", e, reconnect_delay)
             print(f"[!] Connection dropped. Reconnecting in {reconnect_delay}s...", flush=True)
             if on_state_change:
@@ -356,16 +416,26 @@ async def run_relay_loop(
                     on_state_change("reconnecting", str(e))
                 except Exception:
                     pass
-            await asyncio.sleep(reconnect_delay)
+            # Interruptible delay
+            delay_end = time.time() + reconnect_delay
+            while time.time() < delay_end:
+                if stop_event and stop_event.is_set():
+                    break
+                await asyncio.sleep(0.2)
         except asyncio.CancelledError:
             logger.info("Relay loop cancelled, shutting down.")
-            if on_state_change:
-                try:
-                    on_state_change("stopped", None)
-                except Exception:
-                    pass
             break
         except Exception as e:
+            if stop_event and stop_event.is_set():
+                break
+            # Guard against running after event loop closed
+            try:
+                loop = asyncio.get_running_loop()
+                if loop.is_closed():
+                    break
+            except RuntimeError:
+                break
+
             err_str = str(e)
             if "403" in err_str:
                 logger.warning("Relay connection rejected (HTTP 403 Forbidden). Token may be invalid or rotated; rechecking local configuration...")
@@ -378,7 +448,23 @@ async def run_relay_loop(
                     on_state_change("reconnecting", err_str)
                 except Exception:
                     pass
-            await asyncio.sleep(reconnect_delay)
+            # Interruptible delay
+            delay_end = time.time() + reconnect_delay
+            while time.time() < delay_end:
+                if stop_event and stop_event.is_set():
+                    break
+                try:
+                    await asyncio.sleep(0.2)
+                except Exception:
+                    break
+
+    # Sovereign air-gap termination: wipe sensitive token reference and emit stopped state
+    current_token = None
+    if on_state_change:
+        try:
+            on_state_change("stopped", None)
+        except Exception:
+            pass
 
 
 def start_relay(

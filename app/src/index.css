@@ -56,8 +56,8 @@
 :root {
   color-scheme: light;
   --radius: 0.75rem;
-  --background: #f0f2f6;
-  --foreground: #1a1a1c;
+  --background: #eef2f7;
+  --foreground: #0f1e33;
   --card: #ffffff;
   --card-foreground: #1a1a1c;
   --popover: #ffffff;
@@ -81,17 +81,17 @@
   --chart-4: #10b981;
   --chart-5: #f59e0b;
 
-  /* Extra Station Structural Surface Tokens (Light Theme First) */
-  --station-canvas: #f0f2f6;
+  /* Extra Station Structural Surface Tokens (Combo #1 Trust Calm) */
+  --station-canvas: #eef2f7;
   --station-well: #ffffff;
-  --station-elevated: #f4f5f8;
+  --station-elevated: #f4f6fa;
   --station-surface: #dfe4eb;
   --station-surface-hover: #e3e7ed;
   --station-border: #dfe4eb;
-  --station-border-subtle: #eceff4;
-  --station-text-primary: #1a1a1c;
-  --station-text-muted: #525866;
-  --station-text-dim: #868c98;
+  --station-border-subtle: #e8edf3;
+  --station-text-primary: #0f1e33;
+  --station-text-muted: #475569;
+  --station-text-dim: #7c8aa0;
   --station-shadow: 0 4px 20px -2px rgba(26, 26, 28, 0.05);
 }
 

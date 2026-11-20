@@ -3,14 +3,9 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   Wrench,
+  Network,
   FileCheck2,
-  Layers,
-  Brain,
-  KeyRound,
-  Activity,
   Settings,
-  User,
-  Info,
   PanelLeftClose,
   PanelLeftOpen,
   Cable,
@@ -46,19 +41,16 @@ export function DashboardSidebar({
 }: DashboardSidebarProps) {
   const user = useAuthStore((state) => state.user);
   const openAuthModal = useAuthStore((state) => state.openAuthModal);
+  const updateAvailable = useUpdateStore((state) => state.updateAvailable);
+  const installedVersionLabel = useUpdateStore((state) => state.installedVersionLabel);
 
   const navItems: NavItem[] = [
     { id: "overview", label: "Dashboard", icon: LayoutDashboard },
-    { id: "tools", label: "MCP Tools", icon: Wrench, badge: "40" },
-    { id: "sessions", label: "Task Sessions", icon: FileCheck2 },
-    { id: "apps", label: "Connected Apps", icon: Layers, badge: "5" },
-    { id: "connectors", label: "Plugins & Connectors", icon: Cable, badge: "Setup" },
-    { id: "skills", label: "Skills & Memory", icon: Brain },
-    { id: "keys", label: "API Keys & Relay", icon: KeyRound },
-    { id: "telemetry", label: "Reports & Doctor", icon: Activity },
-    { id: "settings", label: "Settings", icon: Settings },
-    { id: "profile", label: "Profile", icon: User },
-    { id: "about", label: "About", icon: Info },
+    { id: "tools", label: "Tools & Skills", icon: Wrench, badge: "40" },
+    { id: "memory", label: "Memory Graph", icon: Network, badge: "Kùzu" },
+    { id: "sessions", label: "History", icon: FileCheck2 },
+    { id: "integrations", label: "Integrations", icon: Cable },
+    { id: "settings", label: "Settings & Health", icon: Settings },
   ];
 
   const handleNavClick = (id: string) => {
@@ -95,14 +87,19 @@ export function DashboardSidebar({
             <ExtraLogoIcon className="size-7 shrink-0" />
             {!collapsed && (
               <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <h1 className="font-semibold text-sm text-[#1a1a1c] tracking-tight leading-none">
+                <button
+                  type="button"
+                  onClick={() => handleNavClick("about")}
+                  className="flex items-center gap-1.5 text-left cursor-pointer group leading-none"
+                  title="View About & Software Updates"
+                >
+                  <h1 className="font-semibold text-sm text-[#1a1a1c] group-hover:text-[#1677ff] transition-colors tracking-tight leading-none">
                     Extra
                   </h1>
-                  <span className="text-[10px] font-mono text-[#868c98] leading-none">
-                    {useUpdateStore((s) => s.installedVersionLabel) || APP_VERSION_LABEL}
+                  <span className="text-[10px] font-mono text-[#868c98] group-hover:text-[#1677ff] transition-colors leading-none">
+                    {installedVersionLabel || APP_VERSION_LABEL}
                   </span>
-                </div>
+                </button>
                 <p className="text-[10px] text-[#868c98] font-medium truncate mt-1 leading-none">
                   {PRODUCT_BYLINE}
                 </p>
@@ -135,7 +132,12 @@ export function DashboardSidebar({
                     : "text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8]"
                 } ${collapsed ? "justify-center px-0" : ""}`}
               >
-                <Icon className={`size-4.5 shrink-0 ${isActive ? "text-white" : "text-[#525866]"}`} />
+                <div className="relative">
+                  <Icon className={`size-4.5 shrink-0 ${isActive ? "text-white" : "text-[#525866]"}`} />
+                  {item.id === "settings" && updateAvailable && (
+                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-[#1677ff] ring-2 ring-white animate-pulse" />
+                  )}
+                </div>
 
                 {!collapsed && (
                   <>
@@ -150,6 +152,9 @@ export function DashboardSidebar({
                       >
                         {item.badge}
                       </span>
+                    )}
+                    {item.id === "settings" && updateAvailable && !item.badge && (
+                      <span className="size-2 rounded-full bg-[#1677ff] shrink-0 animate-pulse" title="Update available" />
                     )}
                   </>
                 )}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import {
-  Sparkles,
+  Compass,
   Calculator,
   Play,
   Check,
@@ -12,7 +12,7 @@ import {
   ArrowRight,
   ArrowLeft,
   X,
-  Flame,
+  OctagonAlert,
 } from "lucide-react";
 import { ExtraLogoIcon } from "../ExtraLogo";
 import { useOnboardingStore } from "../../store/useOnboardingStore";
@@ -107,13 +107,13 @@ export function FirstFlightWizard() {
             </div>
             <div>
               <span className="font-bold text-xs uppercase tracking-wider text-primary">
-                First Flight Setup
+                Setup &amp; Verification
               </span>
               <h4 className="text-sm font-semibold text-[#1a1a1c]">
                 {step === "welcome" && "Welcome to Extra"}
                 {step === "select_ai" && "Choose Your AI Assistant"}
                 {step === "connect" && "Connect in 1 Click"}
-                {step === "demo" && "The 10-Second Magic Test"}
+                {step === "demo" && "Live Actuation Verification"}
               </h4>
             </div>
           </div>
@@ -153,7 +153,7 @@ export function FirstFlightWizard() {
             <div className="space-y-6 animate-in fade-in duration-200">
               <div className="text-center space-y-2 max-w-md mx-auto">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-1">
-                  <Sparkles className="size-3.5" />
+                  <Compass className="size-3.5" />
                   <span>Universal Computer-Use Engine</span>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1a1a1c] tracking-tight">
@@ -188,7 +188,7 @@ export function FirstFlightWizard() {
 
                 <div className="p-4 rounded-2xl border border-[#dfe4eb] bg-[#fafbfd] space-y-1.5">
                   <div className="size-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
-                    <Flame className="size-4" />
+                    <OctagonAlert className="size-4" />
                   </div>
                   <h4 className="text-xs font-bold text-[#1a1a1c]">Hardware Safety</h4>
                   <p className="text-[11px] text-[#868c98] leading-normal">
@@ -488,23 +488,23 @@ export function FirstFlightWizard() {
                   onClick={() => setStep("demo")}
                   className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-primary hover:bg-primary/95 text-white font-bold text-xs shadow-md shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer"
                 >
-                  <span>Next: Try Live Magic Test</span>
+                  <span>Next: Verify Desktop Actuation</span>
                   <ArrowRight className="size-4" />
                 </button>
               </div>
             </div>
           )}
 
-          {/* ================= STEP 4: MAGIC DEMO ================= */}
+          {/* ================= STEP 4: LIVE ACTUATION DEMO ================= */}
           {step === "demo" && (
             <div className="space-y-6 animate-in fade-in duration-200">
               <div className="text-center space-y-1.5 max-w-md mx-auto">
                 <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200 mb-1">
                   <Play className="size-3 fill-emerald-600 text-emerald-600" />
-                  <span>Interactive Proof of Flight</span>
+                  <span>Hardware Actuation Verification</span>
                 </div>
                 <h3 className="text-2xl font-extrabold text-[#1a1a1c]">
-                  The 10-Second Magic Test
+                  Live Desktop Actuation Test
                 </h3>
                 <p className="text-xs text-[#868c98] leading-relaxed">
                   Watch Extra safely control your screen right now. We'll open Windows Calculator, compute <code className="font-mono text-primary font-bold">125 * 8</code>, and snap the window cleanly.

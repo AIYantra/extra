@@ -3,13 +3,14 @@
    Linear / Teenage Engineering Inspired Minimalist Hierarchy
    ========================================================================== */
 body {
-  @apply font-sans antialiased text-station-text-primary bg-station-canvas selection:bg-indigo-500/20 selection:text-indigo-400;
+  @apply font-sans antialiased text-station-text-primary bg-station-canvas selection:bg-[#1677ff]/15 selection:text-[#0f1e33];
 }
 
 @layer base {
-  /* Tier 1: Bold display numbers & section anchors */
+  /* Tier 1: Manrope display headings · Tier 2: Inter body · Tier 3: JetBrains Mono tabular */
   h1, h2, h3, h4, h5, h6 {
-    @apply font-sans text-station-text-primary font-semibold tracking-tight;
+    font-family: var(--font-display);
+    @apply text-station-text-primary font-semibold tracking-tight;
   }
 
   h1 {

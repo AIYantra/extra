@@ -132,6 +132,33 @@ _ENGINE_PROC = None
 _ENGINE_START_TS = 0.0
 CREDENTIALS_FILE = EXTRA_DIR / "station_credentials.dat"
 
+_OAUTH_PENDING_STATES: dict[str, float] = {}
+_OAUTH_STATE_LOCK = threading.Lock()
+
+
+def _create_oauth_state() -> str:
+    """Generates a cryptographically secure anti-CSRF state token valid for 10 minutes."""
+    now = time.time()
+    with _OAUTH_STATE_LOCK:
+        expired = [s for s, exp in _OAUTH_PENDING_STATES.items() if now > exp]
+        for s in expired:
+            _OAUTH_PENDING_STATES.pop(s, None)
+        new_state = secrets.token_hex(16)
+        _OAUTH_PENDING_STATES[new_state] = now + 600.0
+        return new_state
+
+
+def _validate_and_consume_oauth_state(state: str) -> bool:
+    """Atomically consumes and validates an anti-CSRF OAuth state token."""
+    if not state or len(state) < 16:
+        return False
+    now = time.time()
+    with _OAUTH_STATE_LOCK:
+        exp = _OAUTH_PENDING_STATES.pop(state, None)
+        if exp is not None and now <= exp:
+            return True
+    return False
+
 
 def dpapi_encrypt(data_bytes: bytes) -> bytes:
     """Encrypt data bound to the current Windows user login using Windows DPAPI."""
@@ -2396,11 +2423,11 @@ class SPAHandler(SimpleHTTPRequestHandler):
 
     def _is_loopback_origin(self, origin: str) -> bool:
         if not origin:
-            return True
+            return False
         try:
             from urllib.parse import urlparse
             parsed = urlparse(origin)
-            return parsed.scheme in ("http", "https") and parsed.hostname in ("127.0.0.1", "localhost")
+            return parsed.scheme in ("http", "https") and parsed.hostname in ("127.0.0.1", "localhost", "::1")
         except Exception:
             return False
 
@@ -2408,7 +2435,7 @@ class SPAHandler(SimpleHTTPRequestHandler):
         # 1. DNS Rebinding Protection: Host header must strictly be loopback
         host_header = self.headers.get("Host", "")
         host_name = host_header.split(":")[0].strip().lower()
-        if host_name not in ("127.0.0.1", "localhost"):
+        if host_name not in ("127.0.0.1", "localhost", "::1"):
             self.send_error(400, "Bad Request: Invalid Host header")
             return False
 
@@ -2418,7 +2445,59 @@ class SPAHandler(SimpleHTTPRequestHandler):
             self.send_error(403, "Forbidden: Cross-origin access denied")
             return False
 
+        # 3. Protect state-mutating requests against simple CSRF
+        if self.command in ("POST", "PUT", "DELETE"):
+            sec_fetch_site = self.headers.get("Sec-Fetch-Site", "").lower()
+            if sec_fetch_site == "cross-site":
+                self.send_error(403, "Forbidden: Cross-site request rejected")
+                return False
+
+            client_header = self.headers.get("X-Extra-Client")
+            auth_header = self.headers.get("Authorization", "")
+
+            # Loopback origin allowed
+            if origin and self._is_loopback_origin(origin):
+                return True
+
+            # Desktop WebStation client allowed
+            if client_header == "WebStation":
+                return True
+
+            # Valid bearer token allowed
+            if auth_header.startswith("Bearer "):
+                token = auth_header[7:].strip()
+                if secrets.compare_digest(token, EXTRA_LOOPBACK_TOKEN):
+                    return True
+
+            # Same-origin browser request allowed
+            if sec_fetch_site in ("same-origin", "none"):
+                return True
+
+            # If no Origin and no authentication/client assertion on mutating request, reject
+            if not origin:
+                self.send_error(403, "Forbidden: Missing origin or authorization header")
+                return False
+
         return True
+
+    def _is_authorized_client(self) -> bool:
+        if not self._check_security():
+            return False
+        origin = self.headers.get("Origin")
+        if origin and self._is_loopback_origin(origin):
+            return True
+        sec_fetch_site = self.headers.get("Sec-Fetch-Site", "").lower()
+        if sec_fetch_site in ("same-origin", "none"):
+            return True
+        client_header = self.headers.get("X-Extra-Client")
+        if client_header == "WebStation":
+            return True
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+            if secrets.compare_digest(token, EXTRA_LOOPBACK_TOKEN):
+                return True
+        return False
 
     def end_headers(self):
         csp = (
@@ -2509,7 +2588,13 @@ class SPAHandler(SimpleHTTPRequestHandler):
         elif clean_path in ("/api/extra/user", "/api/extra/operator"):
             return self._send_json(get_operator_info())
         elif clean_path in ("/api/extra/session-token", "/api/session-token"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or client assertion"}, 401)
             return self._send_json({"token": EXTRA_LOOPBACK_TOKEN})
+        elif clean_path in ("/api/extra/oauth-state", "/api/oauth-state"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized"}, 401)
+            return self._send_json({"state": _create_oauth_state(), "expires_in": 600})
         elif clean_path in ("/api/extra/openapi.json", "/api/openapi.json"):
             return self._send_json(get_openapi_spec())
         elif clean_path in ("/api/extra/connectors", "/api/connectors"):
@@ -2517,11 +2602,22 @@ class SPAHandler(SimpleHTTPRequestHandler):
         elif clean_path in ("/api/extra/engine/status", "/api/engine/status"):
             return self._send_json(get_engine_status())
         elif clean_path in ("/api/extra/credentials", "/api/credentials"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
             return self._send_json(get_stored_credentials())
         elif clean_path in ("/api/auth/callback", "/oauth/callback"):
+            if not self._check_security():
+                return
             from urllib.parse import parse_qs, urlparse
             query_str = urlparse(self.path).query
             params = parse_qs(query_str)
+            state = params.get("state", [""])[0]
+
+            # Mandatory anti-CSRF state token validation
+            if not state or not _validate_and_consume_oauth_state(state):
+                self.send_error(400, "Bad Request: Invalid or expired OAuth anti-CSRF state token")
+                return
+
             token = params.get("token", [""])[0]
             relay_token = params.get("relay_token", [""])[0]
             user_json = params.get("user", ["{}"])[0]
@@ -2538,7 +2634,7 @@ class SPAHandler(SimpleHTTPRequestHandler):
                     "user": user or {"email": "cloud.operator@extra.local", "username": "Operator", "plan": "free"}
                 }
                 save_stored_credentials(creds)
-                print("  [OK] Cloud session linked via browser callback!", flush=True)
+                print("  [OK] Cloud session linked via verified OAuth browser callback!", flush=True)
 
             html_body = """<!DOCTYPE html>
 <html>
@@ -2612,26 +2708,62 @@ class SPAHandler(SimpleHTTPRequestHandler):
                 return self._send_json({"status": "ok", "success": ok, "results": {client_id: ok}, "configured": client_id})
 
         elif clean_path in ("/api/extra/open-browser", "/api/open-browser"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
             target_url = req_data.get("url", "")
+            # Seamless OAuth CSRF state injection if opening the desktop sign-in bridge
+            if "desktop_callback=" in target_url:
+                try:
+                    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+                    parsed = urlparse(target_url)
+                    q = parse_qs(parsed.query)
+                    if "desktop_callback" in q:
+                        cb_url = q["desktop_callback"][0]
+                        cb_parsed = urlparse(cb_url)
+                        cb_q = parse_qs(cb_parsed.query)
+                        if "state" not in cb_q:
+                            new_state = _create_oauth_state()
+                            cb_q["state"] = [new_state]
+                            new_cb_query = urlencode(cb_q, doseq=True)
+                            new_cb_url = urlunparse((cb_parsed.scheme, cb_parsed.netloc, cb_parsed.path, cb_parsed.params, new_cb_query, cb_parsed.fragment))
+                            q["desktop_callback"] = [new_cb_url]
+                            new_query = urlencode(q, doseq=True)
+                            target_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+                except Exception as ex:
+                    print(f"[ExtraApp] OAuth state injection notice: {ex}", flush=True)
+
             if target_url.startswith(("http://", "https://")):
                 ok = open_url_in_user_browser(target_url)
                 return self._send_json({"success": ok})
             return self._send_json({"error": "Invalid URL"}, 400)
 
         elif clean_path in ("/api/extra/reveal", "/api/reveal"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
             target_path = req_data.get("path", "")
+            if target_path:
+                norm_p = Path(os.path.normpath(os.path.expandvars(os.path.expanduser(target_path)))).resolve()
+                workspace_dir = (Path.home() / ".extra" / "workspace").resolve()
+                if any(part.startswith(".") for part in norm_p.parts if part not in (".", "..")) and not norm_p.is_relative_to(workspace_dir):
+                    return self._send_json({"error": "Access denied: cannot reveal sensitive hidden directories"}, 403)
             ok = reveal_file_in_explorer(target_path)
             return self._send_json({"success": ok})
 
         elif clean_path == "/api/extra/doctor/run":
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized"}, 401)
             res = get_doctor_diagnostic()
             return self._send_json({"success": True, "results": res})
 
         elif clean_path in ("/api/extra/keys", "/api/keys"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized"}, 401)
             action = req_data.get("action", "create")
             return self._send_json(modify_api_keys(action, req_data))
 
         elif clean_path in ("/api/extra/credentials", "/api/credentials"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
             action = req_data.get("action")
             if action == "clear":
                 clear_stored_credentials()
@@ -2968,7 +3100,19 @@ def open_url_in_user_browser(target_url: str) -> bool:
     Opens target_url in the user's primary/active browser and profile.
     Prioritizes Chrome with the user's active profile (e.g. Yantra / osyantra@gmail.com),
     falling back to OS default protocol handler.
+    Strictly validates URLs to prevent protocol handler argument splitting and CLI flag injection.
     """
+    clean_url = target_url.strip()
+    try:
+        from urllib.parse import urlparse
+        p = urlparse(clean_url)
+        if p.scheme not in ("http", "https") or not p.netloc:
+            return False
+        if any(c in clean_url for c in ("\r", "\n", "\t", '"', "'", "`")):
+            return False
+    except Exception:
+        return False
+
     if sys.platform == "win32":
         chrome_candidates = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")) / "Google" / "Chrome" / "Application" / "chrome.exe",
@@ -3004,10 +3148,6 @@ def open_url_in_user_browser(target_url: str) -> bool:
             except Exception as e:
                 print(f"[Extra] Chrome profile detection warning: {e}", flush=True)
 
-            # [OpenBot Security Hardening] Sanitize URL & prevent CLI flag injection
-            clean_url = target_url.strip()
-            if clean_url.startswith("-") or not (clean_url.startswith("http://") or clean_url.startswith("https://") or clean_url.startswith("file://")):
-                clean_url = "http://" + clean_url.lstrip("-")
             cmd = [chrome_exe]
             if profile_dir and not profile_dir.startswith("-"):
                 cmd.append(f"--profile-directory={profile_dir}")
@@ -3021,7 +3161,7 @@ def open_url_in_user_browser(target_url: str) -> bool:
 
     try:
         import webbrowser
-        return webbrowser.open(target_url)
+        return webbrowser.open(clean_url)
     except Exception:
         return False
 

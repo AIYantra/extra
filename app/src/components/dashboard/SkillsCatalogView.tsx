@@ -15,6 +15,7 @@ import {
 } from "../../services/extraDataService";
 import { soundEngine } from "../../utils/sound";
 import { toast } from "sonner";
+import { KuzuGraphSimulatorView } from "./KuzuGraphSimulatorView";
 
 export function SkillsCatalogView() {
   const [activeTab, setActiveTab] = useState<"skills" | "memory">("skills");
@@ -104,11 +105,18 @@ export function SkillsCatalogView() {
     setActiveSkillId(skill.id);
     soundEngine.playTick();
     try {
-      await new Promise((r) => setTimeout(r, 300));
-      soundEngine.playSuccessChime();
-      toast.success(`${skill.name} verified`);
-    } catch {
-      toast.error(`Could not verify ${skill.name}`);
+      const res = await extraDataService.verifySkill(skill.id);
+      if (res && res.verified) {
+        soundEngine.playSuccessChime();
+        toast.success(
+          `${skill.name} verified in ${res.latency_ms}ms · ${res.executable_found ? (res.executable_path || "OS Binary") : "Playbook Valid"}`,
+          { duration: 4000 }
+        );
+      } else {
+        toast.info(`${skill.name} playbook valid (${res.latency_ms}ms) · Host executable standby`);
+      }
+    } catch (err: any) {
+      toast.error(`Could not verify ${skill.name}: ${err?.message || "Execution error"}`);
     } finally {
       setActiveSkillId(null);
     }
@@ -363,67 +371,8 @@ export function SkillsCatalogView() {
           TAB 2: EPISODIC KNOWLEDGE GRAPH (KUZUDB)
           ===================================================================== */}
       {activeTab === "memory" && (
-        <div className="space-y-3.5">
-          {/* Top 4 Kuzu Graph Metric Cards - Clean Numbers, No Decorative Corner Icons */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs">
-              <span className="text-xs text-[#525866] block">Tasks Ingested</span>
-              <div className="text-2xl font-semibold tracking-tight text-[#0a0d14] tabular-nums mt-1">
-                {memoryData?.stats.tasks || 28}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs">
-              <span className="text-xs text-[#525866] block">SOUL Decisions</span>
-              <div className="text-2xl font-semibold tracking-tight text-[#0a0d14] tabular-nums mt-1">
-                {memoryData?.stats.decisions || 39}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs">
-              <span className="text-xs text-[#525866] block">Known Quirks</span>
-              <div className="text-2xl font-semibold tracking-tight text-[#0a0d14] tabular-nums mt-1">
-                {memoryData?.stats.quirks || 6}
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs">
-              <span className="text-xs text-[#525866] block">Known Applications</span>
-              <div className="text-2xl font-semibold tracking-tight text-[#0a0d14] tabular-nums mt-1">
-                {memoryData?.stats.apps || 14}
-              </div>
-            </div>
-          </div>
-
-          {/* Quirks Table */}
-          <div className="p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-xs text-[#0a0d14]">
-                Crystallized Application Quirks & Workarounds
-              </h3>
-              <span className="text-[11px] font-mono text-[#868c98]">
-                FastEmbed 384-dim
-              </span>
-            </div>
-
-            <div className="divide-y divide-[#eceff4]">
-              {(memoryData?.quirks || []).map((quirk, idx) => (
-                <div key={idx} className="py-2.5 flex items-start gap-3">
-                  <span className="size-1.5 rounded-full bg-[#1677ff] mt-1.5 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-xs text-[#1a1a1c]">{quirk.app}</span>
-                      <span className="text-[11px] text-[#868c98] font-mono truncate">{quirk.issue}</span>
-                    </div>
-                    <p className="text-xs text-[#525866] mt-0.5 leading-normal">
-                      <span className="font-medium text-[#1a1a1c]">Workaround: </span>
-                      {quirk.workaround}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="pt-2">
+          <KuzuGraphSimulatorView />
         </div>
       )}
 

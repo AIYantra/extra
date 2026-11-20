@@ -183,6 +183,9 @@ def check_bridge_payload_safety(payload: str, runtime: str) -> Optional[str]:
     return None
 
 
+RAW_SHELL_RUNTIMES = frozenset({"powershell", "cmd", "bash", "sh", "pwsh"})
+
+
 def execute_bridge(
     runtime: str,
     payload: str,
@@ -209,6 +212,22 @@ def execute_bridge(
             stderr="",
             error=f"Unsupported runtime '{runtime}'. Available: {_registry.list_runtimes()}",
             latency_ms=(time.perf_counter() - t0) * 1000.0,
+        )
+
+    # Safety Check: Disallow raw shell execution by default to prevent arbitrary OS command injection
+    if runtime.lower() in RAW_SHELL_RUNTIMES and os.environ.get("EXTRA_ENABLE_RAW_SHELL_BRIDGE") != "1":
+        return BridgeResult(
+            runtime=runtime,
+            success=False,
+            returncode=-1,
+            stdout="",
+            stderr=(
+                f"Security Policy Violation: Raw shell execution runtime '{runtime}' is disabled by default in extra_execute_bridge "
+                f"to prevent command injection. Use 'python' or approved CLI harnesses instead. Set EXTRA_ENABLE_RAW_SHELL_BRIDGE=1 to override."
+            ),
+            error=f"Raw shell execution runtime '{runtime}' is disabled by default for host security.",
+            latency_ms=(time.perf_counter() - t0) * 1000.0,
+            metadata={"security_blocked": True},
         )
 
     # Safety Check: Block unauthorized screen-scraping in execution bridge
@@ -284,7 +303,7 @@ def execute_bridge(
     }
     SENSITIVE_KEY_PATTERNS = (
         "KEY", "SECRET", "TOKEN", "PASSWORD", "AUTH", "CREDENTIAL", "PRIVATE",
-        "PAT", "ACCESS_KEY", "WEBHOOK", "SIG", "API_KEY"
+        "PAT", "ACCESS_KEY", "WEBHOOK", "SIG", "API_KEY", "PASSKEY", "BEARER", "RELAY"
     )
 
     exec_env = {}

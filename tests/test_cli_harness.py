@@ -121,7 +121,7 @@ class TestHarnessExecution:
     def test_execute_missing_harness_error(self):
         runner = UniversalHarnessRunner()
         with patch.object(runner, "resolve_harness", return_value=None):
-            result = runner.execute("unknown-app", ["do-something"])
+            result = runner.execute("gimp", ["do-something"])
             assert result.success is False
             assert result.returncode == -1
             assert "not found on system PATH" in result.error
