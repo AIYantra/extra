@@ -6241,6 +6241,15 @@ async def _relay_start_endpoint(request: Any) -> Any:
         except Exception:
             pass
 
+        if not token or not str(token).strip():
+            try:
+                cfg_path = Path.home() / ".extra" / "config.json"
+                if cfg_path.exists():
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        token = json.load(f).get("relay_token")
+            except Exception:
+                pass
+
         from extra.relay.manager import RelayManager
         success = RelayManager.get_instance().start(token=token)
         try:
@@ -6965,20 +6974,28 @@ def create_unified_mcp_app() -> Any:
     # Restrict CORS to trusted loopback origins unless explicitly tunneling or configured
     if os.environ.get("EXTRA_ALLOW_ALL_ORIGINS") == "1" or os.environ.get("EXTRA_TUNNEL") == "1":
         allowed_origins = ["*"]
+        allow_origin_regex = None
     else:
         allowed_origins = [
             "http://127.0.0.1:5173",
             "http://localhost:5173",
             "http://127.0.0.1:5174",
             "http://localhost:5174",
+            "http://127.0.0.1:8765",
+            "http://localhost:8765",
             "http://127.0.0.1:3000",
             "http://localhost:3000",
+            "tauri://localhost",
+            "https://tauri.localhost",
+            "http://tauri.localhost",
         ]
+        allow_origin_regex = r"^(https?://(localhost|127\.0\.0\.1)(:\d+)?|tauri://.*|https?://tauri\.localhost)"
 
     middleware = [
         Middleware(
             CORSMiddleware,
             allow_origins=allowed_origins,
+            allow_origin_regex=allow_origin_regex,
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

@@ -115,16 +115,19 @@ class RelayManager:
         Starts the background WebSocket relay tunnel.
         """
         with self._lock:
-            token_changed = (token is not None and self._token is not None and token != self._token)
-            if token is not None:
-                self._token = token
-            elif not self._token:
+            clean_token = token.strip() if (token and isinstance(token, str) and token.strip()) else None
+            token_changed = (clean_token is not None and self._token is not None and clean_token != self._token)
+            if clean_token:
+                self._token = clean_token
+            elif not self._token or not self._token.strip():
                 # Try reading from config.json
                 try:
                     cfg_path = Path.home() / ".extra" / "config.json"
                     if cfg_path.exists():
                         with open(cfg_path, "r", encoding="utf-8") as f:
-                            self._token = json.load(f).get("relay_token")
+                            t_disk = json.load(f).get("relay_token")
+                            if t_disk and isinstance(t_disk, str) and t_disk.strip():
+                                self._token = t_disk.strip()
                 except Exception:
                     pass
 
