@@ -42,7 +42,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    void useUpdateStore.getState().autoCheckIfDue();
+    void useUpdateStore.getState().initUpdateChecker();
     const timer = window.setInterval(() => {
       void useUpdateStore.getState().autoCheckIfDue();
     }, UPDATE_CHECK_INTERVAL_MS);
