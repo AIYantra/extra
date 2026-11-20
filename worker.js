@@ -1538,8 +1538,9 @@ export default {
 
       let upstreamRes = await fetch(SCRIPT_MAP[url.pathname]);
       if (!upstreamRes || upstreamRes.status !== 200) {
-        const S3_ORIGIN = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com";
-        upstreamRes = await fetch(new URL(url.pathname, S3_ORIGIN).toString());
+        const S3_ORIGIN = "https://s3.ap-south-1.amazonaws.com";
+        const BUCKET_PREFIX = "/extra.yantraos.com";
+        upstreamRes = await fetch(new URL(BUCKET_PREFIX + url.pathname, S3_ORIGIN).toString());
       }
 
       let bodyText = await upstreamRes.text();
@@ -1566,8 +1567,9 @@ export default {
       const targetScript = isMacOrUnixUserAgent(userAgent) ? "/install.sh" : "/install.ps1";
       let upstreamRes = await fetch(SCRIPT_MAP[targetScript]);
       if (!upstreamRes || upstreamRes.status !== 200) {
-        const S3_ORIGIN = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com";
-        upstreamRes = await fetch(new URL(targetScript, S3_ORIGIN).toString());
+        const S3_ORIGIN = "https://s3.ap-south-1.amazonaws.com";
+        const BUCKET_PREFIX = "/extra.yantraos.com";
+        upstreamRes = await fetch(new URL(BUCKET_PREFIX + targetScript, S3_ORIGIN).toString());
       }
 
       let bodyText = await upstreamRes.text();
@@ -1614,17 +1616,31 @@ export default {
       }
     }
 
-    const S3_ORIGIN = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com";
-    const targetUrl = new URL(url.pathname + sanitizedSearch, S3_ORIGIN);
+    const S3_ORIGIN = "https://s3.ap-south-1.amazonaws.com";
+    const BUCKET_PREFIX = "/extra.yantraos.com";
+    const targetUrl = new URL(BUCKET_PREFIX + url.pathname + sanitizedSearch, S3_ORIGIN);
 
     const reqHeaders = new Headers(request.headers);
     reqHeaders.delete("host");
     reqHeaders.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-    const originRes = await fetch(targetUrl.toString(), {
+    let originRes = await fetch(targetUrl.toString(), {
       method: request.method,
       headers: reqHeaders,
     });
+
+    // If clean URL returns 404 (e.g. S3 directory index), try /index.html fallback
+    if (originRes.status === 404 && !url.pathname.includes(".")) {
+      const fallbackPath = url.pathname.endsWith("/") ? `${url.pathname}index.html` : `${url.pathname}/index.html`;
+      const fallbackUrl = new URL(BUCKET_PREFIX + fallbackPath + sanitizedSearch, S3_ORIGIN);
+      const fallbackRes = await fetch(fallbackUrl.toString(), {
+        method: request.method,
+        headers: reqHeaders,
+      });
+      if (fallbackRes.status === 200) {
+        originRes = fallbackRes;
+      }
+    }
 
     const resHeaders = new Headers(originRes.headers);
     resHeaders.set("X-Content-Type-Options", "nosniff");
