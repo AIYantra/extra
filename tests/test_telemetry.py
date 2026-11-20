@@ -136,7 +136,9 @@ def test_telemetry_client_singleton():
     client1 = TelemetryClient.get_instance()
     client2 = TelemetryClient.get_instance()
     assert client1 is client2
-    assert "extra.yantraos.com" in client1.endpoint_url or "telemetry" in client1.endpoint_url
+    from urllib.parse import urlparse
+    parsed_ep = urlparse(client1.endpoint_url)
+    assert parsed_ep.hostname == "extra.yantraos.com" or "telemetry" in parsed_ep.path
 
 
 def test_mcp_server_main_triggers_first_run(clean_config):

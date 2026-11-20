@@ -829,7 +829,7 @@ class IndicatorController(AbstractIndicatorController):
         self.cmd_queue.put(("COMPLETE", {"summary": summary, "success": success}))
         if play_chime:
             self.audio.play("complete" if success else "error")
-        logger.info("Indicator: Task completed (%s)", summary or ("Success" if success else "Failure"))
+        logger.info("Indicator: Task completed (%s)", "Success" if success else "Failure")
 
     def task_indicate_status(
         self, status: str, message: str = "", play_sound: bool = False

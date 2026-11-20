@@ -86,7 +86,8 @@ def test_lineage_verified_via_browser_download_source(tmp_path: Path):
     assert verdict.valid is True
     assert verdict.detected_origin == ArtifactOrigin.OFFICIAL_WEB_EXPORT
     assert verdict.source_url is not None
-    assert "docs.google.com" in verdict.source_url
+    from urllib.parse import urlparse
+    assert urlparse(verdict.source_url).hostname == "docs.google.com"
 
 
 def test_milestone_verifier_blocks_fake_export(tmp_path: Path):

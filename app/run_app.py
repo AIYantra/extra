@@ -1477,22 +1477,25 @@ def get_real_lineage() -> list:
 
 def reveal_file_in_explorer(file_path: str) -> bool:
     try:
-        if file_path.startswith("~"):
-            file_path = str(Path.home() / file_path[2:])
-        p = Path(file_path)
+        if not file_path or not isinstance(file_path, str):
+            return False
+        clean_path = os.path.normpath(os.path.expandvars(os.path.expanduser(file_path.strip())))
+        p = Path(clean_path).resolve()
         if not p.exists():
             return False
+        resolved_str = str(p)
         if sys.platform == "win32":
             if p.is_dir():
-                subprocess.Popen(["explorer.exe", str(p.resolve())])
+                subprocess.Popen(["explorer.exe", resolved_str], shell=False)
             else:
-                subprocess.Popen(["explorer.exe", f"/select,{str(p.resolve())}"])
+                subprocess.Popen(["explorer.exe", f"/select,{resolved_str}"], shell=False)
             return True
         elif sys.platform == "darwin":
-            subprocess.Popen(["open", "-R", str(p.resolve())])
+            subprocess.Popen(["open", "-R", resolved_str], shell=False)
             return True
         else:
-            subprocess.Popen(["xdg-open", str(p.resolve() if p.is_dir() else p.parent.resolve())])
+            target_open = resolved_str if p.is_dir() else str(p.parent)
+            subprocess.Popen(["xdg-open", target_open], shell=False)
             return True
     except Exception as e:
         print(f"[run_app] reveal_file error: {e}", flush=True)
@@ -2421,15 +2424,23 @@ class SPAHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(DIST_DIR), **kwargs)
 
-    def _is_loopback_origin(self, origin: str) -> bool:
-        if not origin:
-            return False
+    def _get_sanitized_loopback_origin(self) -> Optional[str]:
+        raw_origin = self.headers.get("Origin")
+        if not raw_origin:
+            return None
         try:
             from urllib.parse import urlparse
-            parsed = urlparse(origin)
-            return parsed.scheme in ("http", "https") and parsed.hostname in ("127.0.0.1", "localhost", "::1")
+            parsed = urlparse(raw_origin)
+            if parsed.scheme in ("http", "https") and parsed.hostname in ("127.0.0.1", "localhost", "::1"):
+                port_str = f":{parsed.port}" if parsed.port else ""
+                # Reconstruct origin strictly from validated components, preventing HTTP response splitting
+                return f"{parsed.scheme}://{parsed.hostname}{port_str}"
         except Exception:
-            return False
+            pass
+        return None
+
+    def _is_loopback_origin(self, origin: str) -> bool:
+        return self._get_sanitized_loopback_origin() is not None
 
     def _check_security(self) -> bool:
         # 1. DNS Rebinding Protection: Host header must strictly be loopback
@@ -2528,9 +2539,9 @@ class SPAHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
-        origin = self.headers.get("Origin")
-        if origin and self._is_loopback_origin(origin):
-            self.send_header("Access-Control-Allow-Origin", origin)
+        clean_origin = self._get_sanitized_loopback_origin()
+        if clean_origin:
+            self.send_header("Access-Control-Allow-Origin", clean_origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -2541,10 +2552,10 @@ class SPAHandler(SimpleHTTPRequestHandler):
     def do_OPTIONS(self):
         if not self._check_security():
             return
-        origin = self.headers.get("Origin")
+        clean_origin = self._get_sanitized_loopback_origin()
         self.send_response(204)
-        if origin and self._is_loopback_origin(origin):
-            self.send_header("Access-Control-Allow-Origin", origin)
+        if clean_origin:
+            self.send_header("Access-Control-Allow-Origin", clean_origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
@@ -3149,7 +3160,8 @@ def open_url_in_user_browser(target_url: str) -> bool:
                 print(f"[Extra] Chrome profile detection warning: {e}", flush=True)
 
             cmd = [chrome_exe]
-            if profile_dir and not profile_dir.startswith("-"):
+            import re
+            if profile_dir and re.match(r"^[a-zA-Z0-9_\-\. ]+$", profile_dir) and not profile_dir.startswith("-"):
                 cmd.append(f"--profile-directory={profile_dir}")
             cmd.extend(["--", clean_url])
 

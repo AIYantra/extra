@@ -129,7 +129,7 @@ class DualPlaneVisualizer:
 
             if target_file and target_file.is_file():
                 if desktop_exe:
-                    logger.info("[Visualizer] Launching %s with artifact: %s", clean_slug, target_file)
+                    logger.info("[Visualizer] Launching %s with artifact: %s", clean_slug, target_file.name)
                     l_res = launch_app(app_name=clean_slug, args=[str(target_file)], wait_for_window=True, timeout=5.0)
                     method = "launch_app"
                     app_target = l_res.target_executed
@@ -137,7 +137,7 @@ class DualPlaneVisualizer:
                         window_hwnd = l_res.matched_hwnd
                         window_title = l_res.matched_title
                 else:
-                    logger.info("[Visualizer] Opening artifact via OS association: %s", target_file)
+                    logger.info("[Visualizer] Opening artifact via OS association: %s", target_file.name)
                     ok = open_uri(str(target_file))
                     method = "open_uri" if ok else "failed_open"
             elif desktop_exe:

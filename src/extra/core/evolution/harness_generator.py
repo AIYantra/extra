@@ -172,7 +172,17 @@ class HarnessSynthesizer:
         Clones remote git repositories if a URL is provided.
         """
         target = software_path_or_repo.strip()
-        is_git_url = any(target.startswith(p) for p in ("http://", "https://", "git@", "ssh://")) or "github.com/" in target
+        is_git_url = any(target.startswith(p) for p in ("git@", "ssh://"))
+        if not is_git_url:
+            try:
+                from urllib.parse import urlparse
+                _cand = target if "://" in target else f"https://{target}"
+                _p = urlparse(_cand)
+                is_git_url = _p.scheme in ("http", "https") and bool(_p.netloc) and any(
+                    _p.netloc.lower() == d or _p.netloc.lower().endswith(f".{d}") for d in ("github.com", "gitlab.com", "bitbucket.org")
+                )
+            except Exception:
+                is_git_url = False
 
         if is_git_url:
             raw_name = target.rstrip("/").split("/")[-1]
