@@ -7,7 +7,14 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 from extra.relay.manager import RelayManager
-from extra.core.platform.windows import autostart
+
+if sys.platform == "win32":
+    try:
+        from extra.core.platform.windows import autostart
+    except ImportError:
+        autostart = None
+else:
+    autostart = None
 
 
 class TestRelayManager(unittest.TestCase):
@@ -64,6 +71,7 @@ class TestRelayManager(unittest.TestCase):
         self.assertFalse(res["connected"])
 
 
+@unittest.skipUnless(sys.platform == "win32", "Windows autostart tests require Windows")
 class TestWindowsAutostart(unittest.TestCase):
     def test_resolve_command(self):
         """Command resolution should return a non-empty string."""
