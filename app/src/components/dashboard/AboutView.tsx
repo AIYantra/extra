@@ -243,6 +243,24 @@ function UpdatesTab() {
         <div className="space-y-4">
           <div>
             <div className="flex items-center justify-between gap-3">
+              <p className="font-medium text-[#1a1a1c]">v0.3.7</p>
+              <p className="font-mono text-[11px] tabular-nums text-[#868c98]">
+                2026-11-20
+              </p>
+            </div>
+            <p className="mt-1">
+              Multi-Phase Security Hardening, Strict Cloud Relay Air-Gap Isolation, Workspace Filesystem Containment &amp; RFC 7636 PKCE Edge OAuth Defense.
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              <WebsiteLink
+                href="https://github.com/AIYantra/extra/compare/v0.3.6...v0.3.7"
+                label="Full changelog"
+              />
+              <WebsiteLink href={UPDATE_RELEASES_URL} label="All releases" />
+            </div>
+          </div>
+          <div className="border-t border-[#dfe4eb] pt-3">
+            <div className="flex items-center justify-between gap-3">
               <p className="font-medium text-[#1a1a1c]">v0.3.6</p>
               <p className="font-mono text-[11px] tabular-nums text-[#868c98]">
                 2026-11-12

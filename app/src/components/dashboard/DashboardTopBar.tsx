@@ -313,7 +313,7 @@ export function DashboardTopBar({
                       <span>Software Updates</span>
                     </span>
                     <span className="text-[10px] font-mono text-[#868c98]">
-                      {installedVersionLabel || "v0.3.6"}
+                      {installedVersionLabel || "v0.3.7"}
                     </span>
                   </button>
                   <button
