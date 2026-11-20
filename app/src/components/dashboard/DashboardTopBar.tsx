@@ -371,12 +371,22 @@ export function DashboardTopBar({
                       onClick={async () => {
                         setTogglingOffline(true);
                         soundEngine.playTick();
+                        setRelayStatus((prev) => prev ? { ...prev, running: true, status: "connecting", connected: false } : null);
                         try {
                           await setLocalOffline(false);
-                          const updated = await extraDataService.fetchRelayStatus();
-                          setRelayStatus(updated);
+                          let finalStat: LiveRelayStatus | null = null;
+                          for (let i = 0; i < 6; i++) {
+                            await new Promise((r) => setTimeout(r, 450));
+                            finalStat = await extraDataService.fetchRelayStatus();
+                            setRelayStatus(finalStat);
+                            if (finalStat.connected) break;
+                          }
                           soundEngine.playSuccessChime();
-                          toast.success("Cloud Relay connected. Live agent commands enabled.");
+                          if (finalStat?.connected) {
+                            toast.success("Cloud Relay connected. Live agent commands enabled.");
+                          } else {
+                            toast.info("Cloud Relay is reconnecting in the background...");
+                          }
                         } catch {
                           toast.error("Failed to connect Cloud Relay");
                         } finally {
@@ -387,8 +397,8 @@ export function DashboardTopBar({
                       className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-[#f8f9fb] text-xs text-[#1677ff] font-medium transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
-                        <Globe className="size-3.5 text-[#1677ff]" />
-                        <span>Switch to Online (Cloud Relay)</span>
+                        <Globe className={`size-3.5 text-[#1677ff] ${togglingOffline ? "animate-spin" : ""}`} />
+                        <span>{togglingOffline ? "Connecting Cloud Relay..." : "Switch to Online (Cloud Relay)"}</span>
                       </span>
                       <ChevronRight className="size-3 text-[#1677ff]" />
                     </button>
@@ -414,7 +424,7 @@ export function DashboardTopBar({
                       className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md hover:bg-[#f8f9fb] text-xs text-[#525866] hover:text-[#1a1a1c] transition-colors cursor-pointer"
                     >
                       <Laptop className="size-3.5 text-[#868c98]" />
-                      <span>Switch to Offline Mode</span>
+                      <span>{togglingOffline ? "Disconnecting..." : "Switch to Offline Mode"}</span>
                     </button>
                   )}
 
