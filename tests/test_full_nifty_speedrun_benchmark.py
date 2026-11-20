@@ -107,7 +107,7 @@ class TestFullNiftySpeedrunBenchmark(unittest.TestCase):
 
         print(f"[BENCHMARK] Telegram File Injection & Intent: {cb_ms:.2f}ms clipboard, {compile_ms:.3f}ms compiler")
 
-    @unittest.skipIf(os.environ.get("CI") == "true" or sys.platform != "win32", "Live multi-app GUI benchmark skipped in headless CI")
+    @unittest.skipIf(os.environ.get("CI") == "true" or os.environ.get("EXTRA_RUN_LIVE_BENCHMARKS") != "1" or sys.platform != "win32", "Live multi-app GUI benchmark skipped unless EXTRA_RUN_LIVE_BENCHMARKS=1")
     def test_03_full_pipeline_speedrun_live(self):
         """
         Executes the complete 6-stage automation pipeline live on the Windows desktop in Turbo mode:

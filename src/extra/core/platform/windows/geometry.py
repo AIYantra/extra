@@ -130,12 +130,32 @@ def ensure_dpi_aware() -> bool:
     return False
 
 
+def is_current_session_active_console() -> bool:
+    """Verifies that the current process belongs to the active interactive console session."""
+    if not hasattr(kernel32, "WTSGetActiveConsoleSessionId") or not hasattr(kernel32, "ProcessIdToSessionId"):
+        return True
+    try:
+        active_session = kernel32.WTSGetActiveConsoleSessionId()
+        if active_session == 0xFFFFFFFF:
+            return True
+        my_session = wintypes.DWORD()
+        my_pid = kernel32.GetCurrentProcessId()
+        kernel32.ProcessIdToSessionId(my_pid, ctypes.byref(my_session))
+        return my_session.value == active_session
+    except Exception:
+        return True
+
+
 def attach_input_desktop() -> bool:
     """
     Attaches the current calling thread to the active interactive input desktop
     or isolated child virtual desktop if active.
     Required for background agents, subshells, and automation services on Windows.
     """
+    # Cross-session isolation check: prevent attaching to desktop from non-interactive sessions
+    if not is_current_session_active_console():
+        return False
+
     try:
         from extra.core.platform.windows.child_session import get_child_session_manager, SessionTier
         mgr = get_child_session_manager()

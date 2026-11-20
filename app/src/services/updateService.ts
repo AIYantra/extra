@@ -194,6 +194,16 @@ export async function checkForUpdates(
   };
 }
 
+export interface UpdateProgress {
+  state: "idle" | "checking" | "downloading" | "installing" | "restarting" | "completed" | "failed";
+  progress_percent: number;
+  status_text: string;
+  target_version?: string;
+  error?: string | null;
+  started_at?: number | null;
+  completed_at?: number | null;
+}
+
 /** Starts a browser download of the given release asset. */
 export function downloadAsset(url: string, filename: string): void {
   const link = document.createElement("a");
@@ -206,18 +216,41 @@ export function downloadAsset(url: string, filename: string): void {
 }
 
 /**
- * Triggers background execution of the official installer to upgrade Extra.
+ * Fetches real-time background update execution progress from the host server.
  */
-export async function performAppUpdate(): Promise<{ success: boolean; message?: string; error?: string }> {
+export async function fetchUpdateProgress(): Promise<UpdateProgress | null> {
+  try {
+    const res = await fetch("/api/extra/update/status", {
+      headers: { Accept: "application/json" },
+    });
+    if (res.ok) {
+      return (await res.json()) as UpdateProgress;
+    }
+  } catch {
+    // Host server may be reloading
+  }
+  return null;
+}
+
+/**
+ * Triggers background execution of the context-aware updater.
+ */
+export async function performAppUpdate(
+  targetVersion?: string,
+): Promise<{ success: boolean; message?: string; error?: string; status?: UpdateProgress }> {
   try {
     const res = await fetch("/api/extra/update/perform", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
+      body: JSON.stringify({ version: targetVersion }),
     });
     if (res.ok) {
       const data = await res.json();
-      return { success: true, message: data.message || "Update in progress" };
+      return {
+        success: true,
+        message: data.message || "Update in progress",
+        status: data.status,
+      };
     }
     const errData = await res.json().catch(() => ({}));
     return { success: false, error: errData.error || `HTTP ${res.status}` };

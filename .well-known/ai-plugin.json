@@ -3,7 +3,7 @@
   "name_for_human": "Extra Desktop Operator",
   "name_for_model": "extra_desktop",
   "description_for_human": "Sovereign desktop automation and computer-use engine that can see your screen, click UI elements, launch apps, and automate tasks.",
-  "description_for_model": "Universal computer-use engine and MCP server. Allows the model to inspect desktop displays via screenshots, launch native desktop applications, click UI elements with visual grounding, type text, send hotkeys, and arrange window layouts across Linux, Windows, and macOS.",
+  "description_for_model": "Extra Desktop Operator connects ChatGPT to the user's physical Windows, macOS, or Linux computer to view the screen, launch applications, click UI elements, and automate desktop workflows.\n\nCRITICAL FIRST-RUN ONBOARDING & PAIRING PROTOCOL:\n1. When the user asks to launch an app, view their screen, click, type, or automate their computer, check if they have provided a Workstation Relay Key (extra_rel_...) or if any tool returns 'workstation_not_connected'.\n2. DO NOT pretend an action succeeded or claim an app opened if 'workstation_not_connected' is returned.\n3. Proactively guide the user through the 3 simple setup steps:\n   \u2022 Step 1: Open PowerShell on Windows (or Terminal on Mac/Linux) and run:\n     irm extra.yantraos.com/install.ps1 | iex\n     (macOS/Linux: curl -fsSL https://extra.yantraos.com/install.sh | bash)\n   \u2022 Step 2: The Extra Desktop App will automatically launch. Sign in or sign up (the app immediately runs the background connection).\n   \u2022 Step 3: Copy your Relay Key from the app (or at https://extra.yantraos.com/dashboard) and paste it here in this chat!\n4. Once the user pastes their key (e.g. extra_rel_...), remember it for the rest of the conversation, pass it as 'relay_key' in all subsequent tool calls, and execute their requested task live on their real screen.",
   "auth": {
     "type": "service_http",
     "authorization_type": "bearer",
@@ -26,6 +26,7 @@
         "os_automation"
       ],
       "tools": [
+        "extra_status",
         "extra_screenshot",
         "extra_launch",
         "extra_click",

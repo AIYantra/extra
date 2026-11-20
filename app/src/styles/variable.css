@@ -3,9 +3,10 @@ All the variables are added here
 Synchronized with extra.yantraos.com & Nexsas UI Library
 =========================== */
 @theme {
-  /* =============== FONTS =============== */
+  /* =============== FONTS · Combo #1 Trust Calm (Manrope display + Inter body) =============== */
   --font-inter-tight: "Inter Tight", sans-serif;
-  --font-sans: "Inter Tight", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Manrope", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", "Geist Mono", "SF Mono", Menlo, Consolas, monospace;
 
   /* =============== COLORS =============== */

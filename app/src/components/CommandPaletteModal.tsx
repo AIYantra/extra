@@ -1,17 +1,18 @@
 import {
   Play,
-  Monitor,
   PauseCircle,
   FileDown,
   Layers,
-  Terminal,
   Calculator,
   FileSpreadsheet,
   Palette,
   Box,
   FolderOpen,
   Cable,
+  Network,
+  RefreshCw,
 } from "lucide-react";
+import { useUpdateStore } from "../store/useUpdateStore";
 import {
   CommandDialog,
   CommandInput,
@@ -72,8 +73,8 @@ export function CommandPaletteModal({ isOpen, onClose, onRunAction }: CommandPal
           No commands match your query.
         </CommandEmpty>
 
-        {/* Group 1: Pilot Cockpit & Views */}
-        <CommandGroup heading="Pilot Cockpit & Views" className="text-[#868c98] text-[11px] font-medium px-1">
+        {/* Group 1: Navigation & Views */}
+        <CommandGroup heading="Navigation & Views" className="text-[#868c98] text-[11px] font-medium px-1">
           <CommandItem
             onSelect={() => handleSelect("pilot", "Live Desktop Pilot Glass")}
             className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
@@ -85,35 +86,6 @@ export function CommandPaletteModal({ isOpen, onClose, onRunAction }: CommandPal
                 <span className="text-[11px] text-[#868c98] truncate block">Real-time optical streaming & actuator HUD</span>
               </div>
             </div>
-            <CommandShortcut>2</CommandShortcut>
-          </CommandItem>
-
-          <CommandItem
-            onSelect={() => handleSelect("dual-plane", "Dual-Plane Screen Monitor")}
-            className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Layers className="size-4 text-[#868c98] group-hover:text-[#1a1a1c] group-data-[selected=true]:text-[#1a1a1c] dark:group-hover:text-[#f4f5f8] dark:group-data-[selected=true]:text-[#f4f5f8] shrink-0 transition-colors" />
-              <div className="min-w-0">
-                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">Dual-Plane Monitor</span>
-                <span className="text-[11px] text-[#868c98] truncate block">Plane 1 Optical SOUL vs Plane 2 Bridge</span>
-              </div>
-            </div>
-            <CommandShortcut>5</CommandShortcut>
-          </CommandItem>
-
-          <CommandItem
-            onSelect={() => handleSelect("optical", "Optical Radar View")}
-            className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <Monitor className="size-4 text-[#868c98] group-hover:text-[#1a1a1c] group-data-[selected=true]:text-[#1a1a1c] dark:group-hover:text-[#f4f5f8] dark:group-data-[selected=true]:text-[#f4f5f8] shrink-0 transition-colors" />
-              <div className="min-w-0">
-                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">Optical Accessibility Radar</span>
-                <span className="text-[11px] text-[#868c98] truncate block">Live AT-SPI2 and UIAutomation tree</span>
-              </div>
-            </div>
-            <CommandShortcut>7</CommandShortcut>
           </CommandItem>
 
           <CommandItem
@@ -133,17 +105,66 @@ export function CommandPaletteModal({ isOpen, onClose, onRunAction }: CommandPal
           </CommandItem>
 
           <CommandItem
-            onSelect={() => handleSelect("terminal", "Terminal & Process Bridge")}
+            onSelect={() => handleSelect("memory", "KùzuDB Memory Graph Simulation")}
             className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
           >
             <div className="flex items-center gap-3 min-w-0">
-              <Terminal className="size-4 text-[#868c98] group-hover:text-[#1a1a1c] group-data-[selected=true]:text-[#1a1a1c] dark:group-hover:text-[#f4f5f8] dark:group-data-[selected=true]:text-[#f4f5f8] shrink-0 transition-colors" />
+              <Network className="size-4 text-[#868c98] group-hover:text-[#1677ff] group-data-[selected=true]:text-[#1677ff] shrink-0 transition-colors" />
               <div className="min-w-0">
-                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">Terminal & Python Bridge</span>
-                <span className="text-[11px] text-[#868c98] truncate block">Deterministic code execution console</span>
+                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">KùzuDB Memory Graph</span>
+                <span className="text-[11px] text-[#868c98] truncate block">Interactive episodic vector topology & Cypher simulator</span>
               </div>
             </div>
-            <CommandShortcut>6</CommandShortcut>
+            <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded border border-[#dfe4eb] dark:border-[#2c3038] bg-[#f8f9fb] dark:bg-[#1a1c20] text-[#1677ff]">
+              Kùzu
+            </span>
+          </CommandItem>
+
+          <CommandItem
+            onSelect={() => handleSelect("sessions", "Task Execution History")}
+            className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <Layers className="size-4 text-[#868c98] group-hover:text-[#1a1a1c] group-data-[selected=true]:text-[#1a1a1c] dark:group-hover:text-[#f4f5f8] dark:group-data-[selected=true]:text-[#f4f5f8] shrink-0 transition-colors" />
+              <div className="min-w-0">
+                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">Task Sessions & Ledger</span>
+                <span className="text-[11px] text-[#868c98] truncate block">Verified task runs, logs, and artifacts</span>
+              </div>
+            </div>
+          </CommandItem>
+
+          <CommandItem
+            onSelect={() => {
+              soundEngine.playTick();
+              toast.info("Checking for Extra updates...");
+              void useUpdateStore.getState().checkNow();
+              onClose();
+            }}
+            className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <RefreshCw className="size-4 text-[#868c98] group-hover:text-[#1677ff] group-data-[selected=true]:text-[#1677ff] shrink-0 transition-colors" />
+              <div className="min-w-0">
+                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">Check for Software Updates</span>
+                <span className="text-[11px] text-[#868c98] truncate block">Query release channels for newest versions</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono font-medium px-1.5 py-0.5 rounded border border-[#dfe4eb] dark:border-[#2c3038] bg-[#f8f9fb] dark:bg-[#1a1c20] text-[#1677ff]">
+              Updates
+            </span>
+          </CommandItem>
+
+          <CommandItem
+            onSelect={() => handleSelect("about", "Software Updates & Release Notes")}
+            className="group flex items-center justify-between py-2 px-2.5 rounded-xl text-xs cursor-pointer transition-colors duration-120 data-[selected=true]:bg-[#f4f5f8] dark:data-[selected=true]:bg-[#1e2025]"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <RefreshCw className="size-4 text-[#868c98] group-hover:text-[#1a1a1c] group-data-[selected=true]:text-[#1a1a1c] dark:group-hover:text-[#f4f5f8] dark:group-data-[selected=true]:text-[#f4f5f8] shrink-0 transition-colors" />
+              <div className="min-w-0">
+                <span className="font-medium text-[#1a1a1c] dark:text-[#f4f5f8] block">About & Release Notes</span>
+                <span className="text-[11px] text-[#868c98] truncate block">Installed version, changelog, and license</span>
+              </div>
+            </div>
           </CommandItem>
         </CommandGroup>
 

@@ -718,7 +718,7 @@ export class ExtraDataService {
         ? { relay_token: relayToken.trim() }
         : {};
       const payload = JSON.stringify(payloadObj);
-      const headers = { "Content-Type": "application/json", Accept: "application/json" };
+      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json", Accept: "application/json" });
       let res: Response | null = null;
       try {
         res = await fetch("http://127.0.0.1:8000/api/relay/start", {
@@ -754,7 +754,7 @@ export class ExtraDataService {
 
   async stopRelay(): Promise<boolean> {
     try {
-      const headers = { "Content-Type": "application/json", Accept: "application/json" };
+      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json", Accept: "application/json" });
       let ok = false;
       try {
         const res = await fetch("http://127.0.0.1:8000/api/relay/stop", {

@@ -92,16 +92,31 @@ def _is_contained_in(target: Union[str, Path], base: Union[str, Path]) -> bool:
         return False
 
 
+def _is_safe_workspace_root(p: Path) -> bool:
+    """Ensures target directory is not a bare drive root or bare user home root."""
+    try:
+        r = p.resolve()
+        if r == r.parent:
+            return False
+        # Disallow bare home directory directly (e.g. C:\Users\Username or /home/user)
+        home = Path.home().resolve()
+        if r == home:
+            return False
+        return _is_safe_path(r)
+    except Exception:
+        return False
+
+
 def _resolve_safe_dir(dir_path: Optional[str]) -> Path:
     """Resolves and validates target directory against protected boundaries."""
     if not dir_path:
-        base = Path(os.environ.get("EXTRA_WORKSPACE", Path.home() / ".extra" / "workspace"))
+        base = Path(os.environ.get("EXTRA_WORKSPACE", Path.home() / ".extra" / "workspace")).resolve()
     else:
         expanded = os.path.expandvars(os.path.expanduser(dir_path))
         base = Path(expanded).resolve()
 
-    if not _is_safe_path(base):
-        raise PermissionError(f"Target directory '{base}' is a protected system path.")
+    if not _is_safe_workspace_root(base):
+        raise PermissionError(f"Target directory '{base}' cannot be a protected system path, bare drive root, or bare user home directory.")
 
     base.mkdir(parents=True, exist_ok=True)
     return base
@@ -219,6 +234,19 @@ def execute_fs_batch(
                 })
                 continue
 
+            # Dotfile & Hidden File Protection
+            try:
+                rel_parts = full_path.relative_to(target_resolved).parts
+                if any(part.startswith(".") for part in rel_parts):
+                    created.append({
+                        "path": str(rel_path),
+                        "success": False,
+                        "error": "Hidden files and dotfiles (.ssh, .bashrc, .git, etc.) are strictly forbidden in workspace."
+                    })
+                    continue
+            except Exception:
+                pass
+
             is_dir = bool(item.get("is_dir", False))
             if is_dir:
                 full_path.mkdir(parents=True, exist_ok=True)
@@ -262,6 +290,20 @@ def execute_fs_batch(
                     "error": "Path traversal or outside target directory blocked"
                 })
                 continue
+
+            # Dotfile & Hidden File Protection
+            try:
+                dst_rel = dst_path.resolve().relative_to(target_resolved)
+                if any(part.startswith(".") for part in dst_rel.parts):
+                    renamed.append({
+                        "from": str(src_path),
+                        "to": str(dst_path),
+                        "success": False,
+                        "error": "Renaming to hidden files or dotfiles is strictly forbidden."
+                    })
+                    continue
+            except Exception:
+                pass
 
             if src_path.exists():
                 dst_path.parent.mkdir(parents=True, exist_ok=True)

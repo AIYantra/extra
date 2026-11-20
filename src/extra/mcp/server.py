@@ -6014,11 +6014,17 @@ async def _reveal_endpoint(request: Any) -> Any:
     from starlette.responses import JSONResponse
     import subprocess
     import os
+    from pathlib import Path
     try:
         body = await request.json()
         target_path = body.get("path")
         if target_path:
             norm_path = os.path.normpath(os.path.expandvars(os.path.expanduser(target_path)))
+            resolved_p = Path(norm_path).resolve()
+            # Restrict reveal: prohibit revealing hidden sensitive directories unless inside user workspace
+            workspace_dir = (Path.home() / ".extra" / "workspace").resolve()
+            if any(part.startswith(".") for part in resolved_p.parts if part not in (".", "..")) and not resolved_p.is_relative_to(workspace_dir):
+                return JSONResponse({"status": "error", "message": "Access denied: cannot reveal sensitive paths"}, status_code=403)
             if os.path.exists(norm_path):
                 if sys.platform == "win32":
                     if os.path.isdir(norm_path):
@@ -6250,8 +6256,6 @@ async def _relay_start_endpoint(request: Any) -> Any:
             except Exception:
                 pass
 
-        from extra.relay.manager import RelayManager
-        success = RelayManager.get_instance().start(token=token)
         try:
             cfg_path = Path.home() / ".extra" / "config.json"
             cfg_data = {}
@@ -6264,6 +6268,9 @@ async def _relay_start_endpoint(request: Any) -> Any:
                 json.dump(cfg_data, f, indent=2)
         except Exception:
             pass
+
+        from extra.relay.manager import RelayManager
+        success = RelayManager.get_instance().start(token=token, force=True)
         return JSONResponse({"success": success, "status": RelayManager.get_instance().get_status()})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -6274,19 +6281,7 @@ async def _relay_stop_endpoint(request: Any) -> Any:
     from starlette.responses import JSONResponse
     try:
         from extra.relay.manager import RelayManager
-        RelayManager.get_instance().stop()
-        try:
-            cfg_path = Path.home() / ".extra" / "config.json"
-            cfg_data = {}
-            if cfg_path.exists():
-                with open(cfg_path, "r", encoding="utf-8") as f:
-                    cfg_data = json.load(f)
-            cfg_data["is_local_mode"] = True
-            cfg_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(cfg_path, "w", encoding="utf-8") as f:
-                json.dump(cfg_data, f, indent=2)
-        except Exception:
-            pass
+        RelayManager.get_instance().set_offline_mode()
         return JSONResponse({"success": True, "status": RelayManager.get_instance().get_status()})
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
@@ -6509,25 +6504,31 @@ async def _resume_endpoint(request: Any) -> Any:
 
 
 @server.custom_route("/api/dispatch", methods=["POST"])
-
 async def _dispatch_endpoint(request: Any) -> Any:
-
     from starlette.responses import JSONResponse
+    import secrets
+    import os
+
+    # 1. DNS Rebinding Protection: Host header validation
+    host_header = request.headers.get("host", "")
+    host_name = host_header.split(":")[0].strip().lower()
+    if host_name not in ("127.0.0.1", "localhost", "::1", "testserver"):
+        return JSONResponse({"status": "error", "message": "Bad Request: Invalid Host header"}, status_code=400)
+
+    # 2. Check authorization token if configured in environment
+    configured_token = os.environ.get("EXTRA_AUTH_TOKEN")
+    if configured_token:
+        auth_h = request.headers.get("authorization", "")
+        if not auth_h.startswith("Bearer ") or not secrets.compare_digest(auth_h[7:].strip(), configured_token):
+            return JSONResponse({"status": "error", "message": "Unauthorized: Valid Bearer token required"}, status_code=401)
 
     try:
-
         body = await request.json()
-
         intent = body.get("intent", "").strip()
-
         if not intent:
-
             return JSONResponse({"status": "error", "message": "Empty intent"}, status_code=400)
 
-
-
         if _is_engine_paused or getattr(_stall_breaker, "is_paused", False):
-
             return JSONResponse({"status": "error", "message": "Engine is paused via Emergency Panic Stop"}, status_code=423)
 
 
@@ -6676,27 +6677,12 @@ async def _plugin_manifest_endpoint(request: Any) -> Any:
 
 
 _PUBLIC_SSE_PATHS = {
-
     "/",
-
     "/health",
-
     "/plugin.json",
-
     "/.well-known/ai-plugin.json",
-
     "/api/relay/status",
-
-    "/api/relay/start",
-
-    "/api/relay/stop",
-
     "/api/relay/ping",
-
-    "/api/autostart",
-
-    "/api/config/sync",
-
 }
 
 
@@ -6732,50 +6718,29 @@ class BearerAuthASGIMiddleware:
             if (
                 path in _PUBLIC_SSE_PATHS
                 or path.startswith("/.well-known")
-                or path.startswith("/api/relay/")
-                or path.startswith("/api/autostart")
-                or path.startswith("/api/config/")
                 or scope.get("method") == "OPTIONS"
             ):
-
                 await self.app(scope, receive, send)
-
                 return
 
-
-
             headers = dict(scope.get("headers", []))
-
             auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore").strip()
-
             query_string = scope.get("query_string", b"").decode("utf-8", errors="ignore")
 
-
-
+            import secrets
             is_authed = False
-
             if auth_header.lower().startswith("bearer "):
-
                 client_token = auth_header[7:].strip()
-
-                if client_token == self.token:
-
+                if secrets.compare_digest(client_token, self.token):
                     is_authed = True
 
-
-
             if not is_authed and query_string:
-
                 from urllib.parse import parse_qs
-
                 params = parse_qs(query_string)
-
                 for qk in ("token", "auth", "api_key", "key"):
-
-                    if params.get(qk, [None])[0] == self.token:
-
+                    val = params.get(qk, [None])[0]
+                    if val and secrets.compare_digest(val, self.token):
                         is_authed = True
-
                         break
 
 
@@ -7084,13 +7049,21 @@ def run_sse_server(
         "testserver:*",
     ]
 
-    disable_dns = bool(auth_token) or host == "0.0.0.0" or tunnel
-
-
+    # DNS rebinding protection must remain active at all times
+    disable_dns = False
+    if public_url:
+        try:
+            from urllib.parse import urlparse
+            p_netloc = urlparse(public_url).netloc
+            if p_netloc and p_netloc not in effective_hosts:
+                effective_hosts.append(p_netloc)
+                effective_hosts.append(f"{p_netloc}:*")
+        except Exception:
+            pass
 
     if TransportSecuritySettings is not None and hasattr(server.settings, "transport_security"):
         server.settings.transport_security = TransportSecuritySettings(
-            enable_dns_rebinding_protection=not disable_dns,
+            enable_dns_rebinding_protection=True,
             allowed_hosts=effective_hosts,
         )
 

@@ -1,15 +1,13 @@
 import { useState, useEffect } from "react";
 import {
   Info,
-  ShieldCheck,
-  FileText,
   RefreshCw,
   Monitor,
   Server,
   Globe,
   ExternalLink,
   Download,
-  Sparkles,
+  ArrowUpCircle,
 } from "lucide-react";
 import { Switch } from "../ui/switch";
 import {
@@ -24,13 +22,11 @@ import {
 } from "../../services/updateService";
 import { useUpdateStore } from "../../store/useUpdateStore";
 
-type AboutTab = "about" | "privacy" | "terms" | "updates";
+type AboutTab = "about" | "updates";
 
 const TABS: { id: AboutTab; label: string; icon: typeof Info }[] = [
-  { id: "about", label: "About", icon: Info },
-  { id: "privacy", label: "Privacy", icon: ShieldCheck },
-  { id: "terms", label: "Terms", icon: FileText },
-  { id: "updates", label: "Updates", icon: RefreshCw },
+  { id: "about", label: "Overview", icon: Info },
+  { id: "updates", label: "Software Updates", icon: RefreshCw },
 ];
 
 function Section({
@@ -170,7 +166,7 @@ function UpdatesTab() {
                     </>
                   ) : (
                     <>
-                      <Sparkles className="size-4" strokeWidth={1.5} />
+                      <ArrowUpCircle className="size-4" strokeWidth={1.5} />
                       Update Now
                     </>
                   )}
@@ -280,8 +276,12 @@ function UpdatesTab() {
   );
 }
 
-export function AboutView() {
-  const [tab, setTab] = useState<AboutTab>("about");
+interface AboutViewProps {
+  defaultTab?: AboutTab;
+}
+
+export function AboutView({ defaultTab = "about" }: AboutViewProps = {}) {
+  const [tab, setTab] = useState<AboutTab>(defaultTab);
   const installedVersionLabel = useUpdateStore((s) => s.installedVersionLabel) || APP_VERSION_LABEL;
 
   return (
@@ -375,61 +375,21 @@ export function AboutView() {
               ))}
             </div>
           </Section>
-        </div>
-      )}
 
-      {tab === "privacy" && (
-        <div className="space-y-4">
-          <Section title="Stays on this computer">
+          <Section title="Data Sovereignty & Local Processing">
             <p>
-              Your sign-in credential is stored encrypted with Windows
-              encryption on this machine. In local mode there is no account,
-              so there is nothing to send anywhere.
+              Extra operates 100% locally on your machine. Screen captures, hardware keyboard keystrokes, and mission execution traces never leave your device unless you explicitly connect Cloud Relay. All telemetry is sovereign to <code className="font-mono text-[11px] bg-[#f0f2f6] px-1 py-0.5 rounded text-[#1a1a1c]">~/.extra</code>.
             </p>
-          </Section>
-          <Section title="Only when you sign in">
-            <p>
-              Signing in links this computer to your Extra Cloud account so
-              it appears in your device fleet. That link, and the relay
-              passkey shown after sign-in, exist only for signed-in
-              computers.
-            </p>
-          </Section>
-          <Section title="Built to work offline">
-            <p>
-              Local mode runs the full station with no network needed. Cloud
-              features such as browser sign-in and relay sync are used only
-              when you choose them.
-            </p>
-            <WebsiteLink
-              href={PRIVACY_URL}
-              label="Read the full policy on extra.yantraos.com"
-            />
-          </Section>
-        </div>
-      )}
-
-      {tab === "terms" && (
-        <div className="space-y-4">
-          <Section title="Terms of use">
-            <p>
-              Extra operates apps on your own computer at your direction.
-              Review each action before you approve it. You are responsible
-              for what you ask Extra to do on your machine.
-            </p>
-            <p>
-              Local mode needs the local engine running on this computer.
-              Signed-in features need an internet connection and an Extra
-              Cloud account.
-            </p>
-            <p>
-              We may update these terms alongside app updates. The version
-              history lives under Updates on this page.
-            </p>
-            <WebsiteLink
-              href={TERMS_URL}
-              label="Read the full terms on extra.yantraos.com"
-            />
+            <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-[#dfe4eb]">
+              <WebsiteLink
+                href={PRIVACY_URL}
+                label="Privacy Policy"
+              />
+              <WebsiteLink
+                href={TERMS_URL}
+                label="Terms of Service"
+              />
+            </div>
           </Section>
         </div>
       )}

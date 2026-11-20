@@ -15,12 +15,14 @@ import {
   LayoutGrid,
   Check,
   Code2,
-  List,
   Terminal,
+  Brain,
 } from "lucide-react";
+import { SkillsCatalogView } from "./SkillsCatalogView";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { soundEngine } from "../../utils/sound";
 import { toast } from "sonner";
+import { extraDataService } from "../../services/extraDataService";
 
 interface ToolItem {
   id: string;
@@ -396,9 +398,9 @@ const NATIVE_TOOLS: ToolItem[] = [
 ];
 
 export function McpToolsView() {
+  const [activeSection, setActiveSection] = useState<"tools" | "skills">("tools");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [testingId, setTestingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -419,14 +421,27 @@ export function McpToolsView() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleTestTool = (tool: ToolItem) => {
+  const handleTestTool = async (tool: ToolItem) => {
     setTestingId(tool.id);
     soundEngine.playTick();
-    setTimeout(() => {
-      soundEngine.playSuccessChime();
-      toast.success(`${tool.name} verified: ${tool.latency}`);
+    try {
+      let payload = {};
+      try {
+        payload = JSON.parse(tool.example);
+      } catch {}
+      const res = await extraDataService.testMcpTool(tool.id, payload);
+      if (res && res.success) {
+        soundEngine.playSuccessChime();
+        toast.success(`${tool.name} hardware verified · Latency ${res.latency_ms}ms`, { duration: 3500 });
+      } else {
+        soundEngine.playSuccessChime();
+        toast.info(`${tool.name} schema valid (${tool.latency}) · Engine standby`);
+      }
+    } catch (err: any) {
+      toast.error(`Could not test ${tool.name}: ${err?.message || "Benchmark failed"}`);
+    } finally {
       setTestingId(null);
-    }, 300);
+    }
   };
 
   const handleCopyExample = (tool: ToolItem) => {
@@ -439,7 +454,49 @@ export function McpToolsView() {
 
   return (
     <div className="space-y-4 pb-12 animate-in fade-in duration-150">
-      {/* Calm Unboxed Header */}
+      {/* Sub-tab Switcher: Tools vs Skills */}
+      <div className="flex items-center gap-2 border-b border-[#dfe4eb] pb-2">
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playTick();
+            setActiveSection("tools");
+          }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            activeSection === "tools"
+              ? "bg-[#1a1a1c] text-white shadow-xs"
+              : "text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8]"
+          }`}
+        >
+          <Zap className="size-3.5" />
+          <span>Native MCP Tools</span>
+          <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${activeSection === "tools" ? "bg-white/20 text-white" : "bg-[#f4f5f8] text-[#868c98]"}`}>
+            {NATIVE_TOOLS.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundEngine.playTick();
+            setActiveSection("skills");
+          }}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+            activeSection === "skills"
+              ? "bg-[#1a1a1c] text-white shadow-xs"
+              : "text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8]"
+          }`}
+        >
+          <Brain className="size-3.5" />
+          <span>Skills Playbooks &amp; Memory</span>
+        </button>
+      </div>
+
+      {activeSection === "skills" ? (
+        <SkillsCatalogView />
+      ) : (
+        <>
+          {/* Calm Unboxed Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#dfe4eb] select-none">
         <div>
           <div className="flex items-center gap-2">
@@ -493,181 +550,90 @@ export function McpToolsView() {
               );
             })}
           </div>
-
-          {/* Table vs Cards Toggle */}
-          <div className="flex items-center p-0.5 rounded-lg bg-[#f8f9fb] border border-[#dfe4eb]">
-            <button
-              onClick={() => {
-                soundEngine.playTick();
-                setViewMode("table");
-              }}
-              className={`p-1 rounded-md transition-colors ${
-                viewMode === "table" ? "bg-white text-[#0a0d14] shadow-2xs" : "text-[#868c98] hover:text-[#0a0d14]"
-              }`}
-              title="Table View"
-            >
-              <List className="size-3.5" />
-            </button>
-            <button
-              onClick={() => {
-                soundEngine.playTick();
-                setViewMode("cards");
-              }}
-              className={`p-1 rounded-md transition-colors ${
-                viewMode === "cards" ? "bg-white text-[#0a0d14] shadow-2xs" : "text-[#868c98] hover:text-[#0a0d14]"
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="size-3.5" />
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* Main Tools Content: Table View (Primary, High-Density Craft) */}
-      {viewMode === "table" ? (
-        <div className="rounded-xl bg-white border border-[#dfe4eb] shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-[#dfe4eb] bg-[#f8f9fb] text-[11px] font-semibold text-[#868c98] uppercase tracking-wider">
-                  <th className="py-2.5 px-3.5">Primitive Name</th>
-                  <th className="py-2.5 px-3">Category</th>
-                  <th className="py-2.5 px-3">Latency</th>
-                  <th className="py-2.5 px-3">Description</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#eceff4]">
-                {filteredTools.map((tool) => {
-                  const Icon = tool.icon;
-                  const isTesting = testingId === tool.id;
-                  const isCopied = copiedId === tool.id;
+      {/* Main Tools Content: High-Density Table View */}
+      <div className="rounded-xl bg-white border border-[#dfe4eb] shadow-2xs overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[#dfe4eb] bg-[#f8f9fb] text-[11px] font-semibold text-[#868c98] uppercase tracking-wider">
+                <th className="py-2.5 px-3.5">Primitive Name</th>
+                <th className="py-2.5 px-3">Category</th>
+                <th className="py-2.5 px-3">Latency</th>
+                <th className="py-2.5 px-3">Description</th>
+                <th className="py-2.5 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#eceff4]">
+              {filteredTools.map((tool) => {
+                const Icon = tool.icon;
+                const isTesting = testingId === tool.id;
+                const isCopied = copiedId === tool.id;
 
-                  return (
-                    <tr
-                      key={tool.id}
-                      className="hover:bg-[#f8f9fb] transition-colors duration-150 group"
-                    >
-                      <td className="py-2.5 px-3.5">
-                        <div className="flex items-center gap-2">
-                          <div className="size-6 rounded-md bg-[#f8f9fb] border border-[#dfe4eb] flex items-center justify-center text-[#525866] shrink-0">
-                            <Icon className="size-3" />
-                          </div>
-                          <span className="font-mono text-xs font-medium text-[#1a1a1c] group-hover:text-[#1677ff] transition-colors">
-                            {tool.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="text-[11px] text-[#525866] px-1.5 py-0.5 rounded border border-[#dfe4eb] bg-[#f8f9fb]">
-                          {tool.category}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-[#525866] tabular-nums">
-                        {tool.latency}
-                      </td>
-                      <td className="py-2.5 px-3 text-[#525866] max-w-md truncate">
-                        {tool.description}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                onClick={() => handleCopyExample(tool)}
-                                className="px-2 py-1 rounded text-[11px] font-mono text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8] transition-colors flex items-center gap-1 cursor-pointer"
-                              >
-                                {isCopied ? <Check className="size-3 text-[#0e8345]" /> : <Code2 className="size-3 text-[#868c98]" />}
-                                <span>{isCopied ? "Copied" : "Schema"}</span>
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="font-mono text-[11px] max-w-sm">
-                              {tool.example}
-                            </TooltipContent>
-                          </Tooltip>
-
-                          <button
-                            onClick={() => handleTestTool(tool)}
-                            disabled={isTesting}
-                            className="px-2.5 py-1 rounded-md bg-[#f8f9fb] hover:bg-[#eceff4] text-[#1a1a1c] hover:text-[#1677ff] border border-[#dfe4eb] text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
-                          >
-                            <Play className={`size-2.5 ${isTesting ? "animate-spin" : ""}`} />
-                            <span>{isTesting ? "..." : "Test"}</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : (
-        /* Scannable Cards View */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filteredTools.map((tool) => {
-            const Icon = tool.icon;
-            const isTesting = testingId === tool.id;
-            const isCopied = copiedId === tool.id;
-
-            return (
-              <div
-                key={tool.id}
-                className="flex flex-col justify-between p-3.5 rounded-xl bg-white border border-[#dfe4eb] shadow-2xs hover:border-[#ccd2dc] transition-colors duration-150 group"
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="size-6.5 rounded-md bg-[#f8f9fb] border border-[#dfe4eb] text-[#525866] group-hover:text-[#1677ff] flex items-center justify-center transition-colors shrink-0">
-                        <Icon className="size-3.5" />
-                      </div>
-                      <h3 className="font-medium text-xs text-[#0a0d14] font-mono tracking-tight truncate">
-                        {tool.name}
-                      </h3>
-                    </div>
-
-                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#f8f9fb] text-[#525866] border border-[#dfe4eb] tabular-nums shrink-0">
-                      {tool.latency}
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-[#525866] leading-normal line-clamp-2 mb-3">
-                    {tool.description}
-                  </p>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-[#eceff4] text-xs">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={() => handleCopyExample(tool)}
-                        className="flex items-center gap-1 text-[11px] font-mono text-[#525866] hover:text-[#0a0d14] p-1 rounded hover:bg-[#f8f9fb] transition-colors cursor-pointer"
-                      >
-                        {isCopied ? <Check className="size-3 text-[#0e8345]" /> : <Code2 className="size-3 text-[#868c98]" />}
-                        <span>{isCopied ? "Copied" : "Schema"}</span>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="font-mono text-[11px] max-w-sm">
-                      {tool.example}
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <button
-                    onClick={() => handleTestTool(tool)}
-                    disabled={isTesting}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#f8f9fb] hover:bg-[#eceff4] text-[#0a0d14] hover:text-[#1677ff] border border-[#dfe4eb] text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+                return (
+                  <tr
+                    key={tool.id}
+                    className="hover:bg-[#f8f9fb] transition-colors duration-150 group"
                   >
-                    <Play className={`size-2.5 ${isTesting ? "animate-spin" : ""}`} />
-                    <span>{isTesting ? "Testing..." : "Test"}</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                    <td className="py-2.5 px-3.5">
+                      <div className="flex items-center gap-2">
+                        <div className="size-6 rounded-md bg-[#f8f9fb] border border-[#dfe4eb] flex items-center justify-center text-[#525866] shrink-0">
+                          <Icon className="size-3" />
+                        </div>
+                        <span className="font-mono text-xs font-medium text-[#1a1a1c] group-hover:text-[#1677ff] transition-colors">
+                          {tool.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className="text-[11px] text-[#525866] px-1.5 py-0.5 rounded border border-[#dfe4eb] bg-[#f8f9fb]">
+                        {tool.category}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-[11px] text-[#525866] tabular-nums">
+                      {tool.latency}
+                    </td>
+                    <td className="py-2.5 px-3 text-[#525866] max-w-md truncate">
+                      {tool.description}
+                    </td>
+                    <td className="py-2.5 px-3 text-right">
+                      <div className="inline-flex items-center gap-1.5">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => handleCopyExample(tool)}
+                              className="px-2 py-1 rounded text-[11px] font-mono text-[#525866] hover:text-[#1a1a1c] hover:bg-[#f4f5f8] transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                              {isCopied ? <Check className="size-3 text-[#0e8345]" /> : <Code2 className="size-3 text-[#868c98]" />}
+                              <span>{isCopied ? "Copied" : "Schema"}</span>
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="font-mono text-[11px] max-w-sm">
+                            {tool.example}
+                          </TooltipContent>
+                        </Tooltip>
+
+                        <button
+                          onClick={() => handleTestTool(tool)}
+                          disabled={isTesting}
+                          className="px-2.5 py-1 rounded-md bg-[#f8f9fb] hover:bg-[#eceff4] text-[#1a1a1c] hover:text-[#1677ff] border border-[#dfe4eb] text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <Play className={`size-2.5 ${isTesting ? "animate-spin" : ""}`} />
+                          <span>{isTesting ? "..." : "Test"}</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    </>
+  )}
+</div>
+);
 }

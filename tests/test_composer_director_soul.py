@@ -15,6 +15,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from PIL import Image
 
@@ -186,11 +187,12 @@ class TestUniversalBridge(unittest.TestCase):
         self.assertLess(res.latency_ms, 5000.0)
 
     def test_powershell_runtime_execution(self):
-        """Verifies executing powershell payload via bridge."""
+        """Verifies executing powershell payload via bridge when authorized."""
         if sys.platform != "win32":
             return
         cmd = "Write-Output 'POWERSHELL_BRIDGE_OK'"
-        res = execute_bridge(runtime="powershell", payload=cmd, timeout_sec=25.0)
+        with patch.dict(os.environ, {"EXTRA_ENABLE_RAW_SHELL_BRIDGE": "1"}):
+            res = execute_bridge(runtime="powershell", payload=cmd, timeout_sec=25.0)
         self.assertTrue(res.success, f"PowerShell bridge failed: {res.error}, stderr: {res.stderr}")
         self.assertEqual(res.returncode, 0)
         self.assertIn("POWERSHELL_BRIDGE_OK", res.stdout)

@@ -42,7 +42,7 @@ class RelayManager:
         self._hub_url: str = DEFAULT_RELAY_URL
         self._last_heartbeat: float = 0.0
         self._last_error: Optional[str] = None
-        self._stop_event: Optional[asyncio.Event] = None
+        self._stop_event: threading.Event = threading.Event()
 
     @classmethod
     def get_instance(cls) -> "RelayManager":
@@ -116,6 +116,13 @@ class RelayManager:
         """
         Starts the background WebSocket relay tunnel.
         """
+        # Explicit empty token check: caller explicitly provided an empty/blank token -> reject and stay stopped
+        if token is not None and not str(token).strip():
+            with self._lock:
+                self._status = "stopped"
+                self._last_error = "No relay passkey configured. Please sign in to connect to Cloud Hub."
+            return False
+
         with self._lock:
             clean_token = token.strip() if (token and isinstance(token, str) and token.strip()) else None
             token_changed = (clean_token is not None and self._token is not None and clean_token != self._token)
@@ -127,7 +134,12 @@ class RelayManager:
                     cfg_path = Path.home() / ".extra" / "config.json"
                     if cfg_path.exists():
                         with open(cfg_path, "r", encoding="utf-8") as f:
-                            t_disk = json.load(f).get("relay_token")
+                            disk_data = json.load(f)
+                            if disk_data.get("is_local_mode", False) and not force:
+                                logger.info("Local air-gapped mode active; cloud relay start rejected.")
+                                self._status = "disabled"
+                                return False
+                            t_disk = disk_data.get("relay_token")
                             if t_disk and isinstance(t_disk, str) and t_disk.strip():
                                 self._token = t_disk.strip()
                 except Exception:
@@ -153,19 +165,23 @@ class RelayManager:
                 logger.info("RelayManager restarting tunnel (token_changed=%s, status=%s)...", token_changed, self._status)
                 self._stop_locked()
 
-            # Wait briefly for old thread to finish if still alive to prevent state race condition
+            # Signal previous thread to stop and wait for clean termination
+            self._stop_event.set()
             old_thread = self._thread
             if old_thread and old_thread.is_alive() and threading.current_thread() != old_thread:
                 try:
-                    old_thread.join(timeout=1.0)
+                    old_thread.join(timeout=2.0)
                 except Exception:
                     pass
 
+            # Create fresh stop event for the new worker
+            self._stop_event = threading.Event()
             self._running = True
             self._status = "connecting"
             self._last_error = None
 
             worker_thread = None
+            current_stop_event = self._stop_event
 
             def _worker() -> None:
                 nonlocal worker_thread
@@ -180,6 +196,7 @@ class RelayManager:
                             token=self._token,  # type: ignore
                             device_name=self._device_name,
                             on_state_change=lambda st, err: self._state_callback(st, err, source_thread=worker_thread),
+                            stop_event=current_stop_event,
                         )
                     )
                 except Exception as ex:
@@ -192,7 +209,8 @@ class RelayManager:
                         # Only set stopped if this worker has not been superseded by a newer thread
                         if self._thread is None or self._thread is worker_thread:
                             self._running = False
-                            self._status = "stopped"
+                            if self._status != "disabled":
+                                self._status = "stopped"
                     if self._loop and not self._loop.is_closed():
                         try:
                             self._loop.close()
@@ -215,6 +233,7 @@ class RelayManager:
         with self._lock:
             self._status = "stopped"
             self._running = False
+            self._stop_event.set()
             cur_loop = self._loop
             cur_thread = self._thread
             if cur_loop and cur_loop.is_running():
@@ -225,10 +244,35 @@ class RelayManager:
 
         if cur_thread and cur_thread.is_alive() and threading.current_thread() != cur_thread:
             try:
-                cur_thread.join(timeout=1.5)
+                cur_thread.join(timeout=2.0)
             except Exception:
                 pass
+        with self._lock:
+            if self._thread is cur_thread and not (cur_thread and cur_thread.is_alive()):
+                self._thread = None
         logger.info("RelayManager stopped successfully.")
+        return True
+
+    def set_offline_mode(self) -> bool:
+        """
+        Enforces sovereign air-gapped offline mode, clearing tokens and severing tunnels.
+        """
+        self.stop()
+        with self._lock:
+            self._status = "disabled"
+            self._token = None
+        try:
+            cfg_path = Path.home() / ".extra" / "config.json"
+            cfg_data = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+            cfg_data["is_local_mode"] = True
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(cfg_data, f, indent=2)
+        except Exception:
+            pass
         return True
 
     def get_status(self) -> Dict[str, Any]:

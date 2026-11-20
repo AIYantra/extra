@@ -95,8 +95,8 @@ export class LoopbackTelemetryClient {
     return token;
   }
 
-  private async authHeaders(custom: Record<string, string> = {}): Promise<Record<string, string>> {
-    const headers: Record<string, string> = { ...custom };
+  async authHeaders(custom: Record<string, string> = {}): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { "X-Extra-Client": "WebStation", ...custom };
     const token = await this.getSessionToken();
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
