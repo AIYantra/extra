@@ -1618,7 +1618,14 @@ export default {
 
     const S3_ORIGIN = "https://s3.ap-south-1.amazonaws.com";
     const BUCKET_PREFIX = "/extra.yantraos.com";
-    const targetUrl = new URL(BUCKET_PREFIX + url.pathname + sanitizedSearch, S3_ORIGIN);
+
+    // 1. Resolve S3 key: root "/" or empty path maps directly to "/index.html"
+    let s3Path = url.pathname;
+    if (s3Path === "/" || s3Path === "") {
+      s3Path = "/index.html";
+    }
+
+    const targetUrl = new URL(BUCKET_PREFIX + s3Path + sanitizedSearch, S3_ORIGIN);
 
     const reqHeaders = new Headers(request.headers);
     reqHeaders.delete("host");
@@ -1629,8 +1636,8 @@ export default {
       headers: reqHeaders,
     });
 
-    // If clean URL returns 404 (e.g. S3 directory index), try /index.html fallback
-    if (originRes.status === 404 && !url.pathname.includes(".")) {
+    // 2. If S3 returns 403 (AccessDenied on directory/missing object) or 404 on clean routes, try directory /index.html fallback
+    if ((originRes.status === 404 || originRes.status === 403) && !url.pathname.includes(".")) {
       const fallbackPath = url.pathname.endsWith("/") ? `${url.pathname}index.html` : `${url.pathname}/index.html`;
       const fallbackUrl = new URL(BUCKET_PREFIX + fallbackPath + sanitizedSearch, S3_ORIGIN);
       const fallbackRes = await fetch(fallbackUrl.toString(), {
@@ -1639,6 +1646,21 @@ export default {
       });
       if (fallbackRes.status === 200) {
         originRes = fallbackRes;
+      }
+    }
+
+    // 3. If still 403 or 404 on a web page route, serve custom 404.html instead of raw S3 XML
+    if ((originRes.status === 404 || originRes.status === 403) && !url.pathname.includes(".")) {
+      const notFoundUrl = new URL(BUCKET_PREFIX + "/404.html", S3_ORIGIN);
+      const notFoundRes = await fetch(notFoundUrl.toString(), {
+        method: request.method,
+        headers: reqHeaders,
+      });
+      if (notFoundRes.status === 200) {
+        originRes = new Response(notFoundRes.body, {
+          status: 404,
+          headers: notFoundRes.headers,
+        });
       }
     }
 
