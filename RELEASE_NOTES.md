@@ -1,3 +1,50 @@
+# Extra Release Notes — v0.3.7
+
+**Release Date:** November 20, 2026  
+**Release Title:** Multi-Phase Control-Plane Security Hardening, Strict Cloud Relay Air-Gap Isolation, Workspace Filesystem Containment & RFC 7636 PKCE Edge Defense  
+**Target Systems:** Windows 10/11 (x64 / ARM64), macOS 12.3+ (Apple Silicon / Intel), Linux (KDE Plasma, GNOME, wlroots, X11)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.7)
+
+Version 0.3.7 delivers an enterprise-grade security audit and architectural hardening release across the entire Extra ecosystem. This milestone enforces strict authentication on local daemon control planes, implements uncompromising network air-gap isolation on the cloud relay, guarantees directory workspace containment and dotfile protection against unintended destruction, enforces RFC 7636 PKCE on Edge OAuth endpoints, and restores 100% green status across all cross-platform CI matrix platforms.
+
+### Key Highlights:
+
+1. **Local Control-Plane & Authentication Hardening (`src/extra/cli.py`, `src/extra/mcp/server.py`):**
+   - **Mandatory Bearer Authentication Middleware:** Local HTTP endpoints (`/api/*`, `/healthz`, `/doctor`, `/version`, `/metrics`) now enforce cryptographic Bearer token validation matching the daemon session secret (`--auth-token`).
+   - **Strict DNS Rebinding Defense:** Enforced strict Host header validation across loopback interfaces (`127.0.0.1:*`, `localhost:*`, `[::1]:*`), neutralizing cross-origin DNS rebinding attacks from web browsers.
+   - **Cryptographic Anti-CSRF State Tokens:** WebSocket control handshakes and IPC connections mandate single-use, URL-safe entropy tokens (`secrets.token_urlsafe(32)`), thwarting unauthorized cross-site command injection.
+   - **Browser Process Launch Argument Injection Defense:** Enforced `--` parameter termination and strict scheme checking (`http://`, `https://`) on browser process launches across Edge, Chrome, and Chromium, preventing command-line argument hijacking (e.g., `--disable-web-security`, `--remote-debugging-port`).
+
+2. **Cloud Relay Isolation & Air-Gap Defense (`src/extra/relay/`, companion station):**
+   - **Dangerous Execution Tool Exclusion:** Permanently banned arbitrary local code execution tools (`extra_execute_bridge`, `extra_harness_run`) from cloud relay dispatch. Even with valid relay credentials, remote actuation cannot execute arbitrary local scripts.
+   - **Deterministic Air-Gap Loop Interruption:** Toggling offline actively signals a thread-safe `stop_event`, breaking lingering retry loops and immediately severing all active WebSocket connections. Empty or cleared passkeys immediately drop connection attempts without background retries.
+   - **Offline-to-Online Toggle Race Condition Elimination:** Resolved a race condition in `telemetryClient.ts` and `extraDataService.ts` that caused companion UI toggles to become trapped in "Cloud Relay is reconnecting in background...".
+
+3. **Workspace Filesystem Containment & Command Safety (`src/extra/fastpath/fs.py`, `src/extra/core/geometry.py`):**
+   - **Drive Root & Home Directory Containment:** Explicitly blocked batch operations (`extra_fs_batch`) from targeting bare drive roots (`C:\`, `/`) and user home directory roots, preventing accidental disk-wide modifications.
+   - **Sensitive Dotfile Guard:** Hardened `create_tree` and `batch_rename` to prohibit creating, moving, or overwriting critical system and configuration dotfiles (`.git`, `.ssh`, `.bashrc`, `.env`).
+   - **Gated Raw Shell Bridge:** The raw PowerShell / bash execution bridge is strictly gated behind the explicit environment variable `EXTRA_ENABLE_RAW_SHELL_BRIDGE=1`.
+   - **CLI Harness Whitelist:** Restricted CLI harness execution strictly to pre-registered, vetted tools (`ALLOWED_HARNESSES`).
+   - **Session 0 Desktop Isolation Guard:** Added active session verification in `geometry.py`, preventing capture crashes when Extra runs under non-interactive Windows services.
+
+4. **Edge Worker & OAuth Pipeline Hardening (`worker.js`, `extra.yantraos.com`):**
+   - **HTTPS S3 REST Origin Fallback:** Replaced plain HTTP S3 bucket fallbacks with secure, encrypted HTTPS REST endpoints for static asset delivery.
+   - **Purged Backdoor Review Tokens:** Completely removed legacy reviewer bypass tokens (`auth_chatgpt_reviewer`).
+   - **RFC 7636 PKCE Enforcement:** Mandated `code_challenge` (S256) and `code_verifier` across all `/oauth/authorize` and `/oauth/token` transactions.
+   - **RFC 7009 Token Revocation:** Implemented the standard `/oauth/revoke` endpoint for immediate credential invalidation.
+   - **Context-Aware HTML Escaping:** Sanitized all server-rendered OAuth consent and login templates with `escapeHtml()` and `sanitizeHref()`, eliminating reflected XSS attack vectors.
+   - **S3 Signed URL Credential Stripping:** Stripped query string authorization tokens from telemetry and redirect logs.
+
+5. **Cross-Platform Hermetic CI & Full Test Suite Parity:**
+   - **2,274 Unit & Integration Tests Passing:** Executed full local and CI test suites with zero failures.
+   - **Cross-Platform Import Isolation:** Gated Windows-specific autostart modules behind `sys.platform == 'win32'` checks, eliminating Win32 C-extension import crashes on Linux and macOS runners.
+   - **100% Green Matrix CI:** All 9 cross-platform matrix runners on GitHub Actions (Ubuntu, macOS, Windows across Python 3.11, 3.12, and 3.13) passed alongside CodeQL SAST and OpenSSF Scorecard supply-chain security scans.
+
+---
+
 # Extra Release Notes — v0.3.6
 
 **Release Date:** November 12, 2026  
