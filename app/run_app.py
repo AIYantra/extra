@@ -72,14 +72,17 @@ LOOPBACK_TOKEN_FILE = EXTRA_DIR / ".loopback_token"
 
 
 def _resolve_runtime_version() -> str:
-    """Dynamically resolves Extra runtime version."""
+    """Dynamically resolves Extra runtime version with zero stale caching."""
+    # 1. Source package init
     try:
-        import extra
-        v = getattr(extra, "__version__", None)
-        if v:
-            return v
+        init_cand = Path(__file__).resolve().parent.parent / "src" / "extra" / "__init__.py"
+        if init_cand.exists():
+            for line in init_cand.read_text(encoding="utf-8").splitlines():
+                if line.startswith("__version__") and "=" in line:
+                    return line.split("=")[1].strip().strip("\"'")
     except Exception:
         pass
+    # 2. Package.json in app directory
     try:
         pkg_json = BUNDLE_DIR / "package.json"
         if pkg_json.exists():
@@ -88,7 +91,35 @@ def _resolve_runtime_version() -> str:
                 return data["version"]
     except Exception:
         pass
-    return "0.3.6"
+    # 3. Root package.json
+    try:
+        root_pkg = Path(__file__).resolve().parent.parent / "package.json"
+        if root_pkg.exists():
+            data = json.loads(root_pkg.read_text(encoding="utf-8"))
+            if data.get("version"):
+                return data["version"]
+    except Exception:
+        pass
+    # 4. Pyproject.toml
+    try:
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        if pyproject.exists():
+            for line in pyproject.read_text(encoding="utf-8").splitlines():
+                if line.strip().startswith("version") and "=" in line:
+                    return line.split("=")[1].strip().strip("\"'")
+    except Exception:
+        pass
+    # 5. Live module reload
+    try:
+        import extra
+        import importlib
+        importlib.reload(extra)
+        v = getattr(extra, "__version__", None)
+        if v:
+            return v
+    except Exception:
+        pass
+    return "0.3.7"
 
 
 _RUNTIME_VER = _resolve_runtime_version()
@@ -1088,9 +1119,11 @@ _UPDATE_CACHE = {"data": None, "ts": 0.0}
 def get_app_update_info(force: bool = False) -> dict:
     """Fetches release info with caching, fallbacks, and zero unhandled exceptions."""
     now = time.time()
-    if not force and _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 900:
+    if not force and _UPDATE_CACHE["data"] and (now - _UPDATE_CACHE["ts"]) < 300:
         return _UPDATE_CACHE["data"]
 
+    global _RUNTIME_VER
+    _RUNTIME_VER = _resolve_runtime_version()
     current_ver = _RUNTIME_VER
     result = {
         "current": current_ver,
@@ -1251,6 +1284,23 @@ def _run_update_worker(target_version: str = None):
             if pull_res.returncode != 0:
                 print(f"  [UPDATE] Git pull notice: {pull_res.stderr.strip()}", flush=True)
 
+            try:
+                stash_list = subprocess.run(
+                    [git_cmd, "-C", str(repo_root), "stash", "list"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if "extra-autoupdate-stash" in stash_list.stdout:
+                    subprocess.run(
+                        [git_cmd, "-C", str(repo_root), "stash", "pop"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                    )
+            except Exception:
+                pass
+
             _set_update_status("installing", 65, "Upgrading core Python dependencies...")
             if req_file.exists():
                 subprocess.run(
@@ -1265,6 +1315,23 @@ def _run_update_worker(target_version: str = None):
                 text=True,
                 timeout=60,
             )
+
+            # Rebuild frontend if npm exists and package.json is present
+            npm_cmd = shutil.which("npm")
+            app_dir = repo_root / "app"
+            if npm_cmd and (app_dir / "package.json").exists():
+                _set_update_status("installing", 80, "Compiling production cockpit interface...")
+                try:
+                    subprocess.run(
+                        [npm_cmd, "run", "build"],
+                        cwd=str(app_dir),
+                        capture_output=True,
+                        text=True,
+                        shell=True,
+                        timeout=120,
+                    )
+                except Exception as ex:
+                    print(f"  [UPDATE] Frontend build notice: {ex}", flush=True)
 
         elif sys.prefix != sys.base_prefix or "site-packages" in str(Path(__file__).resolve()):
             _set_update_status("installing", 60, "Upgrading extra-desktop package via pip...")
@@ -1300,14 +1367,20 @@ def _run_update_worker(target_version: str = None):
                 _set_update_status("installing", 75, "Applying signed Unix runtime update...")
                 subprocess.run(cmd, shell=True, timeout=300)
 
-        _set_update_status("restarting", 90, "Hot-reloading Extra engine daemon...")
+        _set_update_status("restarting", 92, "Hot-reloading Extra engine daemon...")
         try:
             restart_extra_server(wait_sec=15.0)
         except Exception:
             pass
 
-        final_ver = target_version or _RUNTIME_VER
-        _set_update_status("completed", 100, f"Extra successfully updated to v{final_ver}!")
+        global _RUNTIME_VER
+        if target_version:
+            _RUNTIME_VER = target_version.lstrip("vV")
+        else:
+            _RUNTIME_VER = _resolve_runtime_version()
+        final_ver = _RUNTIME_VER
+
+        _set_update_status("completed", 100, f"Extra successfully updated to v{final_ver}!", target_version=final_ver)
 
         # Invalidate update check cache
         _UPDATE_CACHE["data"] = None
@@ -2563,12 +2636,15 @@ class SPAHandler(SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        global _RUNTIME_VER
         clean_path = self.path.split("?")[0]
 
         # REST API Endpoints
         if clean_path in ("/api/extra/version", "/api/version"):
+            _RUNTIME_VER = _resolve_runtime_version()
             return self._send_json({"version": _RUNTIME_VER, "label": f"v{_RUNTIME_VER}", "sac_compliant": True})
         elif clean_path in ("/api/extra/update", "/api/update"):
+            _RUNTIME_VER = _resolve_runtime_version()
             force = "force" in self.path
             return self._send_json(get_app_update_info(force=force))
         elif clean_path in ("/api/extra/update/status", "/api/update/status"):

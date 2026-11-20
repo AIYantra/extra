@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Info,
   RefreshCw,
@@ -6,10 +6,7 @@ import {
   Server,
   Globe,
   ExternalLink,
-  Download,
-  ArrowUpCircle,
 } from "lucide-react";
-import { Switch } from "../ui/switch";
 import {
   APP_VERSION_LABEL,
   PRODUCT_BYLINE,
@@ -18,9 +15,9 @@ import {
 import { openExternal } from "../../utils/openExternal";
 import {
   UPDATE_RELEASES_URL,
-  downloadAsset,
 } from "../../services/updateService";
 import { useUpdateStore } from "../../store/useUpdateStore";
+import { SoftwareUpdateCard } from "./SoftwareUpdateCard";
 
 type AboutTab = "about" | "updates";
 
@@ -64,180 +61,10 @@ function WebsiteLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-function formatCheckedAt(ts: number | null): string {
-  if (!ts) return "Never checked";
-  return `Last checked ${new Date(ts).toLocaleString()}`;
-}
-
 function UpdatesTab() {
-  const {
-    installedVersionLabel,
-    autoCheck,
-    autoUpdate,
-    lastCheckedAt,
-    latestTag,
-    updateAvailable,
-    checking,
-    updating,
-    error,
-    lastResult,
-    setAutoCheck,
-    setAutoUpdate,
-    syncInstalledVersion,
-    checkNow,
-    performUpdateNow,
-  } = useUpdateStore();
-
-  useEffect(() => {
-    void syncInstalledVersion();
-  }, [syncInstalledVersion]);
-
-  const activeLabel = installedVersionLabel || APP_VERSION_LABEL;
-
   return (
     <div className="space-y-4">
-      <Section title="Installed">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <span className="font-medium text-[#1a1a1c]">
-              Extra {PRODUCT_BYLINE}
-            </span>
-            <span className="font-mono text-[11px] tabular-nums text-[#525866]">
-              {activeLabel} local
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={() => void checkNow()}
-            disabled={checking || updating}
-            className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] bg-[#1677ff] px-4 text-xs font-medium text-white transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#0958d9] disabled:opacity-50"
-          >
-            {checking ? (
-              <>
-                <RefreshCw
-                  className="size-4 animate-spin"
-                  strokeWidth={1.5}
-                />
-                Checking
-              </>
-            ) : (
-              <>
-                <RefreshCw className="size-4" strokeWidth={1.5} />
-                Check for updates
-              </>
-            )}
-          </button>
-        </div>
-        <p className="font-mono text-[11px] tabular-nums text-[#868c98]">
-          {formatCheckedAt(lastCheckedAt)}
-        </p>
-        {error && <p className="text-xs text-[#e11d48]">{error}</p>}
-        {!error && lastCheckedAt && !updateAvailable && (
-          <p className="text-xs text-[#525866]">
-            You&apos;re up to date on {activeLabel}.
-          </p>
-        )}
-      </Section>
-
-      {updateAvailable && latestTag && (
-        <section className="rounded-xl border border-[#bbf0cf] bg-[#edfcf2]">
-          <h3 className="border-b border-[#bbf0cf] px-5 py-3 text-xs font-semibold text-[#0e8345]">
-            Update available
-          </h3>
-          <div className="space-y-3 px-5 py-4 text-xs leading-relaxed text-[#0e8345]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p>
-                <span className="font-mono font-medium tabular-nums">
-                  {latestTag}
-                </span>{" "}
-                is out. Installed {activeLabel}.
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void performUpdateNow()}
-                  disabled={updating}
-                  className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] bg-[#0e8345] px-4 text-xs font-medium text-white transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#0b6b37] disabled:opacity-50"
-                >
-                  {updating ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" strokeWidth={1.5} />
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <ArrowUpCircle className="size-4" strokeWidth={1.5} />
-                      Update Now
-                    </>
-                  )}
-                </button>
-                {lastResult?.downloadUrl && lastResult.assetName && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      downloadAsset(
-                        lastResult.downloadUrl as string,
-                        lastResult.assetName as string,
-                      )
-                    }
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] border border-[#bbf0cf] bg-white px-3 text-xs font-medium text-[#0e8345] transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#f4f5f8]"
-                  >
-                    <Download className="size-3.5" strokeWidth={1.5} />
-                    Download
-                  </button>
-                )}
-                {lastResult && (
-                  <button
-                    type="button"
-                    onClick={() => void openExternal(lastResult.releaseUrl)}
-                    className="flex h-9 cursor-pointer items-center gap-2 rounded-[10px] border border-[#bbf0cf] bg-white px-3 text-xs font-medium text-[#0e8345] transition-colors ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[#f4f5f8]"
-                  >
-                    View release
-                    <ExternalLink className="size-3.5" strokeWidth={1.5} />
-                  </button>
-                )}
-              </div>
-            </div>
-            {lastResult?.publishedAt && (
-              <p className="font-mono text-[11px] tabular-nums">
-                Published{" "}
-                {new Date(lastResult.publishedAt).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-
-      <Section title="Automatic updates">
-        <div className="flex items-center justify-between gap-3 py-1">
-          <div>
-            <p className="font-medium text-[#1a1a1c]">Check automatically</p>
-            <p className="mt-0.5 text-[11px] text-[#525866]">
-              Look for new releases every few hours and notify you.
-            </p>
-          </div>
-          <Switch
-            checked={autoCheck}
-            onCheckedChange={setAutoCheck}
-            aria-label="Check for updates automatically"
-          />
-        </div>
-        <div className="flex items-center justify-between gap-3 border-t border-[#dfe4eb] py-1 pt-3">
-          <div>
-            <p className="font-medium text-[#1a1a1c]">
-              Download updates automatically
-            </p>
-            <p className="mt-0.5 text-[11px] text-[#525866]">
-              Fetch the installer as soon as one is available.
-            </p>
-          </div>
-          <Switch
-            checked={autoUpdate}
-            onCheckedChange={setAutoUpdate}
-            aria-label="Download updates automatically"
-          />
-        </div>
-      </Section>
+      <SoftwareUpdateCard />
 
       <Section title="Release history">
         <div className="space-y-4">

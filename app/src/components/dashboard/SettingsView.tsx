@@ -16,10 +16,7 @@ import {
   Radio,
   Cloud,
   Power,
-  ArrowUpCircle,
-  ChevronRight,
 } from "lucide-react";
-import { Switch } from "../ui/switch";
 import { useEngineStore } from "../../store/useEngineStore";
 import { useAuthStore } from "../../store/useAuthStore";
 import { soundEngine } from "../../utils/sound";
@@ -34,6 +31,7 @@ import type { SpeedMode } from "../../services/ipc";
 import { SPEED_MODE_META } from "../../utils/speedModes";
 import { APP_VERSION_LABEL } from "../../utils/appMeta";
 import { useUpdateStore } from "../../store/useUpdateStore";
+import { SoftwareUpdateCard } from "./SoftwareUpdateCard";
 
 interface SettingsViewProps {
   onNavigateTab?: (tab: string) => void;
@@ -79,25 +77,6 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
   const [testingCloudPing, setTestingCloudPing] = useState(false);
   const [cloudPingResult, setCloudPingResult] = useState<string | null>(null);
   const [copiedCloudMcpUrl, setCopiedCloudMcpUrl] = useState(false);
-
-  const {
-    installedVersionLabel,
-    updateAvailable,
-    latestTag,
-    checking: checkingUpdate,
-    updating: updatingApp,
-    progressPercent: updateProgress,
-    statusMessage: updateStatusMsg,
-    lastCheckedAt,
-    autoCheck,
-    autoUpdate,
-    setAutoCheck,
-    setAutoUpdate,
-    checkNow,
-    performUpdateNow,
-  } = useUpdateStore();
-
-  const activeVerLabel = installedVersionLabel || APP_VERSION_LABEL;
 
   useEffect(() => {
     extraDataService.fetchDoctor().then((doc) => {
@@ -381,164 +360,8 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
 
       {/* Main Settings Sections */}
       <div className="space-y-6">
-        {/* Section 0: Software Updates & Engine Release Channel */}
-        <section className="bg-white rounded-xl border border-[#dfe4eb] overflow-hidden shadow-2xs">
-          <div className="px-5 py-4 border-b border-[#dfe4eb] flex items-center justify-between bg-white">
-            <div className="flex items-center gap-3">
-              <div className="size-8 rounded-lg bg-[#f0f2f6] border border-[#dfe4eb] flex items-center justify-center shrink-0">
-                <RefreshCw className="size-4 text-[#1677ff]" />
-              </div>
-              <div>
-                <h3 className="text-xs font-semibold text-[#1a1a1c] tracking-tight">
-                  Software Updates
-                </h3>
-                <p className="text-[11px] text-[#525866] mt-0.5">
-                  Release verification, engine hot-reload & automated security patches
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-[#f8f9fb] text-[#1a1a1c] border border-[#dfe4eb] tabular-nums">
-                {activeVerLabel}
-              </span>
-            </div>
-          </div>
-
-          <div className="p-5 space-y-4">
-            {/* If Update Available: Elevated Emerald Banner */}
-            {updateAvailable && latestTag ? (
-              <div className="rounded-xl border border-[#bbf0cf] bg-[#edfcf2] p-4 text-[#0e8345]">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="size-2 rounded-full bg-[#0e8345] animate-ping" />
-                      <span className="font-semibold text-xs text-[#0e8345] tracking-tight">
-                        Extra {latestTag} is ready to install
-                      </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-white text-[#0e8345] border border-[#bbf0cf]">
-                        New Release
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#0e8345]/90">
-                      Installed version {activeVerLabel}. Includes performance optimizations and security hardening.
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <button
-                      onClick={() => void performUpdateNow()}
-                      disabled={updatingApp}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0e8345] hover:bg-[#0b6b37] text-white text-xs font-medium transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
-                    >
-                      <ArrowUpCircle className={`size-3.5 ${updatingApp ? "animate-spin" : ""}`} />
-                      <span>{updatingApp ? "Updating..." : "Update Now"}</span>
-                    </button>
-                    {onNavigateTab && (
-                      <button
-                        onClick={() => {
-                          soundEngine.playTick();
-                          onNavigateTab("about");
-                        }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[#bbf0cf] bg-white hover:bg-[#edfcf2] text-xs font-medium text-[#0e8345] transition-colors cursor-pointer"
-                      >
-                        <span>Changelog</span>
-                        <ChevronRight className="size-3" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Live Progress Bar when updating */}
-                {updatingApp && (
-                  <div className="mt-3 pt-3 border-t border-[#bbf0cf]/60 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
-                      <span>{updateStatusMsg || "Applying updates..."}</span>
-                      <span className="tabular-nums font-semibold">{updateProgress}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-white/70 rounded-full overflow-hidden border border-[#bbf0cf]">
-                      <div
-                        className="h-full bg-[#0e8345] rounded-full transition-all duration-300"
-                        style={{ width: `${Math.max(5, updateProgress)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Up to Date Status Banner */
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-lg bg-[#f8f9fb] border border-[#dfe4eb]">
-                <div className="flex items-center gap-2.5">
-                  <div className="size-5 rounded-full bg-[#edfcf2] border border-[#bbf0cf] flex items-center justify-center shrink-0">
-                    <Check className="size-3 text-[#0e8345]" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-medium text-[#1a1a1c] block">
-                      Extra is up to date
-                    </span>
-                    <span className="text-[11px] font-mono text-[#868c98] block">
-                      {lastCheckedAt ? `Last checked ${new Date(lastCheckedAt).toLocaleTimeString()}` : "Checked on startup"}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => void checkNow()}
-                    disabled={checkingUpdate || updatingApp}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dfe4eb] bg-white text-xs font-medium text-[#1a1a1c] hover:bg-[#f0f2f6] transition-colors cursor-pointer disabled:opacity-50 shadow-2xs"
-                  >
-                    <RefreshCw className={`size-3.5 ${checkingUpdate ? "animate-spin text-[#1677ff]" : "text-[#525866]"}`} />
-                    <span>{checkingUpdate ? "Checking..." : "Check for updates"}</span>
-                  </button>
-                  {onNavigateTab && (
-                    <button
-                      onClick={() => {
-                        soundEngine.playTick();
-                        onNavigateTab("about");
-                      }}
-                      className="text-xs text-[#1677ff] hover:underline cursor-pointer px-1.5 py-1"
-                    >
-                      Release Notes
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Toggle Preferences */}
-            <div className="pt-2 border-t border-[#dfe4eb] divide-y divide-[#dfe4eb]">
-              <div className="py-2.5 flex items-center justify-between gap-4">
-                <div>
-                  <span className="text-xs font-medium text-[#1a1a1c] block">
-                    Automatic update checks
-                  </span>
-                  <span className="text-[11px] text-[#525866] block">
-                    Periodically query official release channels and surface unobtrusive notifications
-                  </span>
-                </div>
-                <Switch
-                  checked={autoCheck}
-                  onCheckedChange={setAutoCheck}
-                />
-              </div>
-
-              <div className="py-2.5 flex items-center justify-between gap-4">
-                <div>
-                  <span className="text-xs font-medium text-[#1a1a1c] block">
-                    Download updates automatically
-                  </span>
-                  <span className="text-[11px] text-[#525866] block">
-                    Fetch verified signed packages in background as soon as they are published
-                  </span>
-                </div>
-                <Switch
-                  checked={autoUpdate}
-                  onCheckedChange={setAutoUpdate}
-                />
-              </div>
-            </div>
-          </div>
-        </section>
+        {/* Section 0: Software Updates & Engine Release Channel (Un-slopped Agency Craft) */}
+        <SoftwareUpdateCard onNavigateTab={onNavigateTab} />
 
         {/* Section 1: Execution Pacing */}
         <section className="bg-white rounded-xl border border-[#dfe4eb] overflow-hidden">

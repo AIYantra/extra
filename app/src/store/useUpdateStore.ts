@@ -6,6 +6,7 @@ import {
   fetchInstalledVersion,
   performAppUpdate,
   fetchUpdateProgress,
+  isNewerVersion,
   type UpdateCheckResult,
 } from "../services/updateService";
 import { getAppVersion, getAppVersionLabel, setAppVersion } from "../utils/appMeta";
@@ -30,12 +31,14 @@ interface UpdateStoreState {
   updateState: "idle" | "checking" | "downloading" | "installing" | "restarting" | "completed" | "failed";
   error: string | null;
   lastResult: UpdateCheckResult | null;
+  reloadCountdown: number | null;
 
   setAutoCheck: (enabled: boolean) => void;
   setAutoUpdate: (enabled: boolean) => void;
   syncInstalledVersion: () => Promise<string>;
   checkNow: (opts?: { silent?: boolean }) => Promise<UpdateCheckResult | null>;
   performUpdateNow: () => Promise<boolean>;
+  triggerReloadNow: () => void;
   autoCheckIfDue: () => Promise<void>;
 }
 
@@ -57,6 +60,11 @@ export const useUpdateStore = create<UpdateStoreState>()(
       updateState: "idle",
       error: null,
       lastResult: null,
+      reloadCountdown: null,
+
+      triggerReloadNow: () => {
+        window.location.reload();
+      },
 
       setAutoCheck: (enabled: boolean) => {
         set({ autoCheck: enabled });
@@ -174,20 +182,37 @@ export const useUpdateStore = create<UpdateStoreState>()(
 
                 if (progress.state === "completed") {
                   clearInterval(poller);
-                  const newVer = await fetchInstalledVersion();
+                  const freshVer = await fetchInstalledVersion();
+                  const effectiveVer = (freshVer && isNewerVersion(freshVer, get().installedVersion))
+                    ? freshVer
+                    : (targetTag || freshVer || get().installedVersion);
+
+                  setAppVersion(effectiveVer);
                   set({
                     updating: false,
-                    installedVersion: newVer || targetTag || get().installedVersion,
-                    installedVersionLabel: `v${newVer || targetTag || get().installedVersion}`,
+                    installedVersion: effectiveVer,
+                    installedVersionLabel: `v${effectiveVer}`,
                     updateAvailable: false,
                     updateState: "completed",
                     progressPercent: 100,
+                    statusMessage: `Extra v${effectiveVer} is installed and active!`,
+                    reloadCountdown: 3,
                   });
                   soundEngine.playSuccessChime();
-                  toast.success(`Updated to Extra v${newVer || targetTag}!`, {
-                    description: "All engine modules and security fixes are active.",
+                  toast.success(`Updated to Extra v${effectiveVer}!`, {
+                    description: "All engine modules, daemon services, and security fixes are verified.",
                   });
-                  setTimeout(() => window.location.reload(), 1800);
+
+                  let countdown = 3;
+                  const timer = setInterval(() => {
+                    countdown--;
+                    if (countdown <= 0) {
+                      clearInterval(timer);
+                      window.location.reload();
+                    } else {
+                      set({ reloadCountdown: countdown });
+                    }
+                  }, 1000);
                   return;
                 }
 
@@ -207,8 +232,9 @@ export const useUpdateStore = create<UpdateStoreState>()(
 
               // Fallback version polling in case progress endpoint is transient
               const newVer = await fetchInstalledVersion();
-              if (newVer && newVer !== get().installedVersion) {
+              if (newVer && isNewerVersion(newVer, get().installedVersion)) {
                 clearInterval(poller);
+                setAppVersion(newVer);
                 set({
                   updating: false,
                   installedVersion: newVer,
@@ -216,6 +242,8 @@ export const useUpdateStore = create<UpdateStoreState>()(
                   updateAvailable: false,
                   updateState: "completed",
                   progressPercent: 100,
+                  statusMessage: `Extra v${newVer} is installed and active!`,
+                  reloadCountdown: 2,
                 });
                 soundEngine.playSuccessChime();
                 toast.success(`Updated to Extra v${newVer}!`);
