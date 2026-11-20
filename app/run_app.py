@@ -2179,14 +2179,28 @@ def modify_api_keys(action: str, payload: dict):
 
 
 def get_cloud_relay_info():
+    # If main daemon is running on port 8000, query its authoritative relay status
+    try:
+        req = urllib.request.Request("http://127.0.0.1:8000/api/relay/status")
+        with urllib.request.urlopen(req, timeout=0.8) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        pass
+
     cfg_file = EXTRA_DIR / "config.json"
     cfg = json.loads(cfg_file.read_text(encoding="utf-8")) if cfg_file.exists() else {}
     machine_id = cfg.get("anonymous_machine_id", "4b048fc826fd654834ff7e5719890efdbe00f293310f51d822ece97f519736fd")
     creds = get_stored_credentials()
     active_token = creds.get("relay_token", "")
+    is_local = cfg.get("is_local_mode", False)
 
     return {
-        "status": "connected" if _RELAY_RUNNING else "standby",
+        "running": _RELAY_RUNNING,
+        "status": "connected" if _RELAY_RUNNING else ("disabled" if is_local else "stopped"),
+        "connected": _RELAY_RUNNING,
+        "token_configured": bool(active_token),
+        "device_name": f"{socket.gethostname()} (Windows)",
         "active_relay": _RELAY_RUNNING,
         "relay_token": active_token,
         "cloudflare_edge": "https://extra.yantraos.com",
@@ -2490,7 +2504,7 @@ class SPAHandler(SimpleHTTPRequestHandler):
             return self._send_json(get_live_kuzu_graph())
         elif clean_path in ("/api/extra/keys", "/api/keys"):
             return self._send_json(get_api_keys())
-        elif clean_path in ("/api/extra/relay", "/api/relay"):
+        elif clean_path in ("/api/extra/relay", "/api/relay", "/api/extra/relay/status", "/api/relay/status"):
             return self._send_json(get_cloud_relay_info())
         elif clean_path in ("/api/extra/user", "/api/extra/operator"):
             return self._send_json(get_operator_info())
@@ -2671,11 +2685,57 @@ class SPAHandler(SimpleHTTPRequestHandler):
 
         elif clean_path in ("/api/extra/relay/start", "/api/relay/start"):
             creds = get_stored_credentials()
-            r_tok = creds.get("relay_token") or (creds.get("user") or {}).get("relay_token")
+            r_tok = (req_data.get("relay_token") if isinstance(req_data, dict) else None) or creds.get("relay_token") or (creds.get("user") or {}).get("relay_token")
             if r_tok:
                 start_background_relay(r_tok)
+                try:
+                    start_req = urllib.request.Request(
+                        "http://127.0.0.1:8000/api/relay/start",
+                        data=json.dumps({"relay_token": r_tok}).encode("utf-8"),
+                        headers={"Content-Type": "application/json", "Authorization": f"Bearer {EXTRA_LOOPBACK_TOKEN}"}
+                    )
+                    urllib.request.urlopen(start_req, timeout=1.5)
+                except Exception:
+                    pass
+                try:
+                    cfg_path = Path.home() / ".extra" / "config.json"
+                    cfg_data = {}
+                    if cfg_path.exists():
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            cfg_data = json.load(f)
+                    cfg_data["is_local_mode"] = False
+                    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(cfg_path, "w", encoding="utf-8") as f:
+                        json.dump(cfg_data, f, indent=2)
+                except Exception:
+                    pass
                 return self._send_json({"success": True, "status": "connected" if _RELAY_RUNNING else "connecting"})
             return self._send_json({"success": False, "error": "No relay token found"}, 400)
+
+        elif clean_path in ("/api/extra/relay/stop", "/api/relay/stop"):
+            stop_background_relay()
+            try:
+                stop_req = urllib.request.Request(
+                    "http://127.0.0.1:8000/api/relay/stop",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json", "Authorization": f"Bearer {EXTRA_LOOPBACK_TOKEN}"}
+                )
+                urllib.request.urlopen(stop_req, timeout=1.5)
+            except Exception:
+                pass
+            try:
+                cfg_path = Path.home() / ".extra" / "config.json"
+                cfg_data = {}
+                if cfg_path.exists():
+                    with open(cfg_path, "r", encoding="utf-8") as f:
+                        cfg_data = json.load(f)
+                cfg_data["is_local_mode"] = True
+                cfg_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(cfg_path, "w", encoding="utf-8") as f:
+                    json.dump(cfg_data, f, indent=2)
+            except Exception:
+                pass
+            return self._send_json({"success": True, "status": "stopped"})
 
         elif clean_path in ("/api/extra/relay/sync", "/api/relay/sync"):
             return self._send_json({

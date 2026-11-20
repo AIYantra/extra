@@ -6184,14 +6184,30 @@ async def _config_sync_endpoint(request: Any) -> Any:
                 data[k] = body[k]
         with open(cfg_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
+
+        # Reactive Relay Lifecycle Hook: Auto-start or stop relay based on credentials
+        relay_token = data.get("relay_token")
+        is_local = data.get("is_local_mode", False)
+        try:
+            from extra.relay.manager import RelayManager
+            mgr = RelayManager.get_instance()
+            if relay_token and not is_local:
+                mgr.start(relay_token)
+            elif is_local:
+                mgr.stop()
+        except Exception:
+            pass
+
         return JSONResponse({"status": "ok", "config_saved": True})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=400)
 
 
-@server.custom_route("/api/config", methods=["GET"])
+@server.custom_route("/api/config", methods=["GET", "POST"])
 async def _config_get_endpoint(request: Any) -> Any:
     from starlette.responses import JSONResponse
+    if request.method == "POST":
+        return await _config_sync_endpoint(request)
     try:
         cfg_path = Path.home() / ".extra" / "config.json"
         if cfg_path.exists():
@@ -6201,6 +6217,113 @@ async def _config_get_endpoint(request: Any) -> Any:
         return JSONResponse({"status": "ok", "config": {}})
     except Exception as e:
         return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+@server.custom_route("/api/relay/status", methods=["GET"])
+async def _relay_status_endpoint(request: Any) -> Any:
+    from starlette.responses import JSONResponse
+    try:
+        from extra.relay.manager import RelayManager
+        status_info = RelayManager.get_instance().get_status()
+        return JSONResponse(status_info)
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+
+@server.custom_route("/api/relay/start", methods=["POST"])
+async def _relay_start_endpoint(request: Any) -> Any:
+    from starlette.responses import JSONResponse
+    try:
+        token = None
+        try:
+            body = await request.json()
+            token = body.get("relay_token") or body.get("token")
+        except Exception:
+            pass
+
+        from extra.relay.manager import RelayManager
+        success = RelayManager.get_instance().start(token=token)
+        try:
+            cfg_path = Path.home() / ".extra" / "config.json"
+            cfg_data = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+            cfg_data["is_local_mode"] = False
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(cfg_data, f, indent=2)
+        except Exception:
+            pass
+        return JSONResponse({"success": success, "status": RelayManager.get_instance().get_status()})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@server.custom_route("/api/relay/stop", methods=["POST"])
+async def _relay_stop_endpoint(request: Any) -> Any:
+    from starlette.responses import JSONResponse
+    try:
+        from extra.relay.manager import RelayManager
+        RelayManager.get_instance().stop()
+        try:
+            cfg_path = Path.home() / ".extra" / "config.json"
+            cfg_data = {}
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_data = json.load(f)
+            cfg_data["is_local_mode"] = True
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(cfg_data, f, indent=2)
+        except Exception:
+            pass
+        return JSONResponse({"success": True, "status": RelayManager.get_instance().get_status()})
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@server.custom_route("/api/relay/ping", methods=["GET"])
+async def _relay_ping_endpoint(request: Any) -> Any:
+    from starlette.responses import JSONResponse
+    try:
+        from extra.relay.manager import RelayManager
+        res = RelayManager.get_instance().ping()
+        return JSONResponse(res)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+
+
+@server.custom_route("/api/autostart", methods=["GET"])
+async def _autostart_get_endpoint(request: Any) -> Any:
+    from starlette.responses import JSONResponse
+    try:
+        from extra.core.platform.windows.autostart import get_autostart_info
+        info = get_autostart_info()
+        return JSONResponse(info)
+    except Exception as e:
+        return JSONResponse({"supported": False, "enabled": False, "error": str(e)}, status_code=500)
+
+
+@server.custom_route("/api/autostart", methods=["POST"])
+async def _autostart_post_endpoint(request: Any) -> Any:
+    from starlette.responses import JSONResponse
+    try:
+        body = await request.json()
+        enable = bool(body.get("enabled", True))
+        minimized = bool(body.get("minimized", True))
+
+        from extra.core.platform.windows.autostart import enable_autostart, disable_autostart, get_autostart_info
+        if enable:
+            ok = enable_autostart(minimized=minimized)
+        else:
+            ok = disable_autostart()
+
+        info = get_autostart_info()
+        info["success"] = ok
+        return JSONResponse(info)
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
 @server.custom_route("/api/clients", methods=["GET"])
@@ -6553,6 +6676,18 @@ _PUBLIC_SSE_PATHS = {
 
     "/.well-known/ai-plugin.json",
 
+    "/api/relay/status",
+
+    "/api/relay/start",
+
+    "/api/relay/stop",
+
+    "/api/relay/ping",
+
+    "/api/autostart",
+
+    "/api/config/sync",
+
 }
 
 
@@ -6585,7 +6720,14 @@ class BearerAuthASGIMiddleware:
 
             # Exempt public discovery routes, manifest lookups, and CORS preflight OPTIONS
 
-            if path in _PUBLIC_SSE_PATHS or path.startswith("/.well-known") or scope.get("method") == "OPTIONS":
+            if (
+                path in _PUBLIC_SSE_PATHS
+                or path.startswith("/.well-known")
+                or path.startswith("/api/relay/")
+                or path.startswith("/api/autostart")
+                or path.startswith("/api/config/")
+                or scope.get("method") == "OPTIONS"
+            ):
 
                 await self.app(scope, receive, send)
 
@@ -7013,6 +7155,13 @@ def run_sse_server(
 
     )
 
+    # Auto-start background Cloud Relay if user is signed in with relay credentials
+    try:
+        from extra.relay.manager import RelayManager
+        RelayManager.get_instance().auto_start_if_configured()
+    except Exception as e:
+        logger.debug("Background relay auto-start check: %s", e)
+
     uvicorn_server = uvicorn.Server(config)
 
     try:
@@ -7020,6 +7169,12 @@ def run_sse_server(
         anyio.run(uvicorn_server.serve)
 
     finally:
+
+        try:
+            from extra.relay.manager import RelayManager
+            RelayManager.get_instance().stop()
+        except Exception:
+            pass
 
         if tunnel_proc:
 
