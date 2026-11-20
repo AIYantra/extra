@@ -2,7 +2,7 @@
 name = "extra-station"
 version = "0.3.6"
 description = "Extra Station — Sovereign Desktop Mission Control Cockpit"
-authors = ["YantraOS"]
+authors = ["yantraOS"]
 license = "Apache-2.0"
 repository = "https://github.com/yantra-core/extra"
 edition = "2021"

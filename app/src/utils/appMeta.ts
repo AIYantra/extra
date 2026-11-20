@@ -23,5 +23,5 @@ export function setAppVersion(newVersion: string): void {
 export const APP_VERSION = DEFAULT_APP_VERSION;
 export const APP_VERSION_LABEL = DEFAULT_APP_VERSION_LABEL;
 export const PRODUCT_NAME = "Extra";
-export const PRODUCT_BYLINE = "by YantraOS";
+export const PRODUCT_BYLINE = "by yantraOS";
 export const RELAY_HOST = "extra.yantraos.com";

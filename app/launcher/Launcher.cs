@@ -94,7 +94,7 @@ namespace ExtraLauncher
             this.Controls.Add(_title);
 
             _subtitle = new Label();
-            _subtitle.Text = "by YantraOS";
+            _subtitle.Text = "by yantraOS";
             _subtitle.Font = new Font(SystemFonts.DefaultFont.FontFamily, 11f, FontStyle.Regular);
             _subtitle.ForeColor = Muted;
             _subtitle.AutoSize = true;
@@ -118,7 +118,7 @@ namespace ExtraLauncher
             this.Controls.Add(_track);
 
             Label version = new Label();
-            version.Text = "v0.3.5 · YantraOS";
+            version.Text = "v0.3.5 · yantraOS";
             version.Font = new Font(SystemFonts.DefaultFont.FontFamily, 9f, FontStyle.Regular);
             version.ForeColor = Muted;
             version.AutoSize = true;
