@@ -663,24 +663,37 @@ export class ExtraDataService {
 
   async fetchRelayStatus(): Promise<LiveRelayStatus> {
     try {
-      const headers = await telemetryClient.authHeaders();
       let res: Response | null = null;
       try {
         const c8000 = new AbortController();
-        const t8000 = setTimeout(() => c8000.abort(), 1200);
-        res = await fetch("http://127.0.0.1:8000/api/relay/status", { headers, signal: c8000.signal });
+        const t8000 = setTimeout(() => c8000.abort(), 2500);
+        res = await fetch("http://127.0.0.1:8000/api/relay/status", {
+          signal: c8000.signal,
+          headers: { Accept: "application/json" },
+        });
         clearTimeout(t8000);
       } catch {}
 
       if (!res || !res.ok) {
-        const cLocal = new AbortController();
-        const tLocal = setTimeout(() => cLocal.abort(), 1200);
-        res = await fetch(`${API_BASE}/api/extra/relay/status`, { headers, signal: cLocal.signal });
-        clearTimeout(tLocal);
+        try {
+          const cLocal = new AbortController();
+          const tLocal = setTimeout(() => cLocal.abort(), 2000);
+          res = await fetch(`${API_BASE}/api/extra/relay/status`, {
+            signal: cLocal.signal,
+            headers: { Accept: "application/json" },
+          });
+          clearTimeout(tLocal);
+        } catch {}
       }
 
       if (res && res.ok) {
-        return await res.json();
+        const cType = res.headers.get("content-type") || "";
+        if (cType.includes("application/json") || cType.includes("json")) {
+          const parsed = await res.json();
+          if (parsed && typeof parsed === "object" && "connected" in parsed) {
+            return parsed as LiveRelayStatus;
+          }
+        }
       }
     } catch (e) {
       // daemon standby fallback
@@ -701,8 +714,11 @@ export class ExtraDataService {
 
   async startRelay(relayToken?: string): Promise<{ success: boolean; status?: LiveRelayStatus }> {
     try {
-      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
-      const payload = JSON.stringify({ relay_token: relayToken });
+      const payloadObj = relayToken && typeof relayToken === "string" && relayToken.trim()
+        ? { relay_token: relayToken.trim() }
+        : {};
+      const payload = JSON.stringify(payloadObj);
+      const headers = { "Content-Type": "application/json", Accept: "application/json" };
       let res: Response | null = null;
       try {
         res = await fetch("http://127.0.0.1:8000/api/relay/start", {
@@ -713,15 +729,21 @@ export class ExtraDataService {
       } catch {}
 
       try {
-        await fetch(`${API_BASE}/api/extra/relay/start`, {
+        const resLocal = await fetch(`${API_BASE}/api/extra/relay/start`, {
           method: "POST",
           headers,
           body: payload,
         });
+        if (!res || !res.ok) {
+          res = resLocal;
+        }
       } catch {}
 
       if (res && res.ok) {
-        return await res.json();
+        const cType = res.headers.get("content-type") || "";
+        if (cType.includes("application/json") || cType.includes("json")) {
+          return await res.json();
+        }
       }
       return { success: true };
     } catch (e) {
@@ -732,12 +754,13 @@ export class ExtraDataService {
 
   async stopRelay(): Promise<boolean> {
     try {
-      const headers = await telemetryClient.authHeaders({ "Content-Type": "application/json" });
+      const headers = { "Content-Type": "application/json", Accept: "application/json" };
       let ok = false;
       try {
         const res = await fetch("http://127.0.0.1:8000/api/relay/stop", {
           method: "POST",
           headers,
+          body: JSON.stringify({}),
         });
         if (res.ok) ok = true;
       } catch {}
@@ -746,6 +769,7 @@ export class ExtraDataService {
         const res2 = await fetch(`${API_BASE}/api/extra/relay/stop`, {
           method: "POST",
           headers,
+          body: JSON.stringify({}),
         });
         if (res2.ok) ok = true;
       } catch {}
@@ -759,10 +783,19 @@ export class ExtraDataService {
   async pingRelay(): Promise<{ ok: boolean; latency_ms: number; error?: string }> {
     try {
       const t0 = performance.now();
-      const headers = await telemetryClient.authHeaders();
-      const res = await fetch("http://127.0.0.1:8000/api/relay/ping", { headers });
+      let res: Response | null = null;
+      try {
+        res = await fetch("http://127.0.0.1:8000/api/relay/ping", { headers: { Accept: "application/json" } });
+      } catch {}
+
+      if (!res || !res.ok) {
+        try {
+          res = await fetch(`${API_BASE}/api/extra/relay/ping`, { headers: { Accept: "application/json" } });
+        } catch {}
+      }
+
       const elapsed = Math.round(performance.now() - t0);
-      if (res.ok) {
+      if (res && res.ok) {
         const data = await res.json();
         return { ok: !!data.ok, latency_ms: data.latency_ms || elapsed };
       }

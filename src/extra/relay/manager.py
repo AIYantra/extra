@@ -52,8 +52,12 @@ class RelayManager:
                 _MANAGER_INSTANCE = cls()
             return _MANAGER_INSTANCE
 
-    def _state_callback(self, state: str, error: Optional[str] = None) -> None:
+    def _state_callback(self, state: str, error: Optional[str] = None, source_thread: Optional[threading.Thread] = None) -> None:
         with self._lock:
+            # Stale thread guard: ignore callbacks from older, superseded worker threads
+            if source_thread is not None and self._thread is not None and source_thread is not self._thread:
+                logger.debug("Discarding state callback '%s' from superseded worker thread", state)
+                return
             self._status = state
             if state == "connected":
                 self._last_heartbeat = time.time()
@@ -61,7 +65,8 @@ class RelayManager:
             elif state == "reconnecting":
                 self._last_error = error
             elif state == "stopped":
-                self._status = "stopped"
+                if source_thread is None or self._thread is None or source_thread is self._thread:
+                    self._status = "stopped"
 
     def auto_start_if_configured(self) -> bool:
         """
@@ -99,9 +104,6 @@ class RelayManager:
             return self._running
 
     def _stop_locked(self) -> None:
-        if not self._running:
-            self._status = "stopped"
-            return
         self._status = "stopped"
         self._running = False
         if self._loop and self._loop.is_running():
@@ -139,17 +141,12 @@ class RelayManager:
             if device_name:
                 self._device_name = device_name
 
-            # Check if running and already connected with the same token
-            is_active = self._running and self._thread and self._thread.is_alive()
-            needs_restart = (
-                not is_active
-                or token_changed
-                or force
-                or self._status != "connected"
-            )
+            # Check if running and already connected/connecting with the same token
+            is_active = bool(self._running and self._thread and self._thread.is_alive())
 
-            if not needs_restart:
-                logger.info("RelayManager already running and connected.")
+            # Idempotency guard: If tunnel is actively connecting or already connected with the same token, do not kill it!
+            if is_active and not token_changed and not force and self._status in ("connecting", "connected"):
+                logger.info("RelayManager already active and healthy (status=%s). Reusing connection.", self._status)
                 return True
 
             if is_active:
@@ -168,7 +165,11 @@ class RelayManager:
             self._status = "connecting"
             self._last_error = None
 
+            worker_thread = None
+
             def _worker() -> None:
+                nonlocal worker_thread
+                worker_thread = threading.current_thread()
                 self._loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(self._loop)
                 try:
@@ -178,25 +179,32 @@ class RelayManager:
                             hub_url=self._hub_url,
                             token=self._token,  # type: ignore
                             device_name=self._device_name,
-                            on_state_change=self._state_callback,
+                            on_state_change=lambda st, err: self._state_callback(st, err, source_thread=worker_thread),
                         )
                     )
                 except Exception as ex:
                     logger.error("Relay worker loop exited with exception: %s", ex)
                     with self._lock:
-                        self._last_error = str(ex)
+                        if self._thread is None or self._thread is worker_thread:
+                            self._last_error = str(ex)
                 finally:
                     with self._lock:
-                        self._running = False
-                        self._status = "stopped"
+                        # Only set stopped if this worker has not been superseded by a newer thread
+                        if self._thread is None or self._thread is worker_thread:
+                            self._running = False
+                            self._status = "stopped"
                     if self._loop and not self._loop.is_closed():
-                        self._loop.close()
+                        try:
+                            self._loop.close()
+                        except Exception:
+                            pass
 
             self._thread = threading.Thread(
                 target=_worker,
                 daemon=True,
                 name="Extra-CloudRelay-Daemon",
             )
+            worker_thread = self._thread
             self._thread.start()
             return True
 
@@ -205,20 +213,21 @@ class RelayManager:
         Gracefully disconnects and terminates the background relay loop.
         """
         with self._lock:
-            if not self._running:
-                self._status = "stopped"
-                return True
-
             self._status = "stopped"
             self._running = False
-            if self._loop and self._loop.is_running():
+            cur_loop = self._loop
+            cur_thread = self._thread
+            if cur_loop and cur_loop.is_running():
                 try:
-                    self._loop.call_soon_threadsafe(self._loop.stop)
+                    cur_loop.call_soon_threadsafe(cur_loop.stop)
                 except Exception:
                     pass
 
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=1.5)
+        if cur_thread and cur_thread.is_alive() and threading.current_thread() != cur_thread:
+            try:
+                cur_thread.join(timeout=1.5)
+            except Exception:
+                pass
         logger.info("RelayManager stopped successfully.")
         return True
 

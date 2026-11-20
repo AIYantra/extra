@@ -2182,7 +2182,7 @@ def get_cloud_relay_info():
     # If main daemon is running on port 8000, query its authoritative relay status
     try:
         req = urllib.request.Request("http://127.0.0.1:8000/api/relay/status")
-        with urllib.request.urlopen(req, timeout=0.8) as resp:
+        with urllib.request.urlopen(req, timeout=1.8) as resp:
             if resp.status == 200:
                 return json.loads(resp.read().decode("utf-8"))
     except Exception:
