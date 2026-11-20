@@ -35,8 +35,9 @@ interface UpdateStoreState {
 
   setAutoCheck: (enabled: boolean) => void;
   setAutoUpdate: (enabled: boolean) => void;
+  initUpdateChecker: () => Promise<void>;
   syncInstalledVersion: () => Promise<string>;
-  checkNow: (opts?: { silent?: boolean }) => Promise<UpdateCheckResult | null>;
+  checkNow: (opts?: { silent?: boolean; force?: boolean }) => Promise<UpdateCheckResult | null>;
   performUpdateNow: () => Promise<boolean>;
   triggerReloadNow: () => void;
   autoCheckIfDue: () => Promise<void>;
@@ -63,7 +64,7 @@ export const useUpdateStore = create<UpdateStoreState>()(
       reloadCountdown: null,
 
       triggerReloadNow: () => {
-        window.location.reload();
+        window.location.href = window.location.pathname + "?_t=" + Date.now();
       },
 
       setAutoCheck: (enabled: boolean) => {
@@ -79,9 +80,12 @@ export const useUpdateStore = create<UpdateStoreState>()(
           const ver = await fetchInstalledVersion();
           if (ver) {
             setAppVersion(ver);
+            const latest = get().latestTag?.replace(/^[vV]/, "");
+            const hasUpdate = Boolean(latest && isNewerVersion(latest, ver));
             set({
               installedVersion: ver,
               installedVersionLabel: `v${ver}`,
+              updateAvailable: hasUpdate,
             });
             return ver;
           }
@@ -91,12 +95,22 @@ export const useUpdateStore = create<UpdateStoreState>()(
         return get().installedVersion;
       },
 
+      initUpdateChecker: async () => {
+        try {
+          await get().syncInstalledVersion();
+          // Always perform a silent check on cockpit initialization
+          await get().checkNow({ silent: true, force: true });
+        } catch {
+          // fallback gracefully
+        }
+      },
+
       checkNow: async (opts) => {
         const silent = opts?.silent ?? false;
         if (get().checking) return get().lastResult;
         set({ checking: true, error: null });
         try {
-          // Sync live local version first
+          // 1. Sync live local version from backend first
           const activeVer = await get().syncInstalledVersion();
           const result = await checkForUpdates(activeVer);
           const alreadyNotified = get().notifiedTag === result.latestTag;
@@ -105,36 +119,39 @@ export const useUpdateStore = create<UpdateStoreState>()(
             setAppVersion(result.current);
           }
 
+          // Strict ground truth: only available if latest is genuinely newer than current installed version
+          const isAvailable = Boolean(result.available && isNewerVersion(result.latest, result.current));
+
           set({
             checking: false,
             installedVersion: result.current,
             installedVersionLabel: `v${result.current}`,
             lastCheckedAt: Date.now(),
             latestTag: result.latestTag,
-            updateAvailable: result.available,
+            updateAvailable: isAvailable,
             lastResult: result,
             notifiedTag:
-              result.available && !alreadyNotified
+              isAvailable && !alreadyNotified
                 ? result.latestTag
                 : get().notifiedTag,
           });
 
-          if (result.available && !alreadyNotified) {
+          if (isAvailable && !alreadyNotified) {
             if (get().autoUpdate) {
               await get().performUpdateNow();
             } else {
               toast.success(`Update available: ${result.latestTag}`, {
-                description: `Installed v${result.current} — click 'Update Now' in About › Updates.`,
+                description: `Installed v${result.current} — click 'Update Now' in Settings & Health.`,
               });
             }
-          } else if (!silent && !result.available) {
+          } else if (!silent && !isAvailable) {
             if (result.offline) {
               toast.info(`Extra v${result.current} (Installed)`, {
                 description: "Cannot reach update server. You are running the verified local release.",
               });
             } else {
               toast.success("You're up to date", {
-                description: `Installed v${result.current} is the latest release.`,
+                description: `Installed v${result.current} is the latest verified release.`,
               });
             }
           }
@@ -208,7 +225,7 @@ export const useUpdateStore = create<UpdateStoreState>()(
                     countdown--;
                     if (countdown <= 0) {
                       clearInterval(timer);
-                      window.location.reload();
+                      window.location.href = window.location.pathname + "?_t=" + Date.now();
                     } else {
                       set({ reloadCountdown: countdown });
                     }
@@ -247,7 +264,9 @@ export const useUpdateStore = create<UpdateStoreState>()(
                 });
                 soundEngine.playSuccessChime();
                 toast.success(`Updated to Extra v${newVer}!`);
-                setTimeout(() => window.location.reload(), 1500);
+                setTimeout(() => {
+                  window.location.href = window.location.pathname + "?_t=" + Date.now();
+                }, 1500);
                 return;
               }
 
@@ -290,8 +309,6 @@ export const useUpdateStore = create<UpdateStoreState>()(
         autoCheck: state.autoCheck,
         autoUpdate: state.autoUpdate,
         lastCheckedAt: state.lastCheckedAt,
-        latestTag: state.latestTag,
-        updateAvailable: state.updateAvailable,
         notifiedTag: state.notifiedTag,
       }),
     },
