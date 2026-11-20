@@ -63,8 +63,8 @@ export const useAuthStore = create<AuthStoreState>()(
       },
 
       setLocalOffline: async (enabled: boolean) => {
-        const currentToken = get().token || "";
-        const currentUser = get().user;
+        const currentToken = get().token || authClient.getLocalToken() || "";
+        const currentUser = get().user || authClient.getLocalCachedUser();
         const currentRelayToken = get().relayToken || currentUser?.relay_token || "";
 
         if (enabled) {
@@ -75,9 +75,7 @@ export const useAuthStore = create<AuthStoreState>()(
           }
         } else {
           // Reconnect outbound WebSocket tunnel
-          if (currentRelayToken) {
-            await extraDataService.startRelay(currentRelayToken).catch(() => {});
-          }
+          await extraDataService.startRelay(currentRelayToken || undefined).catch(() => {});
           if (currentUser) {
             authClient.syncToLocalDaemon(currentToken, currentUser, false).catch(() => {});
           }
@@ -204,12 +202,26 @@ export const useAuthStore = create<AuthStoreState>()(
 
       initFromSecureStorage: async () => {
         try {
-          const creds = await authClient.loadStoredCredentials();
-          if (creds && creds.token && creds.user) {
+          let creds = await authClient.loadStoredCredentials();
+          // Fallback to cached session in localStorage if loopback DPAPI daemon is booting
+          if (!creds || !creds.user) {
+            const cachedUser = authClient.getLocalCachedUser();
+            const cachedToken = authClient.getLocalToken();
+            if (cachedUser && cachedToken) {
+              creds = {
+                token: cachedToken,
+                user: cachedUser,
+                relay_token: cachedUser.relay_token,
+              };
+            }
+          }
+          if (creds && (creds.token || creds.user)) {
+            const user = creds.user;
+            const rToken = creds.relay_token || user?.relay_token || null;
             set({
-              token: creds.token,
-              user: creds.user,
-              relayToken: creds.user.relay_token || creds.relay_token || null,
+              token: creds.token || null,
+              user: user || null,
+              relayToken: rToken,
               isAuthenticated: true,
               isLocalOfflineMode: false,
             });
