@@ -2686,6 +2686,14 @@ class SPAHandler(SimpleHTTPRequestHandler):
         elif clean_path in ("/api/extra/relay/start", "/api/relay/start"):
             creds = get_stored_credentials()
             r_tok = (req_data.get("relay_token") if isinstance(req_data, dict) else None) or creds.get("relay_token") or (creds.get("user") or {}).get("relay_token")
+            if not r_tok or not str(r_tok).strip():
+                try:
+                    cfg_path = Path.home() / ".extra" / "config.json"
+                    if cfg_path.exists():
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            r_tok = json.load(f).get("relay_token")
+                except Exception:
+                    pass
             if r_tok:
                 start_background_relay(r_tok)
                 try:
