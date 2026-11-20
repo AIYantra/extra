@@ -50,6 +50,8 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
     isAuthenticated,
     user,
     relayToken,
+    isLocalOfflineMode,
+    setLocalOffline,
     openAuthModal,
     logout,
     refreshProfile,
@@ -148,11 +150,17 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
     toast.success(`Speed mode set to ${mode.toUpperCase()}`);
   };
 
-  const handleTestChimes = () => {
+  const handleTestChimes = async () => {
     setTestingSound(true);
     soundEngine.playSuccessChime();
-    toast.success("Acoustic feedback verified");
-    setTimeout(() => setTestingSound(false), 500);
+    try {
+      await extraDataService.triggerSystemBeep();
+      toast.success("Hardware speaker & acoustic chime verified");
+    } catch {
+      toast.success("Acoustic feedback verified");
+    } finally {
+      setTimeout(() => setTestingSound(false), 500);
+    }
   };
 
   const handleTestIndicators = async () => {
@@ -266,15 +274,22 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
     setLoadingRelayAction(true);
     soundEngine.playTick();
     try {
-      const res = await extraDataService.startRelay(relayToken || undefined);
-      if (res.success) {
-        toast.success("Initiating Cloud Relay tunnel...");
-        const updated = await extraDataService.fetchRelayStatus();
-        setRelayStatus(updated);
-        soundEngine.playSuccessChime();
-      } else {
-        toast.error("Could not start Cloud Relay");
+      await setLocalOffline(false);
+      let finalStat: LiveRelayStatus | null = null;
+      for (let i = 0; i < 6; i++) {
+        await new Promise((r) => setTimeout(r, 450));
+        finalStat = await extraDataService.fetchRelayStatus();
+        setRelayStatus(finalStat);
+        if (finalStat.connected) break;
       }
+      soundEngine.playSuccessChime();
+      if (finalStat?.connected) {
+        toast.success("Cloud Relay connected. Remote agents can now reach this workstation.");
+      } else {
+        toast.info("Cloud Relay is reconnecting in background...");
+      }
+    } catch {
+      toast.error("Could not start Cloud Relay");
     } finally {
       setLoadingRelayAction(false);
     }
@@ -284,12 +299,14 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
     setLoadingRelayAction(true);
     soundEngine.playTick();
     try {
-      const ok = await extraDataService.stopRelay();
-      if (ok) {
-        toast.success("Cloud Relay disconnected");
-        const updated = await extraDataService.fetchRelayStatus();
-        setRelayStatus(updated);
-      }
+      await setLocalOffline(true);
+      const updated = await extraDataService.fetchRelayStatus();
+      setRelayStatus(updated);
+      setCloudPingResult(null);
+      soundEngine.playSuccessChime();
+      toast.info("Operating in Sovereign Offline Mode. Cloud Relay tunnel closed.");
+    } catch {
+      toast.error("Failed to disconnect Cloud Relay");
     } finally {
       setLoadingRelayAction(false);
     }
@@ -824,10 +841,20 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
                     <span className="text-xs font-semibold text-[#1a1a1c]">
                       Cloud MCP Relay Tunnel
                     </span>
-                    {isAuthenticated && relayStatus?.connected && (
+                    {isAuthenticated && relayStatus?.connected && !isLocalOfflineMode ? (
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#edfcf2] text-[#0e8345] border border-[#bbf0cf]">
                         <span className="size-1.5 rounded-full bg-[#0e8345] animate-ping" />
-                        Online
+                        Online (AWS ap-south-1)
+                      </span>
+                    ) : isAuthenticated && isLocalOfflineMode ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#f0f2f6] text-[#525866] border border-[#dfe4eb]">
+                        <span className="size-1.5 rounded-full bg-[#868c98]" />
+                        Sovereign Offline (Air-Gapped)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#fff8e6] text-[#b7791f] border border-[#f5dfa8]">
+                        <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Standby
                       </span>
                     )}
                   </div>
@@ -845,8 +872,8 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
                   {isAuthenticated && (
                     <button
                       onClick={handleTestCloudPing}
-                      disabled={testingCloudPing}
-                      className="px-2.5 py-1.5 rounded-lg border border-[#dfe4eb] bg-white hover:bg-[#f8f9fb] text-xs font-medium text-[#1a1a1c] flex items-center gap-1.5 cursor-pointer transition-colors"
+                      disabled={testingCloudPing || isLocalOfflineMode || !relayStatus?.connected}
+                      className="px-2.5 py-1.5 rounded-lg border border-[#dfe4eb] bg-white hover:bg-[#f8f9fb] text-xs font-medium text-[#1a1a1c] flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs"
                       title="Test live roundtrip ping to AWS Hub"
                     >
                       <Radio className={`size-3.5 ${testingCloudPing ? "animate-spin text-[#1677ff]" : "text-[#525866]"}`} />
@@ -854,21 +881,21 @@ export function SettingsView({ onNavigateTab }: SettingsViewProps = {}) {
                     </button>
                   )}
                   {isAuthenticated && (
-                    relayStatus?.connected ? (
+                    relayStatus?.connected && !isLocalOfflineMode ? (
                       <button
                         onClick={handleStopRelay}
                         disabled={loadingRelayAction}
-                        className="px-2.5 py-1.5 rounded-lg border border-[#fecdd3] bg-[#fff1f2] hover:bg-[#ffe4e6] text-[#e11d48] text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
+                        className="px-2.5 py-1.5 rounded-lg border border-[#fecdd3] bg-[#fff1f2] hover:bg-[#ffe4e6] text-[#e11d48] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                       >
-                        <span>Disconnect</span>
+                        <span>{loadingRelayAction ? "Disconnecting..." : "Disconnect"}</span>
                       </button>
                     ) : (
                       <button
                         onClick={handleStartRelay}
                         disabled={loadingRelayAction}
-                        className="px-2.5 py-1.5 rounded-lg bg-[#1677ff] hover:bg-[#125ecc] text-white text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors"
+                        className="px-2.5 py-1.5 rounded-lg bg-[#1677ff] hover:bg-[#125ecc] text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
                       >
-                        <span>Connect</span>
+                        <span>{loadingRelayAction ? "Connecting..." : "Connect Relay"}</span>
                       </button>
                     )
                   )}
