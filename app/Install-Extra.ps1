@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Installs Extra Desktop (Extra by YantraOS) in one step.
+  Installs Extra Desktop (Extra by yantraOS) in one step.
 
 .DESCRIPTION
   Downloads the Extra launcher + frozen app bundle from the GitHub
@@ -39,7 +39,7 @@ try {
 
 Write-Host "======================================================================"
 Write-Host "  EXTRA - one-command install ($Version)"
-Write-Host "  Extra by YantraOS"
+Write-Host "  Extra by yantraOS"
 Write-Host "======================================================================"
 
 if (-not (Test-Path $InstallDir)) {
@@ -128,7 +128,7 @@ foreach ($link in $targets) {
     $shortcut = $shell.CreateShortcut($link)
     $shortcut.TargetPath = $launcher
     $shortcut.WorkingDirectory = $InstallDir
-    $shortcut.Description = "Extra by YantraOS"
+    $shortcut.Description = "Extra by yantraOS"
     $shortcut.Save()
     Write-Step "Shortcut written: $link"
   } catch {
