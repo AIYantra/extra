@@ -26,11 +26,13 @@ def set_html_clipboard(html: str) -> bool:
         [System.Windows.Forms.Clipboard]::SetText($html, [System.Windows.Forms.TextDataFormat]::Html)
         """
         try:
+            creationflags = 0x08000000 if sys.platform == "win32" else 0
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-STA", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 timeout=10,
+                creationflags=creationflags,
             )
             return res.returncode == 0
         except Exception:

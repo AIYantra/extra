@@ -326,16 +326,8 @@ namespace ExtraLauncher
 
         private static void FocusOrReopenWindow()
         {
-            IntPtr existingHwnd = FindWindow(null, "Extra");
-            if (existingHwnd != IntPtr.Zero && !IsAppWindow(existingHwnd))
-            {
-                existingHwnd = IntPtr.Zero;
-            }
-            if (existingHwnd == IntPtr.Zero)
-            {
-                FindExtraWindow();
-                existingHwnd = _foundHwnd;
-            }
+            FindExtraWindow();
+            IntPtr existingHwnd = _foundHwnd;
             if (existingHwnd != IntPtr.Zero)
             {
                 ShowWindow(existingHwnd, SW_RESTORE);
@@ -413,17 +405,8 @@ namespace ExtraLauncher
             _appMutex = new Mutex(true, "yantraOS_Extra_MissionControl_Mutex", out createdNew);
             if (!createdNew)
             {
-                IntPtr existingHwnd = FindWindow(null, "Extra");
-                if (existingHwnd != IntPtr.Zero && !IsAppWindow(existingHwnd))
-                {
-                    existingHwnd = IntPtr.Zero;
-                }
-                if (existingHwnd == IntPtr.Zero)
-                {
-                    // Fall back to substring match (Edge app window titles vary).
-                    FindExtraWindow();
-                    existingHwnd = _foundHwnd;
-                }
+                FindExtraWindow();
+                IntPtr existingHwnd = _foundHwnd;
                 if (existingHwnd != IntPtr.Zero)
                 {
                     ShowWindow(existingHwnd, SW_RESTORE);
@@ -688,10 +671,29 @@ namespace ExtraLauncher
         /// artifact, another program's tab) can also contain "Extra". Only the
         /// Edge/Chrome host we launched may claim a boot.
         /// </summary>
-        private static bool IsAppWindow(IntPtr hWnd)
+        private static bool IsAppWindow(IntPtr hWnd, string title)
         {
             try
             {
+                if (string.IsNullOrEmpty(title)) { return false; }
+                string lower = title.ToLowerInvariant().Trim();
+                if (lower.Contains("- google chrome") || lower.Contains("- microsoft edge") || lower.Contains("- edge") || lower.Contains(" - personal"))
+                {
+                    return false;
+                }
+                if (title.Contains("—") || title.Contains("–") || title.Contains("|") || title.Contains("·"))
+                {
+                    return false;
+                }
+                if (lower.Contains("project extra") || lower.Contains("dashboard") || lower.Contains("login") || lower.Contains("signup"))
+                {
+                    return false;
+                }
+                if (lower != "extra" && lower != "extra station")
+                {
+                    return false;
+                }
+
                 int pid;
                 GetWindowThreadProcessId(hWnd, out pid);
                 if (pid == 0) { return false; }
@@ -728,9 +730,7 @@ namespace ExtraLauncher
                     StringBuilder sb = new StringBuilder(256);
                     GetWindowText(hWnd, sb, sb.Capacity);
                     string title = sb.ToString();
-                    if (!string.IsNullOrEmpty(title) &&
-                        title.IndexOf("Extra", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                        IsAppWindow(hWnd))
+                    if (!string.IsNullOrEmpty(title) && IsAppWindow(hWnd, title))
                     {
                         _windowSeen = true;
                         _foundHwnd = hWnd;

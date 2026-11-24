@@ -98,11 +98,13 @@ def copy_files_to_clipboard(file_paths: List[Union[str, Path]]) -> bool:
         try:
             paths_arg = ",".join(f'"{p}"' for p in valid_paths)
             ps_cmd = f"Set-Clipboard -Path {paths_arg}"
+            creationflags = 0x08000000 if sys.platform == "win32" else 0
             res = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
                 capture_output=True,
                 text=True,
                 timeout=5,
+                creationflags=creationflags,
             )
             return res.returncode == 0
         except Exception as e:

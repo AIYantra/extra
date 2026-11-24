@@ -9,17 +9,29 @@ Write-Host "  Light Theme | Nexsas UI | Win32 DXGI | C:\Users\AdLoa\.extra" -For
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host ""
 
+$pyScript = Join-Path $ScriptDir "run_app.py"
+# Try signed pythonw first for 100% SAC compliance and zero console flash
+$pyw = (Get-Command pythonw -ErrorAction SilentlyContinue).Source
+if (-not $pyw -and (Test-Path "$env:USERPROFILE\.extra\venv\Scripts\pythonw.exe")) {
+    $pyw = "$env:USERPROFILE\.extra\venv\Scripts\pythonw.exe"
+}
+
+if ($pyw -and (Test-Path $pyScript)) {
+    Start-Process -FilePath $pyw -ArgumentList "`"$pyScript`"" -WindowStyle Hidden
+    exit 0
+}
+
+# Fallback to python.exe
+$py = (Get-Command python -ErrorAction SilentlyContinue).Source
+if ($py -and (Test-Path $pyScript)) {
+    Start-Process -FilePath $py -ArgumentList "`"$pyScript`""
+    exit 0
+}
+
 $exePath = Join-Path $ScriptDir "dist-desktop\ExtraApp.exe"
 if (Test-Path $exePath) {
     Write-Host "[OK] Starting standalone native application ($exePath)..." -ForegroundColor Green
     Start-Process -FilePath $exePath
-    exit 0
-}
-
-$pyScript = Join-Path $ScriptDir "run_app.py"
-if (Test-Path $pyScript) {
-    Write-Host "[OK] Launching Extra Station via python run_app.py..." -ForegroundColor Green
-    python run_app.py
     exit 0
 }
 

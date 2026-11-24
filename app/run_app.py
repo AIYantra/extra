@@ -416,7 +416,8 @@ def _spawn_engine_process(py_exe: str, extra_src: Path) -> bool:
         log_fh.flush()
         DETACHED_PROCESS = 0x00000008
         CREATE_NEW_PROCESS_GROUP = 0x00000200
-        flags = (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP) if sys.platform == "win32" else 0
+        CREATE_NO_WINDOW = 0x08000000
+        flags = (DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW) if sys.platform == "win32" else 0
         _ENGINE_PROC = subprocess.Popen(
             [
                 py_exe,
@@ -918,11 +919,13 @@ def configure_local_client(client_id: str) -> bool:
         agy_cmd = shutil.which("agy")
         if agy_cmd:
             try:
+                creationflags = 0x08000000 if sys.platform == "win32" else 0
                 subprocess.run(
                     [agy_cmd, "mcp", "add", "extra", py, "-m", "extra.mcp.server"],
                     capture_output=True,
                     timeout=5,
                     check=False,
+                    creationflags=creationflags,
                 )
                 success = True
             except Exception:
@@ -1361,7 +1364,8 @@ def _run_update_worker(target_version: str = None):
                 )
                 cmd = ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", ps_cmd]
                 _set_update_status("installing", 75, "Applying signed Windows runtime update...")
-                subprocess.run(cmd, timeout=300)
+                creationflags = 0x08000000 if sys.platform == "win32" else 0
+                subprocess.run(cmd, timeout=300, creationflags=creationflags)
             else:
                 cmd = "curl -sSL https://extra.yantraos.com/install.sh | bash"
                 _set_update_status("installing", 75, "Applying signed Unix runtime update...")
@@ -3022,20 +3026,49 @@ def start_static_server(port: int) -> ThreadingHTTPServer:
 
 
 def find_browser_binary() -> str:
-    """Finds Edge or Chrome executable for native standalone app mode."""
-    candidates = [
-        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
-        shutil.which("msedge"),
-        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        shutil.which("chrome"),
-        shutil.which("google-chrome"),
-        shutil.which("chromium"),
-        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    ]
+    """Finds Edge, Chrome, Chromium, or Brave for native standalone --app= mode.
+
+    Safari does NOT support --app= mode, so it is intentionally excluded.
+    If no Chromium-based browser is found, returns empty string — the caller
+    falls through to webbrowser.open() which will use the default browser
+    (including Safari) in a regular tab.
+    """
+    candidates = []
+
+    if sys.platform == "win32":
+        candidates.extend([
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+            shutil.which("msedge"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            shutil.which("chrome"),
+            shutil.which("google-chrome"),
+            shutil.which("chromium"),
+        ])
+    elif sys.platform == "darwin":
+        candidates.extend([
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            str(Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+            str(Path.home() / "Applications/Chromium.app/Contents/MacOS/Chromium"),
+            shutil.which("google-chrome"),
+            shutil.which("chromium"),
+        ])
+    else:
+        # Linux
+        candidates.extend([
+            shutil.which("google-chrome"),
+            shutil.which("google-chrome-stable"),
+            shutil.which("chromium"),
+            shutil.which("chromium-browser"),
+            shutil.which("microsoft-edge"),
+            shutil.which("brave-browser"),
+        ])
+
     for c in candidates:
         if c and os.path.exists(c):
             return c
@@ -3118,6 +3151,11 @@ def ensure_windows_integration():
             if not lnk_path or not lnk_path.exists():
                 return True
             try:
+                import pythoncom
+                pythoncom.CoInitialize()
+            except Exception:
+                pass
+            try:
                 import win32com.client
                 wsh = win32com.client.Dispatch("WScript.Shell")
                 lnk = wsh.CreateShortcut(str(lnk_path))
@@ -3134,6 +3172,11 @@ def ensure_windows_integration():
 
         # Ultra-fast native COM registration (< 5ms) without spawning powershell.exe
         def _write_shortcuts():
+            try:
+                import pythoncom
+                pythoncom.CoInitialize()
+            except Exception:
+                pass
             try:
                 import win32com.client
                 wsh = win32com.client.Dispatch("WScript.Shell")
@@ -3175,7 +3218,13 @@ def ensure_windows_integration():
                     $d.Description = 'Extra Desktop Companion'
                     $d.Save()
                     """
-                subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_code], capture_output=True, timeout=5)
+                creationflags = 0x08000000 if sys.platform == "win32" else 0
+                subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_code],
+                    capture_output=True,
+                    timeout=5,
+                    creationflags=creationflags,
+                )
 
         # Execute shortcut creation asynchronously if missing so main thread is not delayed
         threading.Thread(target=_write_shortcuts, daemon=True).start()
@@ -3255,8 +3304,12 @@ def open_url_in_user_browser(target_url: str) -> bool:
         return False
 
 
+_APP_WINDOW_PROC = None
+
+
 def launch_native_window(app_url: str) -> bool:
-    """Fallback: Launches chromeless browser application window."""
+    """Fallback: Launches chromeless browser application window with strict isolation."""
+    global _APP_WINDOW_PROC
     browser_exe = find_browser_binary()
     if not browser_exe:
         return False
@@ -3266,6 +3319,7 @@ def launch_native_window(app_url: str) -> bool:
 
     cmd = [
         browser_exe,
+        "--new-window",
         f"--app={app_url}",
         "--window-size=1280,880",
         f"--user-data-dir={app_dir}",
@@ -3277,29 +3331,55 @@ def launch_native_window(app_url: str) -> bool:
         "--app-id=extra",
     ]
 
-    print(f"  [OK] Launching fallback browser window ({Path(browser_exe).name})...", flush=True)
-
-    if sys.platform == "win32":
-        args_str = " ".join([f'"{a}"' if " " in a else a for a in cmd[1:]])
-        ret = ctypes.windll.shell32.ShellExecuteW(None, "open", browser_exe, args_str, None, 1)
-        if ret > 32:
-            return True
+    print(f"  [OK] Launching dedicated application window ({Path(browser_exe).name})...", flush=True)
 
     try:
         proc = subprocess.Popen(cmd)
-        return proc.poll() is None
+        if proc.poll() is None:
+            _APP_WINDOW_PROC = proc
+            return True
     except Exception as e:
-        print(f"  [WARN] Fallback spawn failed: {e}", flush=True)
+        print(f"  [WARN] Direct process spawn failed: {e}", flush=True)
+
+    if sys.platform == "win32":
+        try:
+            args_str = " ".join([f'"{a}"' if " " in a else a for a in cmd[1:]])
+            ret = ctypes.windll.shell32.ShellExecuteW(None, "open", browser_exe, args_str, None, 1)
+            if ret > 32:
+                return True
+        except Exception as e:
+            print(f"  [WARN] ShellExecute fallback failed: {e}", flush=True)
+
+    return False
+
+
+def _candidate_is_app_window(h, title: str = "") -> bool:
+    """True only when the window belongs strictly to our dedicated app host.
+
+    Rejects standard browser windows, browser tabs showing the website,
+    and unrelated processes whose title happens to mention 'Extra'.
+    """
+    if not title:
         return False
 
+    clean_t = title.strip()
+    lower_t = clean_t.lower()
 
-def _candidate_is_app_window(h) -> bool:
-    """True only when the window belongs to our --app browser host.
+    # 1. Reject standard browser windows that append browser chrome branding
+    if any(suffix in lower_t for suffix in ("- google chrome", "- microsoft edge", "- edge", " - personal")):
+        return False
 
-    Title matching alone is not identity: unrelated windows (an Explorer
-    artifact, another program's tab) can also contain "Extra". Only the
-    Edge/Chrome host we launched may claim a boot.
-    """
+    # 2. Reject website routes and documents (e.g. "Mission Control Dashboard — Project Extra", "Login — Project Extra")
+    if any(sep in clean_t for sep in ("—", "–", "|", "·")):
+        return False
+    if any(site_kw in lower_t for site_kw in ("project extra", "login", "signup", "dashboard", "features", "about", "pricing")):
+        return False
+
+    # 3. Dedicated window title must be strictly "Extra" or "Extra Station"
+    if lower_t not in ("extra", "extra station"):
+        return False
+
+    # 4. Deep process verification: Verify process executable and commandline
     try:
         import ctypes
         from ctypes import wintypes
@@ -3308,6 +3388,20 @@ def _candidate_is_app_window(h) -> bool:
         ctypes.windll.user32.GetWindowThreadProcessId(h, ctypes.byref(pid))
         if not pid.value:
             return False
+
+        # If psutil is available, verify process command line contains our app flags
+        try:
+            import psutil
+            proc = psutil.Process(pid.value)
+            proc_cmd = " ".join(proc.cmdline()).lower()
+            if "station_profile" in proc_cmd or "--app=http://127.0.0.1:" in proc_cmd or "--app-id=extra" in proc_cmd:
+                return True
+            # Reject if running standard user profile
+            return False
+        except Exception:
+            pass
+
+        # Fallback executable name check
         PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
         handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
         if not handle:
@@ -3317,26 +3411,65 @@ def _candidate_is_app_window(h) -> bool:
             if not ctypes.windll.psapi.GetModuleFileNameExW(handle, None, buf, 260):
                 return False
             exe = buf.value.lower()
-            return exe.endswith("msedge.exe") or exe.endswith("chrome.exe")
+            return (exe.endswith("msedge.exe") or exe.endswith("chrome.exe")) and lower_t == "extra"
         finally:
             ctypes.windll.kernel32.CloseHandle(handle)
     except Exception:
         return False
 
 
+def _has_live_app_window() -> bool:
+    """Checks if our dedicated Extra App window is currently open and visible."""
+    if sys.platform != "win32":
+        # On macOS/Linux, check if the browser process we spawned is still alive
+        global _APP_WINDOW_PROC
+        if _APP_WINDOW_PROC is not None:
+            return _APP_WINDOW_PROC.poll() is None
+        # No tracked process — assume alive (server-only mode)
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        found = [False]
+
+        def enum_cb(h, l):
+            length = ctypes.windll.user32.GetWindowTextLengthW(h)
+            if length > 0:
+                buff = ctypes.create_unicode_buffer(length + 1)
+                ctypes.windll.user32.GetWindowTextW(h, buff, length + 1)
+                t = buff.value
+                if t and ctypes.windll.user32.IsWindowVisible(h):
+                    if _candidate_is_app_window(h, t):
+                        found[0] = True
+                        return False
+            return True
+
+        EnumProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        ctypes.windll.user32.EnumWindows(EnumProc(enum_cb), 0)
+        return found[0]
+    except Exception:
+        return True
+
+
 def _focus_extra_window() -> bool:
     """Focus the visible Extra cockpit window. Returns True when focused."""
+    if sys.platform == "darwin":
+        try:
+            result = subprocess.run(
+                ["osascript", "-e",
+                 'tell application "System Events" to set frontmost of first process whose name contains "Extra" to true'],
+                capture_output=True, timeout=3
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+    elif sys.platform != "win32":
+        return False
     try:
         import ctypes
         from ctypes import wintypes
 
         SW_RESTORE = 9
-        hwnd = ctypes.windll.user32.FindWindowW(None, "Extra")
-        if hwnd and _candidate_is_app_window(hwnd):
-            ctypes.windll.user32.ShowWindow(hwnd, SW_RESTORE)
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-            return True
-
         focused = [False]
 
         def enum_cb(h, l):
@@ -3344,8 +3477,9 @@ def _focus_extra_window() -> bool:
             if length > 0:
                 buff = ctypes.create_unicode_buffer(length + 1)
                 ctypes.windll.user32.GetWindowTextW(h, buff, length + 1)
-                if "Extra" in buff.value and ctypes.windll.user32.IsWindowVisible(h):
-                    if _candidate_is_app_window(h):
+                t = buff.value
+                if t and ctypes.windll.user32.IsWindowVisible(h):
+                    if _candidate_is_app_window(h, t):
                         ctypes.windll.user32.ShowWindow(h, SW_RESTORE)
                         ctypes.windll.user32.SetForegroundWindow(h)
                         focused[0] = True
@@ -3378,7 +3512,34 @@ def check_single_instance_and_focus() -> bool:
     opens a fresh window against the live server instead of exiting silently.
     """
     if sys.platform != "win32":
-        return False
+        # POSIX single-instance guard using fcntl.flock on a lock file
+        try:
+            import fcntl
+            lock_path = Path.home() / ".extra" / "station.lock"
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            # Keep the file descriptor open globally so the lock persists for process lifetime
+            global _posix_lock_fd
+            _posix_lock_fd = open(lock_path, "w")
+            fcntl.flock(_posix_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            # We got the lock — write our PID for diagnostics
+            _posix_lock_fd.write(str(os.getpid()))
+            _posix_lock_fd.flush()
+            return False  # No other instance; proceed with startup
+        except (IOError, OSError):
+            # Lock held by another process — try to focus its window
+            if _focus_extra_window():
+                return True
+            # Window not found — check if the server is reachable
+            for port in (5173, 5174):
+                if _probe_server(port):
+                    print(f"  [OK] Backend alive, reopening cockpit window on :{port}", flush=True)
+                    launch_native_window(f"http://127.0.0.1:{port}")
+                    return True
+            # Server not responding — stale lock, proceed with fresh start
+            return False
+        except Exception as e:
+            print(f"[ExtraApp] POSIX single-instance check warning: {e}", flush=True)
+            return False
     try:
         import ctypes
 
@@ -3387,7 +3548,7 @@ def check_single_instance_and_focus() -> bool:
         global _instance_mutex
         _instance_mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "yantraOS_Extra_MissionControl_Mutex")
         if ctypes.windll.kernel32.GetLastError() == ERROR_ALREADY_EXISTS:
-            # Another instance already running: focus its window when visible.
+            # Another instance already running: focus its dedicated app window when visible.
             if _focus_extra_window():
                 return True
             # No window (user closed it, server kept running): revive a window
@@ -3480,11 +3641,34 @@ def main():
     print("=" * 66, flush=True)
 
     try:
+        # Wait for the native window to appear (up to 15s)
+        window_appeared = False
+        for _ in range(30):
+            time.sleep(0.5)
+            if _has_live_app_window():
+                window_appeared = True
+                break
+
+        # Lifecycle monitor: when the user closes the app window, clean up and exit cleanly
+        stale_counter = 0
         while True:
-            time.sleep(1)
+            time.sleep(1.5)
+            if window_appeared:
+                if not _has_live_app_window():
+                    stale_counter += 1
+                    if stale_counter >= 2:  # Confirmed closed for > 3 seconds
+                        print("  [ExtraApp] App window closed by user. Cleaning up...", flush=True)
+                        break
+                else:
+                    stale_counter = 0
     except (KeyboardInterrupt, SystemExit):
+        pass
+    finally:
         if httpd:
-            httpd.shutdown()
+            try:
+                httpd.shutdown()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

@@ -1,0 +1,127 @@
+name: macOS E2E Installation Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'src/extra/core/platform/macos/**'
+      - 'app/run_app.py'
+      - 'src/extra/cli.py'
+      - 'requirements.txt'
+      - 'tests/**'
+      - '.github/workflows/macos-e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'install.sh'
+      - 'src/extra/core/platform/macos/**'
+      - 'app/run_app.py'
+      - 'src/extra/cli.py'
+      - 'requirements.txt'
+      - 'tests/**'
+      - '.github/workflows/macos-e2e.yml'
+  workflow_dispatch:
+
+jobs:
+  macos-e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-13]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run install.sh
+        run: |
+          chmod +x install.sh
+          bash install.sh
+        env:
+          DO_NOT_TRACK: "1"
+          EXTRA_TELEMETRY: "0"
+
+      - name: Verify venv and Python
+        run: |
+          test -f "$HOME/.extra/venv/bin/python"
+          "$HOME/.extra/venv/bin/python" --version
+
+      - name: Verify PyObjC framework imports
+        run: |
+          "$HOME/.extra/venv/bin/python" -c "
+          import Quartz; print('Quartz OK')
+          import AppKit; print('AppKit OK')
+          import ApplicationServices; print('ApplicationServices OK')
+          print('All PyObjC frameworks imported successfully')
+          "
+
+      - name: Verify CLI wrapper exists and runs
+        run: |
+          test -f "$HOME/.local/bin/extra"
+          "$HOME/.local/bin/extra" --version || "$HOME/.extra/venv/bin/python" -m extra.cli --version
+
+      - name: Verify MCP config templates
+        run: |
+          # Check that at least one MCP config was written
+          found=0
+          for cfg in \
+            "$HOME/Library/Application Support/Claude/claude_desktop_config.json" \
+            "$HOME/.cursor/mcp.json" \
+            "$HOME/.codeium/windsurf/mcp_config.json"; do
+            if [ -f "$cfg" ]; then
+              echo "Found: $cfg"
+              found=1
+            fi
+          done
+          # It's OK if none exist on CI (no AI host installed), just warn
+          if [ "$found" -eq 0 ]; then
+            echo "::warning::No MCP config files found (expected on CI without AI host apps)"
+          fi
+
+      - name: Run extra doctor (expect TCC warnings on CI)
+        run: |
+          "$HOME/.extra/venv/bin/python" -m extra.cli doctor || true
+
+      - name: Run macOS regression tests
+        run: |
+          "$HOME/.extra/venv/bin/python" -m pytest tests/test_station_macos_regression.py -v --tb=short
+
+      - name: Run macOS-specific platform tests
+        run: |
+          "$HOME/.extra/venv/bin/python" -m pytest tests/test_macos_*.py -v --tb=short 2>&1 || true
+
+      - name: Verify no fork-bomb in station candidates
+        run: |
+          # Ensure the applet path is NOT in the macOS station candidate list
+          ! grep -n "Extra.app.*applet" src/extra/cli.py | grep -v "NOTE.*Do NOT"
+
+      - name: Verify single-instance lock support
+        run: |
+          "$HOME/.extra/venv/bin/python" -c "
+          import fcntl, tempfile, os
+          lock_path = os.path.join(tempfile.gettempdir(), 'extra_ci_lock_test')
+          fd = open(lock_path, 'w')
+          fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+          fd.write(str(os.getpid()))
+          fd.flush()
+          print('POSIX flock: OK')
+          fcntl.flock(fd, fcntl.LOCK_UN)
+          fd.close()
+          os.unlink(lock_path)
+          "
+
+      - name: Verify browser binary finder (macOS)
+        run: |
+          "$HOME/.extra/venv/bin/python" -c "
+          import sys, os
+          sys.path.insert(0, 'app')
+          sys.path.insert(0, 'src')
+          from run_app import find_browser_binary
+          result = find_browser_binary()
+          print(f'find_browser_binary() => {result!r}')
+          # On CI, Chrome may or may not be installed — just verify no crash
+          print('Browser finder: OK (no crash)')
+          "

@@ -107,6 +107,70 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
                 print("  [ACTION] Opening macOS Privacy & Security settings panes directly...")
                 open_all_permissions_settings()
 
+        # TCC Client-Aware Diagnostics: Detect which AI host app needs permissions
+        print("\n[macOS TCC Client Detection]")
+        try:
+            _host_bundle_map = {
+                "terminal": ("com.apple.Terminal", "Terminal"),
+                "iterm2": ("com.googlecode.iterm2", "iTerm2"),
+                "claude": ("com.anthropic.claudedesktop", "Claude Desktop"),
+                "cursor": ("com.todesktop.230313mzl4w4u92", "Cursor"),
+                "windsurf": ("com.codeium.windsurf", "Windsurf"),
+                "vscode": ("com.microsoft.VSCode", "VS Code"),
+                "code": ("com.microsoft.VSCode", "VS Code"),
+                "warp": ("dev.warp.Warp-Stable", "Warp Terminal"),
+                "alacritty": ("org.alacritty", "Alacritty"),
+                "kitty": ("net.kovidgoyal.kitty", "kitty"),
+                "python": (None, "Python (direct)"),
+            }
+            # Walk the process tree to find the topmost host app
+            import os as _os
+            _detected_host = None
+            _ppid = _os.getppid()
+            _visited = set()
+            while _ppid and _ppid > 1 and _ppid not in _visited:
+                _visited.add(_ppid)
+                try:
+                    with open(f"/proc/{_ppid}/comm" if os.path.exists("/proc") else "", "r") as f:
+                        _pname = f.read().strip().lower()
+                except Exception:
+                    # macOS has no /proc — use subprocess
+                    try:
+                        _result = subprocess.run(["ps", "-p", str(_ppid), "-o", "comm="],
+                                                 capture_output=True, text=True, timeout=2)
+                        _pname = Path(_result.stdout.strip()).stem.lower() if _result.returncode == 0 else ""
+                    except Exception:
+                        break
+                for key, (bundle_id, display_name) in _host_bundle_map.items():
+                    if key in _pname:
+                        _detected_host = (bundle_id, display_name)
+                        break
+                if _detected_host:
+                    break
+                try:
+                    _result = subprocess.run(["ps", "-p", str(_ppid), "-o", "ppid="],
+                                             capture_output=True, text=True, timeout=2)
+                    _ppid = int(_result.stdout.strip()) if _result.returncode == 0 else 0
+                except Exception:
+                    break
+
+            if _detected_host:
+                _bid, _dname = _detected_host
+                print(f"  Host Application: {_dname}" + (f" ({_bid})" if _bid else ""))
+                if not (has_screen_perm and has_ax):
+                    print(f"  ⚠️  macOS grants TCC permissions per-app, not per-terminal.")
+                    print(f"      You MUST grant Accessibility & Screen Recording to: {_dname}")
+                    if _bid:
+                        print(f"      Bundle ID: {_bid}")
+                    print(f"      System Settings > Privacy & Security > Accessibility → toggle ON {_dname}")
+                    print(f"      System Settings > Privacy & Security > Screen Recording → toggle ON {_dname}")
+            else:
+                print("  Host Application: Could not detect parent AI host app.")
+                if not (has_screen_perm and has_ax):
+                    print("  ⚠️  Ensure the application running Extra has TCC permissions (Accessibility + Screen Recording).")
+        except Exception as e:
+            print(f"  Host Detection: Skipped ({e})")
+
         # Check PyObjC Frameworks
         print("\n[PyObjC Native Framework Bridges]")
         for framework in ["Quartz", "AppKit", "ApplicationServices", "ScreenCaptureKit"]:
@@ -1339,15 +1403,19 @@ def cmd_station(args: Optional[argparse.Namespace] = None) -> int:
                     candidates.append(Path(which_bin))
 
         elif sys.platform == "darwin":
+            # CRITICAL: Prioritize run_app.py FIRST to prevent circular fork-bomb.
+            # Extra.app (created by osacompile in install.sh) calls `extra station`,
+            # so if we launch Extra.app/applet here we get infinite recursion:
+            #   extra station → Extra.app/applet → extra station → ∞
+            candidates.append(user_run_app)
+            candidates.append(app_dir / "run_app.py")
             candidates.append(Path("/Applications/ExtraApp.app/Contents/MacOS/ExtraApp"))
             candidates.append(Path.home() / "Applications" / "ExtraApp.app" / "Contents" / "MacOS" / "ExtraApp")
-            candidates.append(Path.home() / "Applications" / "Extra.app" / "Contents" / "MacOS" / "applet")
+            # NOTE: Do NOT add Extra.app/.../applet — it calls `extra station` creating infinite recursion
             candidates.append(Path.home() / ".extra" / "bin" / "ExtraApp.app" / "Contents" / "MacOS" / "ExtraApp")
             which_extra = shutil.which("ExtraApp")
             if which_extra:
                 candidates.append(Path(which_extra))
-            candidates.append(user_run_app)
-            candidates.append(app_dir / "run_app.py")
         else:
             candidates.append(Path("/usr/bin/extraapp"))
             candidates.append(Path.home() / ".local" / "bin" / "extraapp")
@@ -1364,11 +1432,15 @@ def cmd_station(args: Optional[argparse.Namespace] = None) -> int:
                     if str(cand).endswith(".py"):
                         if sys.platform == "win32":
                             DETACHED_PROCESS = 0x00000008
+                            CREATE_NO_WINDOW = 0x08000000
+                            flags = DETACHED_PROCESS | CREATE_NO_WINDOW
                             py_bin = sys.executable
                             pyw_cand = Path(py_bin).parent / "pythonw.exe"
                             if pyw_cand.exists():
                                 py_bin = str(pyw_cand)
-                            subprocess.Popen([py_bin, str(cand)], creationflags=DETACHED_PROCESS, close_fds=True)
+                            elif shutil.which("pythonw"):
+                                py_bin = shutil.which("pythonw")
+                            subprocess.Popen([py_bin, str(cand)], creationflags=flags, close_fds=True)
                         else:
                             py_bin = sys.executable
                             venv_py = Path.home() / ".extra" / "venv" / "bin" / "python"

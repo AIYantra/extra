@@ -523,13 +523,21 @@ cat << 'EOF'
 
   1. Accessibility:
      Run: open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-     -> Enable: Terminal / iTerm2 / Claude / Cursor / Windsurf
+     -> Enable the AI host app that runs Extra (see below)
 
   2. Screen Recording:
      Run: open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-     -> Enable: Terminal / iTerm2 / Claude / Cursor / Windsurf
+     -> Enable the AI host app that runs Extra (see below)
 
-  Once granted, verify anytime by running: extra doctor
+  ⚠️  CRITICAL: macOS grants permissions PER-APPLICATION.
+  You must grant these to the app that runs Extra, NOT just Terminal:
+    • Claude Desktop  → Toggle ON in both Accessibility & Screen Recording
+    • Cursor          → Toggle ON in both Accessibility & Screen Recording
+    • Windsurf        → Toggle ON in both Accessibility & Screen Recording
+    • VS Code         → Toggle ON in both Accessibility & Screen Recording
+    • Terminal/iTerm2 → Only needed when running Extra from the terminal
+
+  After granting, verify anytime by running: extra doctor
 ----------------------------------------------------------------------
 EOF
 fi

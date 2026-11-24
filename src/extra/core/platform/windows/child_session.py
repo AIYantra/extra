@@ -84,18 +84,41 @@ class ChildSessionCapability:
 
 
 def detect_os_edition() -> str:
-    """Detects Windows OS edition string via CIM/WMI or platform release."""
-    try:
-        proc = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"],
-            capture_output=True,
-            text=True,
-            timeout=3.0,
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            return proc.stdout.strip()
-    except Exception:
-        pass
+    """Detects Windows OS edition string via native WinReg registry or platform release."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") as key:
+                product_name, _ = winreg.QueryValueEx(key, "ProductName")
+                build_number, _ = winreg.QueryValueEx(key, "CurrentBuildNumber")
+                name = str(product_name)
+                # Windows 11 reports ProductName as 'Windows 10 ...' for backwards compatibility;
+                # build >= 22000 is officially Windows 11.
+                try:
+                    if int(build_number) >= 22000 and "Windows 10" in name:
+                        name = name.replace("Windows 10", "Windows 11")
+                except Exception:
+                    pass
+                if name:
+                    return f"{name} (Build {build_number})"
+        except Exception:
+            pass
+
+        # Fallback to subprocess if registry read fails, strictly with CREATE_NO_WINDOW
+        try:
+            creationflags = 0x08000000  # subprocess.CREATE_NO_WINDOW
+            proc = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "(Get-CimInstance Win32_OperatingSystem).Caption"],
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+                creationflags=creationflags,
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                return proc.stdout.strip()
+        except Exception:
+            pass
+
     return f"Windows {platform.release()} (Build {platform.version()})"
 
 
