@@ -1,26 +1,6 @@
 name: macOS E2E Installation Test
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'install.sh'
-      - 'src/extra/core/platform/macos/**'
-      - 'app/run_app.py'
-      - 'src/extra/cli.py'
-      - 'requirements.txt'
-      - 'tests/**'
-      - '.github/workflows/macos-e2e.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'install.sh'
-      - 'src/extra/core/platform/macos/**'
-      - 'app/run_app.py'
-      - 'src/extra/cli.py'
-      - 'requirements.txt'
-      - 'tests/**'
-      - '.github/workflows/macos-e2e.yml'
   workflow_dispatch:
 
 jobs:
