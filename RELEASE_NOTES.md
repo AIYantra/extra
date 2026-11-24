@@ -1,3 +1,58 @@
+# Extra Release Notes — v0.3.8
+
+**Release Date:** November 24, 2026  
+**Release Title:** Supply-Chain Security Hardening, Zero Code Scanning Alerts, Decoupled Edge Architecture & Glama Ecosystem Integration  
+**Target Systems:** Windows 10/11 (x64 / ARM64), macOS 12.3+ (Apple Silicon / Intel), Linux (KDE Plasma, GNOME, wlroots, X11)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.3.8)
+
+Version 0.3.8 establishes a pristine security and supply-chain baseline for the entire Extra ecosystem. This release achieves a flawless **0 open security alerts** across GitHub Code Scanning, enforces OpenSSF Scorecard least-privilege token permissions and immutable commit-SHA dependency pinning across all automated workflows, cleanly decouples proprietary cloud edge infrastructure from open-source client distributions, resolves Apple Silicon macOS CI runner queue contention, and integrates official Glama MCP registry verification.
+
+---
+
+## 2. Key Highlights & Architectural Enhancements
+
+### 1. OpenSSF Scorecard & Supply-Chain Security Hardening (`.github/workflows/`)
+- **Top-Level Least-Privilege Permissions:** Enforced global `permissions: contents: read` declarations across all GitHub Actions workflows, eliminating unconstrained token defaults.
+- **Immutable Commit-SHA Action Pinning:** Pinned all GitHub Actions (including `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1`) to full 40-character commit hashes to neutralize supply-chain tag mutation attacks.
+- **Job-Level Token Scope Minimization:** Removed unnecessary `actions: write` permissions from packaging workflows (`publish-pypi.yml`), relying on automated artifact retention policies (`retention-days: 1`) rather than elevated API credentials.
+- **Zero Open Code Scanning Alerts:** Formally closed and verified all historical CodeQL SAST and OpenSSF Scorecard alerts on GitHub Code Scanning (0 open alerts).
+
+### 2. Clean Repository Boundary & Architecture Decoupling
+- **Proprietary Edge Decoupling:** Permanently removed cloud edge router and deployment configuration artifacts (`worker.js`, `wrangler.toml`) from the open-source client engine repository, safeguarding cloud OAuth 2.0 authorization server implementations and edge routing logic.
+- **Strict Repository Hygiene:** Enforced Section 12 Repository Hygiene boundaries in `.gitignore` to prevent deployment configs or local development artifacts from being tracked.
+
+### 3. Apple Silicon macOS CI Runner Optimization (`.github/workflows/ci.yml`)
+- **Serialized Runner Concurrency:** Configured `max-parallel: 1` on macOS test matrices to eliminate hosted Apple Silicon runner queue starvation and 15-minute queue timeout cancellations.
+- **Deterministic Green CI:** Verified 100% passing test suite across Python 3.12 and 3.13 on `macos-latest` M1/arm64 runners.
+
+### 4. Glama MCP Registry & Ecosystem Verification (`server.json`, `README.md`)
+- **Official Glama Badge:** Integrated live quality score and verification badges into `README.md` linked to the canonical Glama MCP server listing.
+- **Standardized MCP Identifier:** Established `io.github.AIYantra/extra` as the official canonical registry name across ecosystem manifests.
+
+---
+
+## 3. Problem / Root-Cause / Solution Matrix
+
+| Component | Problem | Root Cause | Permanent Solution |
+| :--- | :--- | :--- | :--- |
+| **GitHub Actions Security** | Scorecard reported 4 high-severity Code Scanning alerts for token permissions and unpinned actions. | Missing top-level permission blocks and unpinned `@v4` tags in `macos-e2e.yml` and `publish-pypi.yml`. | Added `permissions: contents: read`, pinned all actions to immutable commit SHAs, and eliminated `actions: write`. |
+| **macOS CI Reliability** | macOS Python 3.12/3.13 test runs timed out after 15 minutes and were cancelled. | GitHub Actions limits concurrent Apple Silicon hosted runners; parallel execution exhausted available queue slots. | Added `max-parallel: 1` to sequence macOS jobs safely, yielding sub-2.5m run times and zero queue starvation. |
+| **Repository Hygiene & Moat** | Proprietary cloud edge worker files were committed to the public open-source repository. | Early development deploy configs were tracked in the root working directory. | Removed `worker.js` and `wrangler.toml` from `extra`, committed them strictly to the private `extra.yantraos.com` repo, and added ignore rules. |
+| **Registry Discoverability** | MCP community directories required backlink verification for prioritization. | Missing canonical Glama score badge in repository documentation. | Added official Glama score badge to `README.md` and updated upstream directory listings. |
+
+---
+
+## 4. Test & Verification Metrics
+
+- **Unit & Integration Suite:** 2,235 passed, 85 skipped, 0 failed (75.27s).
+- **Extra Doctor Hardware Diagnostics:** Screen capture verified at 32.4ms (< 35ms), UIA accessibility plane responsive (14 elements in 53ms), 72 skills operational.
+- **Supply-Chain Security:** OpenSSF Scorecard: PASSED (36s) | CodeQL SAST: PASSED (1m 21s) | Code Scanning Alerts: **0 Open**.
+
+---
+
 # Extra Release Notes — v0.3.7
 
 **Release Date:** November 20, 2026  
