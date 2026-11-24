@@ -166,3 +166,9 @@ hn.txt
 /*_plan*.md
 /*_report*.md
 /TASK_SUITE*.md
+
+# Local workspace configs & edge deployment artifacts
+worker.js
+wrangler.toml
+.wrangler/
+
