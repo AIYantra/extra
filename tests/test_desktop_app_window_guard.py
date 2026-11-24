@@ -1,5 +1,8 @@
 import sys
 from pathlib import Path
+import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows-only desktop window test")
 
 # Add extra app directory to path
 app_dir = Path(__file__).resolve().parent.parent / "app"
