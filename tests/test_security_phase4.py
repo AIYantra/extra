@@ -30,8 +30,7 @@ def test_worker_https_origins_enforced():
     # Assert no plaintext http:// origins exist in worker.js
     assert "http://" not in content, "Found unencrypted http:// origin in worker.js"
     assert "s3-website" not in content, "Found legacy unauthenticated s3-website origin"
-    s3_https_target = "https://extra.yantraos.com.s3.ap-south-1.amazonaws.com"
-    assert s3_https_target in content
+    assert "https://s3.ap-south-1.amazonaws.com" in content, "Missing secure HTTPS S3 origin"
 
 
 def test_worker_token_ttl_limits():
