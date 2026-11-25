@@ -1505,7 +1505,7 @@ def cmd_license(key: Optional[str] = None) -> int:
     if not clean_key.startswith("EXTRA-PRO-LIFETIME-") or len(clean_key) < 25:
         print("\n[FAIL] Invalid license key format.")
         print("Expected format: EXTRA-PRO-LIFETIME-XXXX-XXXX-XXXX-XXXX")
-        print("Redeem your AppSumo voucher at https://extra.yantraos.com/redeem to generate your key.\n")
+        print("Redeem your voucher at https://extra.yantraos.com/redeem to generate your key.\n")
         return 1
 
     cfg["license_key"] = clean_key
@@ -1520,7 +1520,7 @@ def cmd_license(key: Optional[str] = None) -> int:
     print(" EXTRA PRO LIFETIME LICENSE ACTIVATED")
     print("=" * 65)
     print(f"  License Key:  {clean_key}")
-    print("  Entitlement:  Pro Lifetime Tier 1 (AppSumo Partner)")
+    print("  Entitlement:  Pro Lifetime Tier 1 (Partner Redemption)")
     print("  Status:       ACTIVE & VERIFIED")
     print("  Action Limit: UNLIMITED / UNMETERED")
     print(f"  Config:       {cfg_path}")

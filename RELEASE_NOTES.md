@@ -1,22 +1,22 @@
 # Extra Release Notes — v0.3.9
 
 **Release Date:** November 25, 2026  
-**Release Title:** AppSumo Pro Lifetime Partner Activation, Native CLI License Engine & Edge Gateway Synchronization  
+**Release Title:** Pro Lifetime Partner Activation, Native CLI License Engine & Edge Gateway Synchronization  
 **Target Systems:** Windows 10/11 (x64 / ARM64), macOS 12.3+ (Apple Silicon / Intel), Linux (KDE Plasma, GNOME, wlroots, X11)  
 
 ---
 
 ## 1. Executive Summary & Major Milestones (v0.3.9)
 
-Version 0.3.9 introduces official AppSumo Partner Lifetime tier redemption and entitlements across the entire Extra ecosystem. This release delivers cryptographic license key generation, idempotent voucher redemption with single-use abuse protection, native terminal-based license activation (`extra --license` and `extra license`), full edge routing synchronization across Cloudflare Workers and AWS Lambda, and an integrated lifetime entitlement card within the operator billing cockpit.
+Version 0.3.9 introduces official Pro Lifetime Partner tier redemption and entitlements across the entire Extra ecosystem. This release delivers cryptographic license key generation, idempotent voucher redemption with single-use abuse protection, native terminal-based license activation (`extra --license` and `extra license`), full edge routing synchronization across Cloudflare Workers and AWS Lambda, and an integrated lifetime entitlement card within the operator billing cockpit.
 
 ---
 
 ## 2. Key Highlights & Architectural Enhancements
 
-### 1. AppSumo Partner Lifetime Voucher Engine (`extra.yantraos.com`)
-- **Authoritative Voucher Inventory:** Pre-seeded with 1,000 unique cryptographic AppSumo partner codes with instant format validation.
-- **Strict Single-Use Enforcement:** Enforces atomic DynamoDB locking (`extra_appsumo_redemptions`) to guarantee that each voucher code can only be activated by a single account.
+### 1. Pro Lifetime Partner Voucher Engine (`extra.yantraos.com`)
+- **Authoritative Voucher Inventory:** Pre-seeded with 1,000 unique cryptographic partner voucher codes with instant format validation.
+- **Strict Single-Use Enforcement:** Enforces atomic database locking (`extra_voucher_redemptions`) to guarantee that each voucher code can only be activated by a single account.
 - **Idempotent Purchaser Recovery:** Allows purchasers to retrieve their existing active license key at any time by re-entering their code and email, preventing lost keys without burning new inventory.
 - **Automated Transactional Dispatch:** Sends comprehensive onboarding documentation, activation scripts, and license credentials via Amazon SES upon successful redemption.
 
@@ -31,7 +31,7 @@ Version 0.3.9 introduces official AppSumo Partner Lifetime tier redemption and e
 ### 3. Operator Billing Cockpit & Lifetime Cards (`src/components/dashboard/tabs/billing-tab.tsx`)
 - **Dedicated Lifetime Badge:** Automatically detects Pro Lifetime entitlements and elevates the operator status from standard monthly subscriptions to permanent unmetered lifetime status.
 - **Interactive License Hub:** One-click copy for both raw license keys and terminal activation commands (`extra --license <KEY>`).
-- **Seamless Redemption Access:** Embedded AppSumo voucher claiming banner for free-tier users to easily upgrade.
+- **Seamless Redemption Access:** Embedded partner voucher claiming banner for free-tier users to easily upgrade.
 
 ### 4. Edge Proxy Alignment & Reliability
 - **Gateway Proxy Optimization:** Synchronized Cloudflare Worker edge routes (`worker.js`) with AWS API Gateway Lambda backend (`extra-mcp-hub`).
@@ -43,10 +43,10 @@ Version 0.3.9 introduces official AppSumo Partner Lifetime tier redemption and e
 
 | Component | Problem | Root Cause | Permanent Solution |
 | :--- | :--- | :--- | :--- |
-| **AppSumo Redemption** | Duplicate redemption allowed the same voucher code to activate multiple accounts. | Initial redemption logic lacked atomic single-use locking in the persistent datastore. | Added atomic single-use locking in DynamoDB and KV; enforces email mismatch rejection with 400 Bad Request. |
+| **Voucher Redemption** | Duplicate redemption allowed the same voucher code to activate multiple accounts. | Initial redemption logic lacked atomic single-use locking in the persistent datastore. | Added atomic single-use locking in DynamoDB and KV; enforces email mismatch rejection with 400 Bad Request. |
 | **CLI License Management** | Running `extra --license <KEY>` failed with `invalid choice: '<KEY>'`. | CLI ArgumentParser was missing top-level `--license` argument definition and `license` subcommands. | Added `--license` flag and `license` subcommands in `src/extra/cli.py`, with support for `--status` inspection. |
 | **Edge Gateway Routing** | Redemption form occasionally threw client-side `Failed to fetch`. | Redundant conflicting route declarations in Cloudflare Worker and API Gateway preflight handling. | Aligned Cloudflare Worker edge proxy routing directly to AWS Lambda with universal CORS preflight headers. |
-| **Billing Cockpit** | Redeemed lifetime operators still saw standard monthly upgrade cards. | Dashboard lacked dedicated AppSumo lifetime license state modeling in billing tab. | Implemented interactive AppSumo Lifetime License card in `billing-tab.tsx` with instant copy shortcuts. |
+| **Billing Cockpit** | Redeemed lifetime operators still saw standard monthly upgrade cards. | Dashboard lacked dedicated lifetime license state modeling in billing tab. | Implemented interactive Lifetime License card in `billing-tab.tsx` with instant copy shortcuts. |
 
 ---
 
