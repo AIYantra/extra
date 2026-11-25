@@ -217,7 +217,7 @@ async def execute_local_tool(
                     up_url = f"https://extra.yantraos.com/api/action/upload?action_id={act_id}"
                     up_headers = {
                         "Content-Type": "image/jpeg",
-                        "User-Agent": "Extra-Client/0.3.8",
+                        "User-Agent": "Extra-Client/0.3.9",
                     }
                     if relay_token and relay_token != "anonymous":
                         up_headers["X-Extra-Passkey"] = relay_token

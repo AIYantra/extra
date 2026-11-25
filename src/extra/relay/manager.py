@@ -315,7 +315,7 @@ class RelayManager:
             # Health probe against HTTPS endpoint
             req = urllib.request.Request(
                 "https://extra.yantraos.com/health",
-                headers={"User-Agent": "Extra-Desktop/0.3.8"},
+                headers={"User-Agent": "Extra-Desktop/0.3.9"},
             )
             with urllib.request.urlopen(req, timeout=4.0) as resp:
                 elapsed_ms = round((time.perf_counter() - start) * 1000, 1)
