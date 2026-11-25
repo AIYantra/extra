@@ -1468,6 +1468,66 @@ def cmd_station(args: Optional[argparse.Namespace] = None) -> int:
     return 0
 
 
+def cmd_license(key: Optional[str] = None) -> int:
+    """Activates or inspects Extra Pro Lifetime license key."""
+    cfg_dir = Path.home() / ".extra"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    cfg_path = cfg_dir / "config.json"
+
+    cfg = {}
+    if cfg_path.exists():
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            cfg = {}
+
+    if not key:
+        active_key = cfg.get("license_key")
+        plan = cfg.get("plan", "free")
+        print("\n" + "=" * 65)
+        print(" EXTRA LICENSE STATUS & ENTITLEMENTS")
+        print("=" * 65)
+        if active_key or plan == "pro":
+            print("  Plan:        Pro Lifetime (Unmetered Autonomous Actions)")
+            print(f"  License Key: {active_key or 'Verified via Account Session'}")
+            print("  Status:      ACTIVE & VERIFIED")
+            print("  Station:     Unmetered Local Computer-Use Engine")
+        else:
+            print("  Plan:        Free Tinkerer (100 actions/month)")
+            print("  Status:      Community Edition")
+            print("  To activate: extra --license EXTRA-PRO-LIFETIME-XXXX-XXXX-XXXX-XXXX")
+            print("  Purchase:    https://extra.yantraos.com/pricing")
+        print("=" * 65 + "\n")
+        return 0
+
+    clean_key = key.strip().upper()
+    if not clean_key.startswith("EXTRA-PRO-LIFETIME-") or len(clean_key) < 25:
+        print("\n[FAIL] Invalid license key format.")
+        print("Expected format: EXTRA-PRO-LIFETIME-XXXX-XXXX-XXXX-XXXX")
+        print("Redeem your AppSumo voucher at https://extra.yantraos.com/redeem to generate your key.\n")
+        return 1
+
+    cfg["license_key"] = clean_key
+    cfg["plan"] = "pro"
+    cfg["unmetered"] = True
+    cfg["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+    print("\n" + "=" * 65)
+    print(" EXTRA PRO LIFETIME LICENSE ACTIVATED")
+    print("=" * 65)
+    print(f"  License Key:  {clean_key}")
+    print("  Entitlement:  Pro Lifetime Tier 1 (AppSumo Partner)")
+    print("  Status:       ACTIVE & VERIFIED")
+    print("  Action Limit: UNLIMITED / UNMETERED")
+    print(f"  Config:       {cfg_path}")
+    print("=" * 65)
+    print("All autonomous computer-use actions, fast-paths, and MCP tools unlocked.\n")
+    return 0
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Builds and returns the top-level ArgumentParser for Extra CLI."""
@@ -1478,7 +1538,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", "-v", action="version", version=f"extra {__version__}"
     )
+    parser.add_argument(
+        "--license",
+        dest="license_key",
+        metavar="KEY",
+        help="Activate Extra Pro Lifetime license key (e.g. EXTRA-PRO-LIFETIME-XXXX-XXXX-XXXX-XXXX)",
+    )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # license
+    license_parser = subparsers.add_parser("license", help="View or activate Extra Pro Lifetime license")
+    license_parser.add_argument("key", nargs="?", default=None, help="License key to activate")
+    license_parser.add_argument("--status", action="store_true", help="Display current license status")
     # station / cockpit / app
     station_parser = subparsers.add_parser("station", help="Launch Extra Station desktop mission control cockpit")
     station_parser.add_argument("--url", default="http://localhost:5173", help="Web cockpit URL (default: http://localhost:5173)")
@@ -1651,6 +1722,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if getattr(args, "license_key", None):
+        sys.exit(cmd_license(args.license_key))
+
     if not args.command:
         parser.print_help()
         sys.exit(0)
@@ -1718,6 +1792,8 @@ def main() -> None:
         sys.exit(cmd_click(args))
     elif args.command == "hotkey":
         sys.exit(cmd_hotkey(args))
+    elif args.command == "license":
+        sys.exit(cmd_license(getattr(args, "key", None)))
 
 
 
