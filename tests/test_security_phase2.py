@@ -22,12 +22,12 @@ from extra.relay.manager import RelayManager
 
 class TestPhase2SecurityRelay(unittest.TestCase):
     def test_default_relay_tools_safe(self):
-        """Verify that high-risk filesystem and process launch tools are removed from default allowlist."""
+        """Verify that arbitrary shell/code execution tools are stripped while essential desktop tools are permitted."""
         self.assertNotIn("extra_fs_batch", DEFAULT_ALLOWED_RELAY_TOOLS)
-        self.assertNotIn("extra_launch", DEFAULT_ALLOWED_RELAY_TOOLS)
         self.assertNotIn("extra_execute_bridge", DEFAULT_ALLOWED_RELAY_TOOLS)
         self.assertNotIn("extra_harness_run", DEFAULT_ALLOWED_RELAY_TOOLS)
-        # Verify safe UI inspection tools remain present
+        # Verify safe UI automation and application launch tools remain present
+        self.assertIn("extra_launch", DEFAULT_ALLOWED_RELAY_TOOLS)
         self.assertIn("extra_screenshot", DEFAULT_ALLOWED_RELAY_TOOLS)
         self.assertIn("extra_click", DEFAULT_ALLOWED_RELAY_TOOLS)
         self.assertIn("extra_type", DEFAULT_ALLOWED_RELAY_TOOLS)

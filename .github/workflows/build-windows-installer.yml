@@ -1,0 +1,107 @@
+name: Build & Sign Windows Desktop Installer
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      sign_binary:
+        description: 'Attempt code signing (requires configured secrets)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build-windows:
+    name: Build Windows Standalone Installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Frontend Dependencies & Compile Cockpit
+        shell: pwsh
+        run: |
+          cd app
+          npm ci
+          npm run build
+
+      - name: Install Python Build Dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller==6.22.3
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Compile Standalone Executable (PyInstaller)
+        shell: pwsh
+        run: |
+          cd app
+          python -m PyInstaller --noconfirm --clean --onefile --windowed `
+            --name ExtraApp `
+            --icon src-tauri/icons/icon.ico `
+            --version-file version_info.txt `
+            --add-data "dist;dist" `
+            run_app.py
+
+      # Optional Microsoft Trusted Signing step
+      # To enable: configure Azure Trusted Signing account and uncomment
+      - name: Sign Binary via Microsoft Trusted Signing
+        if: ${{ inputs.sign_binary == true && env.HAS_AZURE_SECRETS == 'true' }}
+        uses: azure/trusted-signing-action@v0.4.1
+        env:
+          HAS_AZURE_SECRETS: ${{ secrets.AZURE_CLIENT_ID != '' }}
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: ${{ secrets.TS_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.TS_PROFILE_NAME }}
+          files: app/dist/ExtraApp.exe
+
+      - name: Verify Binary & Compute Cryptographic Hashes
+        shell: pwsh
+        id: hashes
+        run: |
+          $exe = Get-Item app/dist/ExtraApp.exe
+          $sha256 = (Get-FileHash -Path $exe.FullName -Algorithm SHA256).Hash
+          $size = $exe.Length
+          
+          Write-Host "=========================================="
+          Write-Host "Binary: $($exe.FullName)"
+          Write-Host "Size:   $size bytes ($([math]::Round($size/1MB, 2)) MB)"
+          Write-Host "SHA256: $sha256"
+          Write-Host "=========================================="
+          
+          "$sha256  ExtraApp-Setup.exe" | Out-File -FilePath app/dist/SHA256SUMS.txt -Encoding ascii
+          
+          echo "SHA256=$sha256" >> $env:GITHUB_OUTPUT
+          echo "SIZE=$size" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Artifact to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            app/dist/ExtraApp.exe
+            app/dist/SHA256SUMS.txt
+          generate_release_notes: true

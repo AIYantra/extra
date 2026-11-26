@@ -41,6 +41,8 @@ DEFAULT_ALLOWED_RELAY_TOOLS = frozenset({
     "extra_indicate_status",
     "extra_task_start",
     "extra_task_complete",
+    "extra_launch",
+    "extra_confirm_modal",
 })
 
 DANGEROUS_REMOTE_TOOLS = frozenset({
@@ -217,7 +219,7 @@ async def execute_local_tool(
                     up_url = f"https://extra.yantraos.com/api/action/upload?action_id={act_id}"
                     up_headers = {
                         "Content-Type": "image/jpeg",
-                        "User-Agent": "Extra-Client/0.3.9",
+                        "User-Agent": "Extra-Client/0.4.0",
                     }
                     if relay_token and relay_token != "anonymous":
                         up_headers["X-Extra-Passkey"] = relay_token

@@ -1427,6 +1427,12 @@ def get_operator_info():
     machine_name = os.environ.get("COMPUTERNAME") or socket.gethostname() or "workstation"
     initials = username[:2].upper() if len(username) >= 2 else "OP"
 
+    try:
+        from extra.core.platform.windows.uipi import is_current_process_elevated
+        is_elevated = is_current_process_elevated()
+    except Exception:
+        is_elevated = False
+
     # If linked with Cloud Relay, elevate operator identity
     creds = get_stored_credentials()
     u = creds.get("user")
@@ -1442,7 +1448,8 @@ def get_operator_info():
             "mode": "Connected Cloud Hub",
             "avatar_initials": c_initials,
             "plan": u.get("plan", "pro"),
-            "relay_token": creds.get("relay_token", "")
+            "relay_token": creds.get("relay_token", ""),
+            "is_elevated": is_elevated
         }
 
     return {
@@ -1452,7 +1459,8 @@ def get_operator_info():
         "machine_name": machine_name,
         "is_sovereign": True,
         "mode": "Sovereign Desktop Engine",
-        "avatar_initials": initials
+        "avatar_initials": initials,
+        "is_elevated": is_elevated
     }
 
 
@@ -1593,6 +1601,12 @@ def get_doctor_diagnostic():
 
     live_latency = measure_live_capture_latency()
 
+    try:
+        from extra.core.platform.windows.uipi import is_current_process_elevated
+        is_elevated = is_current_process_elevated()
+    except Exception:
+        is_elevated = False
+
     return {
         "screen_capture": {
             "status": "ok",
@@ -1618,6 +1632,12 @@ def get_doctor_diagnostic():
             "status": "ok",
             "path": str(EXTRA_DIR / "memory" / "graph.kuzu"),
             "connected": True
+        },
+        "uipi_integrity": {
+            "status": "ok" if is_elevated else "standard",
+            "is_elevated": is_elevated,
+            "level": "High (Administrator)" if is_elevated else "Medium (Standard User)",
+            "can_automate_elevated": is_elevated
         }
     }
 
@@ -2666,6 +2686,8 @@ class SPAHandler(SimpleHTTPRequestHandler):
         elif clean_path in ("/api/extra/doctor", "/api/doctor"):
             return self._send_json(get_doctor_diagnostic())
         elif clean_path in ("/api/extra/config", "/api/config"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
             cfg_file = EXTRA_DIR / "config.json"
             cfg = json.loads(cfg_file.read_text(encoding="utf-8")) if cfg_file.exists() else {}
             return self._send_json(cfg)
@@ -2781,6 +2803,10 @@ class SPAHandler(SimpleHTTPRequestHandler):
             req_data = {}
 
         if clean_path in ("/api/extra/config", "/api/config"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
+            if not isinstance(req_data, dict):
+                return self._send_json({"error": "Invalid JSON object"}, 400)
             cfg_file = EXTRA_DIR / "config.json"
             curr = json.loads(cfg_file.read_text(encoding="utf-8")) if cfg_file.exists() else {}
             curr.update(req_data)
@@ -2789,6 +2815,8 @@ class SPAHandler(SimpleHTTPRequestHandler):
             return self._send_json({"success": True, "config": curr})
 
         elif clean_path in ("/api/clients/configure", "/api/extra/clients/configure"):
+            if not self._is_authorized_client():
+                return self._send_json({"error": "Unauthorized: Access requires loopback origin or Bearer token"}, 401)
             client_id = req_data.get("client_id", "")
             if req_data.get("all") or client_id == "all":
                 results = {}

@@ -1,3 +1,66 @@
+# Extra Release Notes — v0.4.0
+
+**Release Date:** November 26, 2026  
+**Release Title:** Win32 UIPI Barrier Guard, Administrator UAC Elevation, Relay Tool Allowlist Restoration & Cryptographic Installer Attestation  
+**Target Systems:** Windows 10/11 (x64 / ARM64), macOS 12.3+ (Apple Silicon / Intel), Linux (KDE Plasma, GNOME, wlroots, X11)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.4.0)
+
+Version 0.4.0 is a major reliability, security, and operator experience release. It directly addresses real-world user feedback regarding Windows User Interface Privilege Isolation (UIPI) barriers, restores essential desktop control tools over remote ChatGPT relays, introduces official cryptographic installer hash attestation for Microsoft Defender SmartScreen compliance, and hardens the local REST control plane and Cloudflare edge gateway against unauthorized access.
+
+---
+
+## 2. Key Highlights & Architectural Enhancements
+
+### 1. Win32 UIPI Barrier Guard & Token Elevation Detection (`src/extra/core/platform/windows/uipi.py`, `server.py`)
+- **Proactive Integrity Inspection:** Extra now detects when target application windows are running with elevated Administrator privileges (High Integrity) while Extra is running as a standard user (Medium Integrity).
+- **64-bit ctypes Safety:** Implements explicit 64-bit Win32 prototypes (`kernel32.GetCurrentProcess.restype = wintypes.HANDLE`), preventing integer conversion overflows on 64-bit Windows architectures.
+- **Actionable Operator Feedback:** Intercepts silent click and keystroke drops caused by Windows UIPI when interacting with elevated applications (such as Task Manager, ERPs, or `EMP.exe`). Instead of burning LLM token loops on failed actuation retries, Extra returns a clear diagnostic advisory:
+  > *"Target window is elevated (Administrator / UIPI). Launch Extra with `extra elevate connect` or run your terminal as Administrator."*
+
+### 2. Native Windows UAC Elevation CLI (`src/extra/cli.py`)
+- **First-Class Elevation Commands:** Added `extra elevate [command]` and `extra --elevate` commands to cleanly spawn an elevated Administrator console via Win32 `ShellExecuteW("runas")`.
+- **Hardened Parameter Escaping:** Formats command line arguments using standard `subprocess.list2cmdline` escaping to guarantee parameters with spaces, quotation marks, or flags are preserved without splitting.
+
+### 3. Restored Essential Tools in Default Cloud Relay (`src/extra/relay/client.py`)
+- **Application Launching (`extra_launch`):** Restored to `DEFAULT_ALLOWED_RELAY_TOOLS`, allowing ChatGPT and remote AI models to launch requested desktop apps visibly on glass.
+- **Universal Modal Confirmation (`extra_confirm_modal`):** Restored to default allowlist, enabling AI agents to confirm dialog popups, dismissal gates, and file saves cleanly.
+- **Hardened Remote Perimeter:** Maintained strict permanent blocking of dangerous tools (`extra_execute_bridge`, `extra_harness_run`), ensuring arbitrary shell execution cannot be dispatched over remote relays.
+
+### 4. Official SHA-256 Installer Attestation (`extra.yantraos.com/src/components/install-modal.tsx`)
+- **SmartScreen Verification Guide:** Directly addresses user inquiries regarding unsigned binary warnings from Microsoft Defender SmartScreen on `ExtraApp-Setup.exe`.
+- **One-Click Cryptographic Verification:** Displays the authoritative SHA-256 checksum directly below the Windows installer download link with copy-to-clipboard and PowerShell `Get-FileHash` instructions.
+
+### 5. Loopback REST Control Plane & Edge Gateway Hardening (`run_app.py`, `worker.js`)
+- **Authorized Client Verification:** Gated `GET /api/extra/config`, `POST /api/extra/config`, and `POST /api/clients/configure` behind `_is_authorized_client()`, requiring local session tokens or bearer authorization.
+- **Query Parameter Secret Scrubbing:** Rewrites relay keys into `Authorization: Bearer` and `x-relay-key` HTTP headers, preventing token exposure in upstream AWS API Gateway URL access logs.
+
+---
+
+## 3. Problem / Root-Cause / Solution Matrix
+
+| Component | Problem | Root Cause | Permanent Solution |
+| :--- | :--- | :--- | :--- |
+| **Win32 UIPI Actuation** | ChatGPT clicks had no effect in elevated apps (e.g. `EMP.exe` with Elevated: Yes). | Windows UIPI silently drops hardware input messages sent from Medium to High integrity processes. | Implemented `TokenElevation` inspection in `uipi.py`; intercepts silent click drops and provides explicit elevation guidance. |
+| **Cloud Relay Execution** | ChatGPT reported: *"Remote tool execution rejected: 'extra_launch' is not in ALLOWED_RELAY_TOOLS"*. | `extra_launch` and `extra_confirm_modal` were over-conservatively removed from the default relay list. | Restored both tools to `DEFAULT_ALLOWED_RELAY_TOOLS` in `client.py` while keeping dangerous bridge/harness tools strictly barred. |
+| **Windows SmartScreen** | Windows Defender SmartScreen blocked `ExtraApp-Setup.exe` with `NotSigned` status. | Installer executable is not yet Authenticode signed with an EV certificate. | Added authoritative SHA-256 checksum display and PowerShell `Get-FileHash` guide directly in the website install modal. |
+| **Local Config API** | `POST /api/extra/config` allowed loopback callers to overwrite `config.json` without credentials. | Route handler lacked `_is_authorized_client()` verification call present on other sensitive endpoints. | Enforced `self._is_authorized_client()` check on both GET and POST config routes, returning 401 Unauthorized if missing. |
+| **UAC Elevation Quoting** | Arguments with spaces were split into separate tokens when elevated via UAC. | `relaunch_elevated` used unescaped `" ".join(sys.argv[1:])`. | Updated to `subprocess.list2cmdline(params_list)` for robust Win32 argument escaping. |
+| **Edge Relay Proxy** | Upstream AWS Lambda relay query strings contained long-lived authentication keys. | `worker.js` set `targetUrl.searchParams.set("key", token)`. | Promoted keys to `Authorization: Bearer` and `x-relay-key` headers; deleted query parameters before forwarding. |
+
+---
+
+## 4. Test & Verification Metrics
+
+- **Comprehensive Security & UIPI Test Suite:** 62 passed in 2.43s (`test_security_hardening.py`, `test_security_phase1.py`, `test_security_phase2.py`, `test_security_phase3.py`, `test_windows_uipi.py`, `test_windows_shell_args.py`, `test_security_phase4.py`, `test_security_web_gateway_phase2.py`, `test_security_payment_phase1.py`).
+- **Full Ecosystem Regression Suite:** 2,253 passed, 85 skipped, 0 failed in 65.41s across `extra/tests`.
+- **System Doctor Diagnostics:** Screen capture latency 22.9ms, UIA plane responsive (51.2ms), KùzuDB graph connected, SAC compliant.
+- **Pre-Release Security Audit:** Run 5 completed with 29 coverage units valid and all 3 code findings patched and verified.
+
+---
+
 # Extra Release Notes — v0.3.9
 
 **Release Date:** November 25, 2026  

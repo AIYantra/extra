@@ -1,6 +1,6 @@
 [package]
 name = "extra-station"
-version = "0.3.6"
+version = "0.4.0"
 description = "Extra Station — Sovereign Desktop Mission Control Cockpit"
 authors = ["yantraOS"]
 license = "Apache-2.0"

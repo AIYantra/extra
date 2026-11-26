@@ -132,3 +132,37 @@ def test_bearer_auth_middleware_enforcement():
         assert called is True
 
     asyncio.run(_run_test())
+
+
+def test_spa_handler_config_requires_authorization():
+    """Verifies that GET/POST /api/extra/config and POST /api/clients/configure require _is_authorized_client()."""
+    import io
+    import json
+    from unittest.mock import MagicMock
+
+    handler = SPAHandler.__new__(SPAHandler)
+    handler.headers = {"Host": "127.0.0.1:5173", "Origin": "http://127.0.0.1:5173"}
+    handler._check_security = MagicMock(return_value=True)
+    handler._is_authorized_client = MagicMock(return_value=False)
+
+    sent_payloads = []
+    handler._send_json = lambda payload, status=200: sent_payloads.append((status, payload))
+
+    # 1. GET /api/extra/config blocked when unauthorized
+    handler.path = "/api/extra/config"
+    handler.do_GET()
+    assert sent_payloads[-1][0] == 401
+
+    # 2. POST /api/extra/config blocked when unauthorized
+    body_bytes = json.dumps({"theme": "light"}).encode("utf-8")
+    handler.headers = {"Host": "127.0.0.1:5173", "Content-Length": str(len(body_bytes))}
+    handler.rfile = io.BytesIO(body_bytes)
+    handler.command = "POST"
+    handler.do_POST()
+    assert sent_payloads[-1][0] == 401
+
+    # 3. POST /api/clients/configure blocked when unauthorized
+    handler.path = "/api/clients/configure"
+    handler.rfile = io.BytesIO(json.dumps({"client_id": "cursor"}).encode("utf-8"))
+    handler.do_POST()
+    assert sent_payloads[-1][0] == 401

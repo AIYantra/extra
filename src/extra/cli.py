@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 try:
     from extra import __version__
 except Exception:
-    __version__ = "0.3.9"
+    __version__ = "0.4.0"
 
 from extra.core.capture import capture_screen
 from extra.core.focus import (
@@ -336,6 +336,23 @@ def cmd_doctor(args: Optional[argparse.Namespace] = None) -> int:
         except Exception as ex:
             print(f"  Desktop Isolation: Notice ({ex})")
 
+        # Windows Integrity & UIPI Automation Level
+        print("\n[Windows Integrity & UIPI Automation Level]")
+        try:
+            from extra.core.platform.windows.uipi import is_current_process_elevated
+            is_elevated = is_current_process_elevated()
+            if is_elevated:
+                print("  Process Integrity:        [OK] High (Administrator Elevation active)")
+                print("  UIPI Automation:          [OK] Full (Can automate standard, elevated, and ERP/Admin software)")
+            else:
+                print("  Process Integrity:        [INFO] Medium (Standard User)")
+                print("  UIPI Automation:          [STANDARD] Standard applications only.")
+                print("                            Windows UIPI will block clicks into elevated apps (Task Manager, ERPs).")
+                print("                            To enable elevated automation, run: extra elevate connect")
+                print("                            or launch your terminal with 'Run as Administrator'.")
+        except Exception as e:
+            print(f"  UIPI Diagnostic:          Notice ({e})")
+
     # 3c. Linux Desktop & Hardware Subsystems (if on Linux)
     elif os_name == "Linux":
         print("\n[Linux Desktop & Hardware Subsystems]")
@@ -592,6 +609,19 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 def cmd_connect(args: argparse.Namespace) -> int:
     """Connects this desktop to the Extra Cloud Hub for ChatGPT automation."""
+    if getattr(args, "elevate", False):
+        if platform.system() == "Windows":
+            from extra.core.platform.windows.uipi import is_current_process_elevated
+            if not is_current_process_elevated():
+                connect_args = ["connect"]
+                if getattr(args, "token", None) and args.token != "anonymous":
+                    connect_args.extend(["--key", args.token])
+                if getattr(args, "hub", None):
+                    connect_args.extend(["--hub", args.hub])
+                if getattr(args, "name", None):
+                    connect_args.extend(["--name", args.name])
+                return relaunch_elevated(connect_args)
+
     from extra.relay import start_relay, DEFAULT_RELAY_URL
     hub_url = getattr(args, "hub", None) or os.environ.get("EXTRA_HUB_URL") or DEFAULT_RELAY_URL
     token = getattr(args, "token", None)
@@ -609,6 +639,50 @@ def cmd_connect(args: argparse.Namespace) -> int:
         device_name=getattr(args, "name", None),
     )
     return 0
+
+
+def relaunch_elevated(command_args: Optional[List[str]] = None) -> int:
+    """Relaunches the current Extra CLI command in a new elevated UAC process on Windows."""
+    if platform.system() != "Windows":
+        print("[WARN] Process elevation via UAC is only applicable to Windows.")
+        return 1
+
+    from extra.core.platform.windows.uipi import is_current_process_elevated
+    if is_current_process_elevated():
+        print("[OK] Extra is already running with Administrator elevation.")
+        return 0
+
+    import ctypes
+    if command_args is None:
+        command_args = sys.argv[1:]
+
+    cleaned_args = [a for a in command_args if a != "--elevate"]
+    if cleaned_args and cleaned_args[0] == "elevate":
+        cleaned_args = cleaned_args[1:]
+
+    exe_path = sys.executable
+    if "python" in Path(exe_path).stem.lower():
+        params_list = ["-m", "extra.cli"] + cleaned_args
+    else:
+        params_list = cleaned_args
+
+    params_str = subprocess.list2cmdline(params_list)
+    print("[*] Requesting Windows UAC Administrator elevation...")
+    ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe_path, params_str, None, 1)
+    if ret > 32:
+        print("[OK] Spawned elevated Administrator console. You may close this unelevated window.")
+        return 0
+    else:
+        print(f"[FAIL] UAC elevation was declined or cancelled (ShellExecute code: {ret}).")
+        return 1
+
+
+def cmd_elevate(args: argparse.Namespace) -> int:
+    """Relaunches Extra with Administrator privileges via Windows UAC prompt."""
+    sub_args = getattr(args, "sub_args", [])
+    if not sub_args:
+        sub_args = ["connect"]
+    return relaunch_elevated(sub_args)
 
 
 def cmd_pip(args: argparse.Namespace) -> int:
@@ -1634,6 +1708,11 @@ def build_parser() -> argparse.ArgumentParser:
     connect_parser.add_argument("--hub", default=None, help="WebSocket Relay Hub URL (default: official extra.yantraos.com relay)")
     connect_parser.add_argument("--key", "--token", dest="token", default="anonymous", help="Setup key or authentication token from extra.yantraos.com account")
     connect_parser.add_argument("--name", default=None, help="Custom friendly device name for this workstation")
+    connect_parser.add_argument("--elevate", action="store_true", help="Relaunch with Administrator elevation via Windows UAC (enables UIPI automation in elevated apps)")
+
+    # elevate (Windows UAC self-elevation)
+    elevate_parser = subparsers.add_parser("elevate", help="Relaunch Extra with Administrator privileges via Windows UAC")
+    elevate_parser.add_argument("sub_args", nargs=argparse.REMAINDER, help="Arguments to pass to elevated Extra instance (e.g. 'extra elevate connect')")
 
     # pip (Picture-in-Picture floating preview window)
     pip_parser = subparsers.add_parser("pip", help="Control hardware-accelerated Picture-in-Picture floating preview window")
@@ -1776,6 +1855,8 @@ def main() -> None:
         sys.exit(cmd_serve(args))
     elif args.command == "connect":
         sys.exit(cmd_connect(args))
+    elif args.command == "elevate":
+        sys.exit(cmd_elevate(args))
     elif args.command == "pip":
         sys.exit(cmd_pip(args))
     elif args.command == "inspect":

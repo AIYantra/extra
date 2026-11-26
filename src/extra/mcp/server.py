@@ -253,7 +253,7 @@ logger = logging.getLogger("extra.mcp")
 try:
     from extra import __version__ as _EXTRA_VERSION
 except ImportError:
-    _EXTRA_VERSION = "0.3.9"
+    _EXTRA_VERSION = "0.4.0"
 
 
 
@@ -994,6 +994,24 @@ def extra_click(
 
         ret["warning"] = outcome.message
 
+    # Universal Windows UIPI Elevation Barrier Check
+    if outcome.status != StallStatus.NORMAL and sys.platform == "win32":
+        try:
+            from extra.core.platform.windows.uipi import check_uipi_barrier
+            target_check_hwnd = after_hwnd or before_hwnd
+            uipi_barrier = check_uipi_barrier(hwnd=target_check_hwnd, coords=(phys_x, phys_y), window_title=win_title)
+            if uipi_barrier:
+                advisory = uipi_barrier.get("advisory")
+                ret["uipi_barrier"] = True
+                ret["target_elevated"] = True
+                ret["verification_status"] = "blocked_by_uipi"
+                ret["error"] = advisory
+                ret["warning"] = advisory
+                ret["message"] = advisory
+                ret["success"] = False
+        except Exception as ex:
+            logger.debug("UIPI barrier check in extra_click failed: %s", ex)
+
     if grounding_meta:
 
         ret["grounding"] = grounding_meta
@@ -1259,6 +1277,21 @@ def extra_type(
         )
 
     record_action_step("extra_type", {"text": text[:80], "press_enter": press_enter, "use_clipboard": use_clipboard, "auto_distill": auto_distill}, duration_ms)
+
+    # Universal Windows UIPI Elevation Barrier Check
+    if sys.platform == "win32":
+        try:
+            from extra.core.platform.windows.uipi import check_uipi_barrier
+            fg_type = get_foreground_window()
+            if fg_type and fg_type.hwnd:
+                uipi_barrier = check_uipi_barrier(hwnd=fg_type.hwnd, window_title=fg_type.title)
+                if uipi_barrier:
+                    advisory = uipi_barrier.get("advisory")
+                    ret["uipi_barrier"] = True
+                    ret["target_elevated"] = True
+                    ret["warning"] = advisory
+        except Exception as ex:
+            logger.debug("UIPI barrier check in extra_type failed: %s", ex)
 
     b_warn = _track_active_blueprint_turn()
 

@@ -97,6 +97,12 @@ export interface DoctorDiagnostic {
     path: string;
     connected: boolean;
   };
+  uipi_integrity?: {
+    status: string;
+    is_elevated: boolean;
+    level: string;
+    can_automate_elevated: boolean;
+  };
 }
 
 export interface RealApiKey {
@@ -271,6 +277,7 @@ export interface OperatorInfo {
   is_sovereign: boolean;
   mode: string;
   avatar_initials: string;
+  is_elevated?: boolean;
 }
 
 const API_BASE = "";
@@ -407,6 +414,7 @@ export class ExtraDataService {
       is_sovereign: true,
       mode: "Sovereign Desktop Engine",
       avatar_initials: "OP",
+      is_elevated: false,
     };
   }
 

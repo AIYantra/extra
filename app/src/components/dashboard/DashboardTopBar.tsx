@@ -12,6 +12,8 @@ import {
   Globe,
   User,
   RefreshCw,
+  Shield,
+  ShieldCheck,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DesktopWindowControls } from "./DesktopWindowControls";
@@ -67,6 +69,7 @@ export function DashboardTopBar({
   const [copiedRelay, setCopiedRelay] = useState(false);
   const [restartingEngine, setRestartingEngine] = useState(false);
   const [relayStatus, setRelayStatus] = useState<LiveRelayStatus | null>(null);
+  const [isElevated, setIsElevated] = useState<boolean | null>(null);
   const [togglingOffline, setTogglingOffline] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -74,8 +77,16 @@ export function DashboardTopBar({
     let mounted = true;
     const updateRelay = async () => {
       try {
-        const stat = await extraDataService.fetchRelayStatus();
-        if (mounted) setRelayStatus(stat);
+        const [stat, op] = await Promise.all([
+          extraDataService.fetchRelayStatus(),
+          extraDataService.fetchOperator(),
+        ]);
+        if (mounted) {
+          setRelayStatus(stat);
+          if (op && op.is_elevated !== undefined) {
+            setIsElevated(op.is_elevated);
+          }
+        }
       } catch {}
     };
     updateRelay();
@@ -188,6 +199,35 @@ export function DashboardTopBar({
 
       {/* Right: Account Status, Theme Switcher & Calm Emergency Pause */}
       <div className="flex items-center gap-2 shrink-0">
+        {/* Elevation / UIPI Status Badge */}
+        {isElevated !== null && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={`hidden md:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs font-medium cursor-default select-none shadow-2xs transition-colors duration-150 ${
+                  isElevated
+                    ? "bg-[#edfcf2] border-[#bbf0cf] text-[#0e8345]"
+                    : "bg-[#f8f9fb] border-[#dfe4eb] text-[#525866]"
+                }`}
+              >
+                {isElevated ? (
+                  <ShieldCheck className="size-3.5 text-[#0e8345]" />
+                ) : (
+                  <Shield className="size-3.5 text-[#868c98]" />
+                )}
+                <span className="font-mono text-[11px]">
+                  {isElevated ? "Admin (UIPI Full)" : "Standard Mode"}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs max-w-xs">
+              {isElevated
+                ? "Administrator Elevation Active: Extra has full Win32 UIPI privileges and can automate standard, elevated, and ERP applications."
+                : "Standard User Mode: Windows UIPI blocks clicks into elevated apps (Task Manager, ERPs). To automate elevated apps, launch terminal as Administrator or run 'extra elevate connect'."}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
         {/* Subtle Update Available Pill */}
         {updateAvailable && (
           <button
@@ -313,7 +353,7 @@ export function DashboardTopBar({
                       <span>Software Updates</span>
                     </span>
                     <span className="text-[10px] font-mono text-[#868c98]">
-                      {installedVersionLabel || "v0.3.9"}
+                      {installedVersionLabel || "v0.4.0"}
                     </span>
                   </button>
                   <button

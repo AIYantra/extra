@@ -6,7 +6,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[('dist', 'dist')],
-    hiddenimports=[],
+    hiddenimports=['extra', 'extra.core.platform.windows.uipi'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,5 +35,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version='version_info.txt',
     icon=['src-tauri/icons/icon.ico'],
 )

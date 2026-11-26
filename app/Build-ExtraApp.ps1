@@ -26,7 +26,10 @@ if (-not (Test-Path $python)) {
 & $python -m PyInstaller --noconfirm --clean --onefile --windowed `
   --name ExtraApp `
   --icon src-tauri/icons/icon.ico `
+  --version-file version_info.txt `
   --add-data "dist;dist" `
+  --hidden-import "extra" `
+  --hidden-import "extra.core.platform.windows.uipi" `
   run_app.py
 
 $out = Get-Item dist/ExtraApp.exe

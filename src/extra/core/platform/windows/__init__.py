@@ -91,6 +91,12 @@ from extra.core.platform.windows.pip_window import (
     PiPPreviewWindow,
     get_pip_window,
 )
+from extra.core.platform.windows.uipi import (
+    is_current_process_elevated,
+    is_window_elevated,
+    get_root_window_at_point,
+    check_uipi_barrier,
+)
 
 
 __all__ = [
@@ -173,4 +179,9 @@ __all__ = [
     "get_child_session_manager",
     "PiPPreviewWindow",
     "get_pip_window",
+    # UIPI & Elevation
+    "is_current_process_elevated",
+    "is_window_elevated",
+    "get_root_window_at_point",
+    "check_uipi_barrier",
 ]
