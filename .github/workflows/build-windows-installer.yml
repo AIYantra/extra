@@ -60,29 +60,33 @@ jobs:
             --icon src-tauri/icons/icon.ico `
             --version-file version_info.txt `
             --add-data "dist;dist" `
+            --hidden-import "extra" `
+            --hidden-import "extra.core.platform.windows.uipi" `
             run_app.py
 
       # Optional Microsoft Trusted Signing step
-      # To enable: configure Azure Trusted Signing account and uncomment
-      - name: Sign Binary via Microsoft Trusted Signing
-        if: ${{ inputs.sign_binary == true && env.HAS_AZURE_SECRETS == 'true' }}
-        uses: azure/trusted-signing-action@v0.4.1
-        env:
-          HAS_AZURE_SECRETS: ${{ secrets.AZURE_CLIENT_ID != '' }}
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: https://eus.codesigning.azure.net/
-          trusted-signing-account-name: ${{ secrets.TS_ACCOUNT_NAME }}
-          certificate-profile-name: ${{ secrets.TS_PROFILE_NAME }}
-          files: app/dist/ExtraApp.exe
+      # To enable: configure Azure Trusted Signing account, add repository secrets, and uncomment:
+      # - name: Sign Binary via Microsoft Trusted Signing
+      #   if: ${{ inputs.sign_binary == true && env.HAS_AZURE_SECRETS == 'true' }}
+      #   uses: azure/artifact-signing-action@v2
+      #   env:
+      #     HAS_AZURE_SECRETS: ${{ secrets.AZURE_CLIENT_ID != '' }}
+      #   with:
+      #     azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+      #     endpoint: https://eus.codesigning.azure.net/
+      #     signing-account-name: ${{ secrets.TS_ACCOUNT_NAME }}
+      #     certificate-profile-name: ${{ secrets.TS_PROFILE_NAME }}
+      #     files-folder: app/dist
+      #     files-folder-filter: exe
 
       - name: Verify Binary & Compute Cryptographic Hashes
         shell: pwsh
         id: hashes
         run: |
           $exe = Get-Item app/dist/ExtraApp.exe
+          Copy-Item $exe.FullName app/dist/ExtraApp-Setup.exe -Force
           $sha256 = (Get-FileHash -Path $exe.FullName -Algorithm SHA256).Hash
           $size = $exe.Length
           
@@ -93,9 +97,20 @@ jobs:
           Write-Host "=========================================="
           
           "$sha256  ExtraApp-Setup.exe" | Out-File -FilePath app/dist/SHA256SUMS.txt -Encoding ascii
+          "$sha256  ExtraApp.exe" | Out-File -FilePath app/dist/SHA256SUMS.txt -Encoding ascii -Append
           
           echo "SHA256=$sha256" >> $env:GITHUB_OUTPUT
           echo "SIZE=$size" >> $env:GITHUB_OUTPUT
+
+      - name: Archive Production Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExtraApp-Windows-x64
+          path: |
+            app/dist/ExtraApp.exe
+            app/dist/ExtraApp-Setup.exe
+            app/dist/SHA256SUMS.txt
+          retention-days: 14
 
       - name: Upload Artifact to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -103,5 +118,5 @@ jobs:
         with:
           files: |
             app/dist/ExtraApp.exe
+            app/dist/ExtraApp-Setup.exe
             app/dist/SHA256SUMS.txt
-          generate_release_notes: true
