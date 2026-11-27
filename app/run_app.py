@@ -447,6 +447,105 @@ def _spawn_engine_process(py_exe: str, extra_src: Path) -> bool:
         return False
 
 
+def _resolve_extra_src() -> Path:
+    """Resolves Extra source directory across development and installed environments."""
+    for cand in (
+        EXTRA_DIR / "app" / "src",
+        Path(__file__).resolve().parent.parent / "src",
+        Path(r"D:\yantra_workspace\extra\src"),
+        EXTRA_DIR / "src",
+    ):
+        if cand.exists():
+            return cand
+    return Path(__file__).resolve().parent.parent / "src"
+
+
+def _is_functional_engine_python(py_path: str, extra_src: Optional[Path] = None) -> bool:
+    """Pre-flight check to verify that a candidate Python can actually run the Extra engine."""
+    try:
+        env = os.environ.copy()
+        if extra_src and extra_src.exists():
+            env["PYTHONPATH"] = str(extra_src)
+        res = subprocess.run(
+            [py_path, "-c", "from PIL import Image; import extra.cli; import mcp; import websockets"],
+            env=env,
+            capture_output=True,
+            timeout=3.0,
+            check=False,
+            creationflags=0x08000000 if sys.platform == "win32" else 0,
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
+
+
+def _resolve_engine_python(extra_src: Optional[Path] = None) -> Optional[str]:
+    """Finds the best available, verified Python executable to run the Extra engine daemon.
+
+    Priority order:
+    1. Dedicated isolated Extra virtual environment (~/.extra/venv/Scripts/python.exe on Windows,
+       ~/.extra/venv/bin/python on POSIX). This is where install.ps1 and install.sh install all dependencies.
+    2. Current sys.executable if running from source (not frozen).
+    3. System python candidates (shutil.which('python'), python3, py.exe).
+    """
+    candidates = []
+
+    # 1. Dedicated isolated Extra virtual environment (Highest priority)
+    if sys.platform == "win32":
+        venv_py = EXTRA_DIR / "venv" / "Scripts" / "python.exe"
+    else:
+        venv_py = EXTRA_DIR / "venv" / "bin" / "python"
+    if venv_py.exists():
+        candidates.append(str(venv_py))
+
+    # 2. sys.executable if running from source (unfrozen)
+    if not getattr(sys, "frozen", False) and sys.executable:
+        candidates.append(sys.executable)
+
+    # 3. System python candidates (shutil.which)
+    for cmd in ("python", "python3", "py"):
+        found = shutil.which(cmd)
+        if found and found not in candidates:
+            candidates.append(found)
+
+    # Developer fallback candidates
+    for dev_cand in (
+        r"C:\Program Files\Python313\python.exe",
+        r"C:\Program Files\Python312\python.exe",
+        r"D:\yantra_workspace\extra\.venv\Scripts\python.exe",
+    ):
+        if os.path.exists(dev_cand) and dev_cand not in candidates:
+            candidates.append(dev_cand)
+
+    # First pass: find a candidate that already has PIL and all dependencies verified
+    for c in candidates:
+        if os.path.exists(c) and _is_functional_engine_python(c, extra_src):
+            return c
+
+    # Second pass: if dedicated venv exists but is missing PIL, auto-repair it
+    if venv_py.exists():
+        try:
+            print(f"[ExtraApp] Dedicated venv {venv_py} is missing dependencies; auto-repairing...", flush=True)
+            subprocess.run(
+                [str(venv_py), "-m", "pip", "install", "--prefer-binary", "--quiet", "pillow", "mcp", "websockets", "mss", "pywin32", "comtypes", "psutil"],
+                capture_output=True,
+                timeout=45.0,
+                check=False,
+                creationflags=0x08000000 if sys.platform == "win32" else 0,
+            )
+            if _is_functional_engine_python(str(venv_py), extra_src):
+                return str(venv_py)
+        except Exception as e:
+            print(f"[ExtraApp] Auto-repair failed: {e}", flush=True)
+
+    # Fallback to any existing candidate
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+
+    return None
+
+
 def start_extra_server_background():
     """Start Extra MCP server in background without blocking window launch."""
     if is_extra_server_online() and is_extra_server_authorized():
@@ -457,31 +556,12 @@ def start_extra_server_background():
         _terminate_stale_engines()
         time.sleep(0.5)
 
-    py_exe = None
-    user_embedded_py = os.path.join(
-        os.environ.get("USERPROFILE", ""), ".extra", "python", "python.exe"
-    )
-    candidates = [
-        shutil.which("python"),
-        sys.executable if not getattr(sys, "frozen", False) else None,
-        user_embedded_py,
-        r"C:\Program Files\Python313\python.exe",
-        r"D:\yantra_workspace\extra\.venv\Scripts\python.exe",
-        shutil.which("python3"),
-    ]
-    for c in candidates:
-        if c and os.path.exists(c):
-            py_exe = c
-            break
+    extra_src = _resolve_extra_src()
+    py_exe = _resolve_engine_python(extra_src)
 
     if not py_exe:
+        print("  [ERROR] No functional Python runtime found for Extra engine daemon.", flush=True)
         return False
-
-    extra_src = Path(r"D:\yantra_workspace\extra\src")
-    if not extra_src.exists():
-        extra_src = EXTRA_DIR / "app" / "src"
-    if not extra_src.exists():
-        extra_src = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
 
     if not _spawn_engine_process(py_exe, extra_src):
         return False
@@ -540,11 +620,7 @@ def get_engine_status() -> dict:
 def run_live_magic_demo() -> dict:
     """Runs a fast, visible, safe demonstration of Extra for first-flight onboarding."""
     try:
-        extra_src = Path(r"D:\yantra_workspace\extra\src")
-        if not extra_src.exists():
-            extra_src = EXTRA_DIR / "app" / "src"
-        if not extra_src.exists():
-            extra_src = Path(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+        extra_src = _resolve_extra_src()
         if str(extra_src) not in sys.path:
             sys.path.insert(0, str(extra_src))
 
@@ -605,7 +681,9 @@ _warmup_started = False
 def _warmup_capture_engine():
     global _live_capture_engine
     try:
-        sys.path.insert(0, r"D:\yantra_workspace\extra\src")
+        extra_src = _resolve_extra_src()
+        if str(extra_src) not in sys.path:
+            sys.path.insert(0, str(extra_src))
         from extra.core.capture import get_capture_engine
         _live_capture_engine = get_capture_engine()
         t0 = time.perf_counter()
@@ -1647,7 +1725,7 @@ def get_doctor_diagnostic():
 # =========================================================================
 
 def get_memory_graph_data():
-    extra_src = Path(r"D:\yantra_workspace\extra\src")
+    extra_src = _resolve_extra_src()
     if str(extra_src) not in sys.path:
         sys.path.append(str(extra_src))
 
@@ -2127,8 +2205,10 @@ def verify_skill_playbook(req_data: dict) -> dict:
     candidate_paths = [
         EXTRA_DIR / "skills" / f"extra-{base_name}" / "SKILL.md",
         EXTRA_DIR / "skills" / f"extra_{base_name}" / "SKILL.md",
+        Path.home() / ".gemini" / "antigravity-cli" / "skills" / f"extra-{base_name}" / "SKILL.md",
+        Path.home() / ".gemini" / "skills" / f"extra-{base_name}" / "SKILL.md",
+        Path.home() / ".gemini" / "config" / "skills" / f"extra-{base_name}" / "SKILL.md",
         Path(r"D:\yantra_workspace\.agents\skills") / f"extra-{base_name}" / "SKILL.md",
-        Path(r"C:\Users\AdLoa\.gemini\config\skills") / f"extra-{base_name}" / "SKILL.md",
     ]
     skill_file = next((p for p in candidate_paths if p.exists()), None)
     playbook_found = skill_file is not None
