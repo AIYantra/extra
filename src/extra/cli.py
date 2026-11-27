@@ -1595,7 +1595,8 @@ def cmd_license(key: Optional[str] = None) -> int:
         return 0
 
     clean_key = key.strip().upper()
-    if not clean_key.startswith("EXTRA-PRO-LIFETIME-") or len(clean_key) < 25:
+    import re
+    if not re.match(r"^EXTRA-PRO-LIFETIME-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}$", clean_key):
         print("\n[FAIL] Invalid license key format.")
         print("Expected format: EXTRA-PRO-LIFETIME-XXXX-XXXX-XXXX-XXXX")
         print("Redeem your voucher at https://extra.yantraos.com/redeem to generate your key.\n")
@@ -1605,7 +1606,11 @@ def cmd_license(key: Optional[str] = None) -> int:
     import urllib.request
     import urllib.error
     import platform as sys_platform
-    from extra.relay.client import get_persistent_device_id, get_default_device_name
+    from extra.relay.client import (
+        get_persistent_device_id,
+        get_default_device_name,
+        save_extra_config,
+    )
 
     machine_id = get_persistent_device_id()
     device_name = get_default_device_name()
@@ -1658,8 +1663,7 @@ def cmd_license(key: Optional[str] = None) -> int:
     cfg["server_verified"] = True
     cfg["verified_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-    with open(cfg_path, "w", encoding="utf-8") as f:
-        json.dump(cfg, f, indent=2)
+    save_extra_config(cfg_path, cfg)
 
     print("\n" + "=" * 65)
     print(" EXTRA PRO LIFETIME LICENSE ACTIVATED & VERIFIED")
@@ -1667,7 +1671,7 @@ def cmd_license(key: Optional[str] = None) -> int:
     print(f"  License Key:     {clean_key}")
     print(f"  Server Auth:     ONLINE VERIFIED (extra.yantraos.com)")
     print(f"  Entitlement:     {data.get('tier', 'Pro Lifetime Tier 1')} (AppSumo Partner)")
-    print(f"  Bound Email:     {data.get('email', 'Registered Account')}")
+    print(f"  Bound Email:     {data.get('email_masked') or data.get('email') or 'Registered Account'}")
     print(f"  Station ID:      {machine_id} ({device_name})")
     print("  Status:          ACTIVE & VERIFIED")
     print("  Cloud Relay:     UNLIMITED / UNMETERED (extra.yantraos.com/mcp)")

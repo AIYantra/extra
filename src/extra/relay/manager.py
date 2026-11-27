@@ -18,6 +18,7 @@ from extra.relay.client import (
     DEFAULT_RELAY_URL,
     get_default_device_name,
     run_relay_loop,
+    save_extra_config,
 )
 
 logger = logging.getLogger("extra.relay.manager")
@@ -268,9 +269,7 @@ class RelayManager:
                 with open(cfg_path, "r", encoding="utf-8") as f:
                     cfg_data = json.load(f)
             cfg_data["is_local_mode"] = True
-            cfg_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(cfg_path, "w", encoding="utf-8") as f:
-                json.dump(cfg_data, f, indent=2)
+            save_extra_config(cfg_path, cfg_data)
         except Exception:
             pass
         return True

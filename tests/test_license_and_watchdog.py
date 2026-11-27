@@ -17,10 +17,31 @@ from extra.relay.client import get_persistent_device_id
 
 class TestLicenseVerificationAndWatchdog(unittest.TestCase):
     def test_rejects_malformed_license_key(self):
-        with tempfile.TemporaryDirectory() as tmpdir, patch("pathlib.Path.home", return_value=Path(tmpdir)):
-            rc = cmd_license("EXTRA-FREE-123")
-            self.assertEqual(rc, 1)
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                patch("pathlib.Path.home", return_value=Path(tmpdir)), \
+                patch("urllib.request.urlopen") as mock_open:
+            self.assertEqual(cmd_license("EXTRA-FREE-123"), 1)
+            self.assertEqual(cmd_license("EXTRA-PRO-LIFETIME-SHORT"), 1)
+            self.assertEqual(cmd_license("EXTRA-PRO-LIFETIME-1234-5678-9012"), 1)
+            mock_open.assert_not_called()
             self.assertFalse((Path(tmpdir) / ".extra" / "config.json").exists())
+
+    def test_save_extra_config_enforces_posix_permissions(self):
+        from extra.relay.client import save_extra_config
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                patch("extra.relay.client.sys.platform", "linux"), \
+                patch("extra.relay.client.os.open", return_value=99) as mock_open, \
+                patch("extra.relay.client.os.fdopen", side_effect=lambda fd, *a, **kw: io.StringIO()) as mock_fdopen, \
+                patch("extra.relay.client.os.chmod") as mock_chmod, \
+                patch("extra.relay.client.os.replace") as mock_replace:
+            target = Path(tmpdir) / ".extra" / "config.json"
+            save_extra_config(target, {"relay_token": "secret"})
+            mock_open.assert_called_once()
+            self.assertEqual(mock_open.call_args[0][2], 0o600)
+            mock_fdopen.assert_called_once()
+            mock_chmod.assert_any_call(target.parent, 0o700)
+            mock_chmod.assert_any_call(target.with_suffix(".tmp"), 0o600)
+            mock_replace.assert_called_once()
 
     def test_rejects_unissued_key_via_server_verification(self):
         err_stream = io.BytesIO(json.dumps({"success": False, "valid": False, "error": "License key not found"}).encode("utf-8"))

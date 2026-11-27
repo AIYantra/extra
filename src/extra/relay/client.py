@@ -73,6 +73,31 @@ def get_default_device_name() -> str:
     return f"{hostname} ({os_name})"
 
 
+def save_extra_config(cfg_path, cfg_data: Dict[str, Any]) -> None:
+    """Persists client configuration atomically with owner-only permissions on POSIX."""
+    from pathlib import Path
+
+    target = Path(cfg_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    is_posix = sys.platform != "win32"
+    if is_posix:
+        try:
+            os.chmod(target.parent, 0o700)
+        except Exception:
+            pass
+    payload = json.dumps(cfg_data, indent=2)
+    tmp_path = target.with_suffix(".tmp")
+    if is_posix:
+        fd = os.open(str(tmp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.chmod(tmp_path, 0o600)
+    else:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.write(payload)
+    os.replace(tmp_path, target)
+
+
 def get_persistent_device_id() -> str:
     """Returns a stable deterministic device_id persisted in ~/.extra/config.json."""
     import hashlib
@@ -94,11 +119,9 @@ def get_persistent_device_id() -> str:
     raw_hw = f"{uuid.getnode()}:{socket.gethostname()}:{platform.system()}"
     dev_id = "dev_" + hashlib.sha256(raw_hw.encode("utf-8")).hexdigest()[:12]
     try:
-        cfg_dir.mkdir(parents=True, exist_ok=True)
         if isinstance(cfg, dict):
             cfg["device_id"] = dev_id
-            with open(cfg_path, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=2)
+            save_extra_config(cfg_path, cfg)
     except Exception:
         pass
     return dev_id

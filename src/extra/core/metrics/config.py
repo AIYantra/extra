@@ -4,6 +4,7 @@ Manages user preferences in ~/.extra/config.json with strict privacy-by-design d
 """
 
 import os
+import sys
 import json
 import uuid
 import hashlib
@@ -76,13 +77,31 @@ def load_config() -> Dict[str, Any]:
 def save_config(config_data: Dict[str, Any]) -> None:
     """Saves configuration atomically to ~/.extra/config.json."""
     EXTRA_HOME.mkdir(parents=True, exist_ok=True)
+    is_posix = sys.platform != "win32"
+    if is_posix:
+        try:
+            os.chmod(EXTRA_HOME, 0o700)
+        except Exception:
+            pass
     temp_path = CONFIG_PATH.with_suffix(".tmp")
+    payload = json.dumps(config_data, indent=2)
     try:
-        temp_path.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+        if is_posix:
+            fd = os.open(str(temp_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.chmod(temp_path, 0o600)
+        else:
+            temp_path.write_text(payload, encoding="utf-8")
         temp_path.replace(CONFIG_PATH)
     except Exception:
         # Fallback direct write
-        CONFIG_PATH.write_text(json.dumps(config_data, indent=2), encoding="utf-8")
+        CONFIG_PATH.write_text(payload, encoding="utf-8")
+        if is_posix:
+            try:
+                os.chmod(CONFIG_PATH, 0o600)
+            except Exception:
+                pass
 
 def is_telemetry_enabled() -> bool:
     """
