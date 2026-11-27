@@ -2,7 +2,7 @@
  * Single source of truth for product identity strings.
  * Version is dynamically synchronized with the local Extra engine runtime.
  */
-export const DEFAULT_APP_VERSION = "0.4.0";
+export const DEFAULT_APP_VERSION = "0.4.1";
 export const DEFAULT_APP_VERSION_LABEL = `v${DEFAULT_APP_VERSION}`;
 
 let _runtimeVersion = DEFAULT_APP_VERSION;

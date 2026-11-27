@@ -1,3 +1,75 @@
+# Extra Release Notes — v0.4.1
+
+**Release Date:** November 27, 2026  
+**Release Title:** Online License Verification, Fleet Seat Synchronization, POSIX Credential Hardening & Multi-Tier Cloud Watchdog  
+**Target Systems:** Windows 10/11 (x64 / ARM64), macOS 12.3+ (Apple Silicon / Intel), Linux (KDE Plasma, GNOME, wlroots, X11)  
+
+---
+
+## 1. Executive Summary & Major Milestones (v0.4.1)
+
+Version 0.4.1 is a core security, fleet management, and cloud infrastructure release. It introduces online server-side license verification with deterministic hardware-bound machine IDs, adds atomic concurrency control and inventory validation to voucher redemption, enforces fleet pairing boundaries with live seat deallocation on unpair, integrates a multi-tier client and server watchdog auto-recovery system, hardens local credential storage permissions on POSIX hosts, and aligns feature documentation with the open-source MIT engine.
+
+---
+
+## 2. Key Highlights & Architectural Enhancements
+
+### 1. Online Server-Verified License Engine (`src/extra/cli.py`, `src/extra/relay/client.py`)
+- **Online Cryptographic Attestation:** Deprecated offline format-only validation checks. Every invocation of `extra --license <KEY>` or `extra license <KEY>` validates against `POST https://extra.yantraos.com/api/license/verify` backed by persistent partner redemption registries.
+- **Strict Key Rejection:** Unissued or forged license keys are rejected with HTTP 404 (`exit code 1`).
+- **Deterministic Station Identifiers:** Generates stable hardware-bound station identifiers (`dev_<sha256>`) based on platform hardware UUID and system hostname, preventing duplicate seat consumption across CLI sessions.
+
+### 2. Voucher Inventory Validation & Atomic Concurrency Control (`worker.js`, `handler.py`)
+- **Pre-Proxy Whitelist Enforcement:** Cloudflare Edge Worker (`worker.js`) and AWS Lambda origin enforce pre-proxy code validation against authoritative voucher inventory and promotional codes.
+- **Atomic Concurrency Control:** Added DynamoDB `ConditionExpression="attribute_not_exists(code)"` to eliminate race conditions and prevent double-redemptions during concurrent requests.
+- **$O(1)$ Partition Key Lookups:** Replaced unbounded table scans with high-speed key-pointer lookups (`KEY#<license_key>`), preventing denial-of-service degradation.
+- **Edge Burst Rate Limiting:** Implemented in-memory rate limiting (20 requests/minute per client IP) on redemption and verification routes.
+
+### 3. Fleet Pairing Enforcement & Device Seat Synchronization (`handler.py`, `src/extra/relay/client.py`)
+- **Enforced Fleet Boundaries:** Free accounts are capped at 1 paired desktop station; Pro accounts support up to 5 concurrent stations across WebSocket `$connect`, `/api/auth/pair-device`, and `/api/license/verify`.
+- **Dynamic Seat Release on Unpair:** Decommissioning or unpairing a machine via `POST /api/auth/unpair-device` immediately decrements active seat allocation in the license registry, allowing seamless station decommissioning and migration.
+
+### 4. Cloud Relay Quota & Remote Bridge Gating (`handler.py`, `worker.js`)
+- **Cloud Relay Action Quota:** Enforces 100 free cloud relay actions per month for standard accounts and unlimited (999,999) actions for Pro accounts.
+- **Remote Bridge Paywall:** Gated `/api/action/*` REST endpoints and ChatGPT OAuth MCP connections behind `plan == "pro"`.
+
+### 5. Multi-Tier Watchdog & Auto-Recovery Architecture (`stall_breaker.py`, `client.py`, `handler.py`)
+- **Local Client Watchdog:** Perceptual hash diffing (`StallBreaker`) with 2-strike runaway actuation detection, 20s WebSocket heartbeat pings, and daemon supervisor (`RelayManager`), inspectable via `extra watchdog`.
+- **Server-Side Pro Auto-Recovery:** Heartbeat telemetry tracks live station state (`watchdog_armed`, `last_seen`). When dispatching tools to Pro accounts, the server prunes stale sockets and executes a 5-second automatic reconnect recovery hold to seamlessly survive transient network drops and machine sleep/wake events.
+
+### 6. Local Credential Hardening & PII Protection (`src/extra/relay/client.py`, `handler.py`)
+- **POSIX Permission Hardening:** Local credentials in `~/.extra/config.json` are written with strict `0o600` permissions (`0o700` on `~/.extra/` directory) on Linux and macOS hosts.
+- **Email Masking:** Sensitive email addresses returned by license verification endpoints are automatically masked (`b***3@gmail.com`).
+
+### 7. Feature Matrix & Documentation Alignment (`pricing.tsx`, `billing-tab.tsx`)
+- Clarified that Zero-Stall Visual Fastpaths (`src/extra/fastpath/`) are available in the open-source MIT core for all users (Free + Pro).
+- Updated pricing callouts and billing tabs to accurately reflect Cloud Watchdog auto-recovery and 5-machine fleet pairing.
+
+---
+
+## 3. Problem / Root-Cause / Solution Matrix
+
+| Component | Problem | Root Cause | Permanent Solution |
+| :--- | :--- | :--- | :--- |
+| **CLI License Validation** | `extra --license` accepted arbitrary forged keys offline without server checks. | Client only checked format length and prefix, saving `plan: "pro"` locally. | Enforced online verification against `POST /api/license/verify`; rejects invalid keys with exit code 1. |
+| **Voucher Redemption** | Arbitrary voucher codes could be accepted; concurrent requests risked double-minting. | Missing voucher inventory whitelist and missing DynamoDB conditional check expressions. | Added inventory whitelist at Edge + Lambda; enforced `attribute_not_exists(code)` on write. |
+| **Fleet Seat Allocation** | Fleet limits were unenforced; unpairing a device did not decrement license seat count. | Missing seat count bounds on WebSocket connection and missing unpair synchronization logic. | Gated fleet at 1 (Free) / 5 (Pro); synchronized `/api/auth/unpair-device` with license registry. |
+| **Table Scan Scalability** | `/api/license/verify` performed full DynamoDB table scans on invalid keys. | Secondary index lacked partition key mapping for arbitrary verification lookups. | Generated `KEY#<license_key>` pointer records enabling instant $O(1)$ lookups without scanning. |
+| **Local Config Security** | `~/.extra/config.json` was created with default `0644` file permissions on POSIX hosts. | Standard `json.dump` writes without explicit file mode flags. | Implemented `save_extra_config()` enforcing `0o600` permissions on config files and `0o700` on directories. |
+| **Website Feature Matrix** | Website listed Fastpaths as Pro-only, causing discrepancy with open MIT repository. | Marketing copy conflated cloud relay fastpaths with local open-source computer-use modules. | Aligned matrix to show Zero-Stall Fastpaths as Free + Pro, clarifying Cloud Watchdog as Pro. |
+
+---
+
+## 4. Test & Verification Metrics
+
+- **Live Production End-to-End Suite:** 100% passed across Cloudflare Edge and AWS Lambda origin.
+- **Comprehensive Unit & License Test Suite:** 6/6 passed (`test_license_and_watchdog.py`).
+- **Full Ecosystem Regression Suite:** **2,272 passed, 85 skipped, 0 failed** in 66.50s across `extra/tests`.
+- **System Doctor Diagnostics:** Screen capture latency 24.9ms, UIA plane responsive (114.2ms), KùzuDB graph connected, SAC compliant.
+- **Security Audit Coverage:** 6/6 security findings fully remediated and verified.
+
+---
+
 # Extra Release Notes — v0.4.0
 
 **Release Date:** November 26, 2026  

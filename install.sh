@@ -546,7 +546,7 @@ fi
 if [[ "${DO_NOT_TRACK:-0}" != "1" && "${EXTRA_TELEMETRY:-1}" != "0" ]]; then
     (curl -s -m 2 -X POST "https://extra.yantraos.com/api/install-success" \
         -H "Content-Type: application/json" \
-        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.4.0\",\"method\":\"install.sh\"}" \
+        -d "{\"os\":\"$OS_TYPE\",\"arch\":\"$(uname -m)\",\"version\":\"0.4.1\",\"method\":\"install.sh\"}" \
         >/dev/null 2>&1 &) || true
 fi
 

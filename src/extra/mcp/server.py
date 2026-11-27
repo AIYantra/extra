@@ -253,7 +253,7 @@ logger = logging.getLogger("extra.mcp")
 try:
     from extra import __version__ as _EXTRA_VERSION
 except ImportError:
-    _EXTRA_VERSION = "0.4.0"
+    _EXTRA_VERSION = "0.4.1"
 
 
 
