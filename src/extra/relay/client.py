@@ -73,6 +73,37 @@ def get_default_device_name() -> str:
     return f"{hostname} ({os_name})"
 
 
+def get_persistent_device_id() -> str:
+    """Returns a stable deterministic device_id persisted in ~/.extra/config.json."""
+    import hashlib
+    import uuid
+    from pathlib import Path
+
+    cfg_dir = Path.home() / ".extra"
+    cfg_path = cfg_dir / "config.json"
+    cfg = {}
+    if cfg_path.exists():
+        try:
+            with open(cfg_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+            if isinstance(cfg, dict) and cfg.get("device_id"):
+                return str(cfg["device_id"])
+        except Exception:
+            pass
+
+    raw_hw = f"{uuid.getnode()}:{socket.gethostname()}:{platform.system()}"
+    dev_id = "dev_" + hashlib.sha256(raw_hw.encode("utf-8")).hexdigest()[:12]
+    try:
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        if isinstance(cfg, dict):
+            cfg["device_id"] = dev_id
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=2)
+    except Exception:
+        pass
+    return dev_id
+
+
 _CUSTOM_TOOL_EXECUTOR = None
 
 
@@ -282,8 +313,7 @@ async def run_relay_loop(
     import websockets
 
     if not device_id:
-        import uuid
-        device_id = "dev_" + uuid.uuid4().hex[:10]
+        device_id = get_persistent_device_id()
 
     if not device_name:
         device_name = get_default_device_name()
@@ -402,6 +432,7 @@ async def run_relay_loop(
                             try:
                                 pong_waiter = await ws.ping()
                                 await asyncio.wait_for(pong_waiter, timeout=8.0)
+                                await ws.send(json.dumps({"action": "ping", "device_id": device_id}))
                                 last_ping_time = now
                             except Exception:
                                 logger.warning("Heartbeat ping timed out, reconnecting...")
@@ -440,8 +471,8 @@ async def run_relay_loop(
 
             err_str = str(e)
             if "403" in err_str:
-                logger.warning("Relay connection rejected (HTTP 403 Forbidden). Token may be invalid or rotated; rechecking local configuration...")
-                print(f"[!] Relay passkey rejected (HTTP 403 Forbidden). Rechecking local config in {reconnect_delay}s...", flush=True)
+                logger.warning("Relay connection rejected (HTTP 403 Forbidden). Token may be invalid, rotated, or fleet machine limit reached.")
+                print(f"[!] Relay connection rejected (HTTP 403 Forbidden: invalid key or fleet limit reached). Rechecking local config in {reconnect_delay}s...", flush=True)
             else:
                 logger.error("Unexpected error in relay loop: %s", e)
                 print(f"[!] Relay error: {e}. Reconnecting in {reconnect_delay}s...", flush=True)
